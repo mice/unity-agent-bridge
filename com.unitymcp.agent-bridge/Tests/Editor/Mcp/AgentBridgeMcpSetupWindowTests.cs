@@ -308,6 +308,13 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
         [Category("AGBM_171")]
         public void StatusSection_Draw_DoesNotThrowWhenConfiguredProjectBlocksOkSummary()
         {
+            var readiness = AgentBridgeMcpSetupWindow.GetEffectiveReadinessForConfiguredProject(
+                McpReadiness.Ready,
+                "D:/Repo/Project",
+                "D:/Repo/OtherProject");
+
+            Assert.That(readiness, Is.EqualTo(McpReadiness.Degraded));
+
             var section = new McpStatusSection();
             var viewModel = new McpStatusViewModel
             {
@@ -345,6 +352,12 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var json = File.ReadAllText(configPath);
             Assert.That(json, Does.Contain("\"unityProjectPath\""));
             Assert.That(json, Does.Contain(projectPath.Replace("\\", "\\\\")));
+            var configuredProjectPath = AgentBridgeMcpSetupWindow.ReadConfiguredUnityProjectPath(projectPath, Path.Combine(root, "Tools"));
+            var readiness = AgentBridgeMcpSetupWindow.GetEffectiveReadinessForConfiguredProject(
+                McpReadiness.Ready,
+                projectPath,
+                configuredProjectPath);
+            Assert.That(readiness, Is.EqualTo(McpReadiness.Ready));
 
             Directory.Delete(root, true);
         }

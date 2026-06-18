@@ -95,7 +95,7 @@ namespace UnityMcp.AgentBridge.Mcp
 
             _diagnosticsSection.Draw(
                 _diagnosticChecks,
-                _readiness,
+                GetEffectiveReadiness(_readiness),
                 _diagnosticReport,
                 _diagnosticsRunning,
                 RunDiagnostics,
@@ -445,7 +445,7 @@ namespace UnityMcp.AgentBridge.Mcp
             return string.IsNullOrEmpty(result.VersionText) ? "OK" : result.VersionText;
         }
 
-        private static string ReadConfiguredUnityProjectPath(string projectRoot, string toolsRoot)
+        internal static string ReadConfiguredUnityProjectPath(string projectRoot, string toolsRoot)
         {
             if (string.IsNullOrEmpty(projectRoot) && string.IsNullOrEmpty(toolsRoot))
             {
@@ -795,7 +795,7 @@ namespace UnityMcp.AgentBridge.Mcp
                     }
                 };
                 _readiness = McpReadiness.Unavailable;
-                _diagnosticReport = _reportFormatter.Format(_diagnosticChecks, _readiness, _settings);
+                _diagnosticReport = _reportFormatter.Format(_diagnosticChecks, GetEffectiveReadiness(_readiness), _settings);
                 Repaint();
                 return;
             }
@@ -820,7 +820,7 @@ namespace UnityMcp.AgentBridge.Mcp
 
             _diagnosticChecks = result.Checks ?? new McpDiagnosticCheck[0];
             _readiness = result.Readiness;
-            _diagnosticReport = result.Report ?? string.Empty;
+            _diagnosticReport = _reportFormatter.Format(_diagnosticChecks, GetEffectiveReadiness(_readiness), _settings);
             Repaint();
         }
 
@@ -881,7 +881,24 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             SyncConfiguredProjectFile(configPath, projectRoot);
             _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
+            _diagnosticReport = _reportFormatter.Format(_diagnosticChecks, GetEffectiveReadiness(_readiness), _settings);
             Repaint();
+        }
+
+        internal McpReadiness GetEffectiveReadiness(McpReadiness readiness)
+        {
+            var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
+            var resolvedToolsRoot = (_pathResolver ?? new McpPathResolver()).ResolveToolsRoot(_settings ?? McpEditorSettingsDefaults.Create());
+            var configuredProjectPath = ReadConfiguredUnityProjectPath(projectRoot, resolvedToolsRoot);
+            return GetEffectiveReadinessForConfiguredProject(readiness, projectRoot, configuredProjectPath);
+        }
+
+        internal static McpReadiness GetEffectiveReadinessForConfiguredProject(
+            McpReadiness readiness,
+            string currentProject,
+            string configuredProject)
+        {
+            return AdjustReadinessForConfiguredProject(readiness, HasConfiguredProjectIssue(currentProject, configuredProject));
         }
 
         private void InitializeMcpRuntime()
