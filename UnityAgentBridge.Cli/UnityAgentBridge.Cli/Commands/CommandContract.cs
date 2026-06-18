@@ -34,7 +34,7 @@ internal static class CommandContract
         writer.WriteLine($"  {executableName} ping [--project-path <path>] [--queue-root <path>] [--timeout-ms <n>]");
         writer.WriteLine($"  {executableName} project_info [--project-path <path>] [--queue-root <path>] [--timeout-ms <n>]");
         writer.WriteLine($"  {executableName} compile [--project-path <path>] [--queue-root <path>] [--timeout-ms <n>]");
-        writer.WriteLine($"  {executableName} console [--type <error|warning|info>]... [--count <n>] [--timeout-ms <n>]");
+        writer.WriteLine($"  {executableName} console [--type <error|warning|info>]... [--count <n>] [--filter <text>] [--timeout-ms <n>]");
         writer.WriteLine($"  {executableName} assetdatabase_search --query <value> [--folder <Assets/...>]... [--offset <n>] [--limit <n>] [--include-details] [--timeout-ms <n>]");
         writer.WriteLine($"  {executableName} get_editor_state [--timeout-ms <n>]");
         writer.WriteLine($"  {executableName} open_scene --scene-path <Assets/...unity> [--mode <single|additive>] [--set-active <true|false>] [--save-modified-scenes <true|false>] [--timeout-ms <n>]");

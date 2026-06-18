@@ -7,6 +7,7 @@ namespace UnityMcp.BuiltInPlugins.EditorBasics
     {
         public string[] types = { "error" };
         public int count = 100;
+        public string filter;
     }
 
     [Serializable]
@@ -14,6 +15,7 @@ namespace UnityMcp.BuiltInPlugins.EditorBasics
     {
         public string[] requestedTypes;
         public int requestedCountPerType;
+        public string filter;
         public UnityConsoleLogBucket[] results;
     }
 

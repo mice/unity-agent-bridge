@@ -20,12 +20,13 @@ namespace UnityMcp.BuiltInPlugins.EditorBasics
             Application.logMessageReceivedThreaded += OnLogMessageReceived;
         }
 
-        public static IReadOnlyList<ConsoleLogEntry> GetSnapshot(ConsoleLogQueryType queryType, int requestedCount)
+        public static IReadOnlyList<ConsoleLogEntry> GetSnapshot(ConsoleLogQueryType queryType, int requestedCount, string filter = null)
         {
             lock (SyncRoot)
             {
                 var filteredEntries = Entries
                     .Where(entry => MatchesQueryType(entry, queryType))
+                    .Where(entry => MatchesFilter(entry, filter))
                     .OrderByDescending(entry => entry.TimestampUtcTicks)
                     .ThenByDescending(entry => entry.Sequence)
                     .ToArray();
@@ -95,6 +96,17 @@ namespace UnityMcp.BuiltInPlugins.EditorBasics
         private static bool MatchesQueryType(ConsoleLogEntry entry, ConsoleLogQueryType queryType)
         {
             return Classify(entry.Type) == queryType;
+        }
+
+        private static bool MatchesFilter(ConsoleLogEntry entry, string filter)
+        {
+            if (string.IsNullOrEmpty(filter))
+            {
+                return true;
+            }
+
+            return (entry.Condition != null && entry.Condition.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                (entry.StackTrace != null && entry.StackTrace.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
         private static ConsoleLogQueryType Classify(LogType type)

@@ -25,6 +25,9 @@
       "type": "integer",
       "minimum": 0,
       "maximum": 1000
+    },
+    "filter": {
+      "type": "string"
     }
   }
 }
