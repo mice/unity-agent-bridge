@@ -1,6 +1,7 @@
 using System;
+using UnityMcp.AgentBridge;
 
-namespace UnityMcp.AgentBridge
+namespace UnityMcp.BuiltInPlugins.TestRunner
 {
     public sealed class UnitySelfTestTool : IAgentTool
     {

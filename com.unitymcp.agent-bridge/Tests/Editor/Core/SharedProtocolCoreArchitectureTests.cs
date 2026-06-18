@@ -133,5 +133,30 @@ namespace UnityMcp.AgentBridge.Tests
                 Assert.That(content, Does.Not.Contain("EditorSceneManager.OpenScene("), sourceFile);
             }
         }
+
+        [Test]
+        [Category("AGB_Core")]
+        public void TestRunnerPlugin_SourceFilesRemainGroupedAndCoreDoesNotOwnMigratedTools()
+        {
+            var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
+            var packageRoot = Path.Combine(projectRoot, "Packages", "com.unitymcp.agent-bridge");
+            var sourceRoot = Path.Combine(packageRoot, "BuiltInPlugins", "TestRunner", "Editor");
+            var coreToolsRoot = Path.Combine(packageRoot, "Editor", "Tools");
+
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "UnityMcp.BuiltInPlugins.TestRunner.asmdef")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "TestRunnerProvider.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "UnityEditModeTestTool.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "UnityPlayModeTestTool.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "UnitySelfTestTool.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(coreToolsRoot, "UnityEditModeTestTool.cs")), Is.False);
+            Assert.That(File.Exists(Path.Combine(coreToolsRoot, "UnityPlayModeTestTool.cs")), Is.False);
+            Assert.That(File.Exists(Path.Combine(coreToolsRoot, "UnitySelfTestTool.cs")), Is.False);
+
+            foreach (var sourceFile in Directory.GetFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
+            {
+                var content = File.ReadAllText(sourceFile);
+                Assert.That(content, Does.Not.Contain("[AgentTool("), sourceFile);
+            }
+        }
     }
 }

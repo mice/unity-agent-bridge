@@ -140,10 +140,14 @@ namespace UnityMcp.AgentBridge
                 var queue = new AgentCommandQueue(_projectRoot, settings.tempRoot);
                 var registry = new AgentToolRegistry(_logger);
                 registry.Discover();
-                UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, _logger);
+                UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, _logger, new UnityMcpPluginHostServices
+                {
+                    Settings = settings,
+                    Queue = queue,
+                    Registry = registry,
+                    Logger = _logger
+                });
                 var facade = new UnityToolFacade(registry, settings, _logger);
-                var selfTestRunner = new AgentBridgeSelfTestRunner(facade, queue, settings, _logger);
-                registry.Register(new UnitySelfTestTool(selfTestRunner));
                 _poller = new AgentCommandPoller(queue, facade, settings, paths, _logger);
 
                 var recoveryRecords = queue.Recover();

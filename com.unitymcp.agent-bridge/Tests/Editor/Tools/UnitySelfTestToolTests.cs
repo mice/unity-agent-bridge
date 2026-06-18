@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
 using UnityEngine;
+using UnityMcp.BuiltInPlugins.TestRunner;
 
 namespace UnityMcp.AgentBridge.Tests
 {

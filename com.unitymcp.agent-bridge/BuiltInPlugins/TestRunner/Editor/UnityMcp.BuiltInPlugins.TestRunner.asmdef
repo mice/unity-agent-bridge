@@ -1,0 +1,20 @@
+{
+  "name": "UnityMcp.BuiltInPlugins.TestRunner",
+  "rootNamespace": "UnityMcp.BuiltInPlugins.TestRunner",
+  "references": [
+    "UnityMcp.AgentBridge.SharedProtocolCore",
+    "UnityMcp.Plugin.Abstractions",
+    "UnityMcp.AgentBridge.Editor"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

@@ -247,6 +247,41 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.read_report" && item.mcpName == "mcp__unity__read_report"), Is.True);
         }
 
+        [Test]
+        [Category("AGB_Core")]
+        public void Discovery_TestRunnerPlugin_RegistersTestToolsAndWritesCatalog()
+        {
+            var settings = CreatePluginOnlySettings();
+            settings.pluginRegistrations.Add(new UnityMcpPluginRegistration
+            {
+                enabled = true,
+                kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
+                assemblyName = "UnityMcp.BuiltInPlugins.TestRunner",
+                providerTypeName = "UnityMcp.BuiltInPlugins.TestRunner.TestRunnerProvider"
+            });
+
+            var paths = new AgentBridgePaths(_projectRoot, settings);
+            paths.EnsureDirectories();
+            var registry = new AgentToolRegistry();
+            registry.Discover();
+            var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
+
+            var result = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, logger, new UnityMcpPluginHostServices
+            {
+                Settings = settings,
+                Queue = new AgentCommandQueue(_projectRoot, settings.tempRoot),
+                Registry = registry,
+                Logger = logger
+            });
+
+            AssertPluginTool(registry, "unity.run_editmode_tests");
+            AssertPluginTool(registry, "unity.run_playmode_tests");
+            AssertPluginTool(registry, "unity.agent_bridge_self_test");
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.run_editmode_tests" && item.mcpName == "mcp__unity__run_editmode_tests"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.run_playmode_tests" && item.mcpName == "mcp__unity__run_playmode_tests"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.agent_bridge_self_test" && item.mcpName == "mcp__unity__agent_bridge_self_test"), Is.True);
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_159.md
         [Test]
         [Category("AGB_Core")]

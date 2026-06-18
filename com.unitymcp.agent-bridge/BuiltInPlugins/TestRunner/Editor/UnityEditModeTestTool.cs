@@ -1,19 +1,19 @@
 using UnityEditor.TestTools.TestRunner.Api;
+using UnityMcp.AgentBridge;
 
-namespace UnityMcp.AgentBridge
+namespace UnityMcp.BuiltInPlugins.TestRunner
 {
-    [AgentTool("unity.run_playmode_tests")]
-    public sealed class UnityPlayModeTestTool : IAgentTool
+    public sealed class UnityEditModeTestTool : IAgentTool
     {
         public ToolDescriptor Descriptor { get; } = new ToolDescriptor
         {
-            Name = "unity.run_playmode_tests",
+            Name = "unity.run_editmode_tests",
             SchemaVersion = JsonUtil.CurrentSchemaVersion,
-            Description = "Run Unity PlayMode tests and report results.",
+            Description = "Run Unity EditMode tests and report results.",
             AllowedModes = ToolExecutionModes.Edit,
             SideEffect = ToolSideEffect.RunsUserCode,
-            MayTriggerDomainReload = true,
-            ArgsSchemaPath = "Documentation~/schemas/unity.run_playmode_tests.args.schema.json"
+            MayTriggerDomainReload = false,
+            ArgsSchemaPath = "Documentation~/schemas/unity.run_editmode_tests.args.schema.json"
         };
 
         public ToolResult Execute(AgentToolContext context, IAgentCancellation cancellation)
@@ -24,7 +24,7 @@ namespace UnityMcp.AgentBridge
                 return failure;
             }
 
-            return UnityTestOperationManager.StartOrResume(context.Command, context.Settings, TestMode.PlayMode, args);
+            return UnityTestOperationManager.StartOrResume(context.Command, context.Settings, TestMode.EditMode, args);
         }
     }
 }

@@ -14,15 +14,12 @@ public sealed class McpToolCatalogTests
     {
         var expectedNames = new[]
         {
-            "mcp__unity__agent_bridge_self_test",
             "mcp__unity__compile",
             "mcp__unity__get_console",
             "mcp__unity__get_editor_state",
             "mcp__unity__open_scene",
             "mcp__unity__ping",
             "mcp__unity__run_diagnostic",
-            "mcp__unity__run_editmode_tests",
-            "mcp__unity__run_playmode_tests",
             "mcp__unity__run_static_method",
             "mcp_echo",
             "unity_bridge_health",
@@ -37,7 +34,7 @@ public sealed class McpToolCatalogTests
             .ToArray();
 
         CollectionAssert.AreEqual(expectedNames.OrderBy(name => name, StringComparer.Ordinal).ToArray(), actualNames);
-        Assert.AreEqual(14, actualNames.Length);
+        Assert.AreEqual(11, actualNames.Length);
     }
 
     [TestMethod]
@@ -130,6 +127,39 @@ public sealed class McpToolCatalogTests
     }
 
     [TestMethod]
+    public void CatalogAddsTestRunnerOnlyFromPluginCatalog()
+    {
+        var projectRoot = CreateUnityProject();
+        var catalogDirectory = Path.Combine(projectRoot, "Library", "AgentBridge");
+        Directory.CreateDirectory(catalogDirectory);
+        File.WriteAllText(
+            Path.Combine(catalogDirectory, "plugin-catalog.json"),
+            """
+            {"version":1,"tools":[
+            {"pluginId":"com.unitymcp.builtin.test-runner","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.TestRunner","bridgeTool":"unity.run_editmode_tests","mcpName":"mcp__unity__run_editmode_tests","title":"Unity Run EditMode Tests","description":"Call unity.run_editmode_tests through the Unity Agent Bridge CLI.","defaultTimeoutMs":120000,"allowedRuntimeModes":"Edit","sideEffect":"RunsUserCode","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"filter\":{\"type\":\"string\",\"minLength\":1}},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.test-runner","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.TestRunner","bridgeTool":"unity.run_playmode_tests","mcpName":"mcp__unity__run_playmode_tests","title":"Unity Run PlayMode Tests","description":"Call unity.run_playmode_tests through the Unity Agent Bridge CLI.","defaultTimeoutMs":180000,"allowedRuntimeModes":"Edit","sideEffect":"RunsUserCode","mayTriggerDomainReload":true,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"filter\":{\"type\":\"string\",\"minLength\":1}},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.test-runner","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.TestRunner","bridgeTool":"unity.agent_bridge_self_test","mcpName":"mcp__unity__agent_bridge_self_test","title":"Unity Agent Bridge Self-Test","description":"Run the Agent Bridge self-test suite through the Unity Agent Bridge CLI.","defaultTimeoutMs":120000,"allowedRuntimeModes":"Edit","sideEffect":"RunsUserCode","mayTriggerDomainReload":true,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"continueOnFailure\":{\"type\":\"boolean\"}},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}
+            ]}
+            """);
+
+        var diagnostics = CreateDiagnostics(projectRoot);
+        var toolNames = McpToolCatalog.GetTools(diagnostics).Select(tool => tool.ProtocolTool.Name).ToArray();
+        var editMode = McpToolCatalog.TryGet("mcp__unity__run_editmode_tests", diagnostics);
+        var playMode = McpToolCatalog.TryGet("mcp__unity__run_playmode_tests", diagnostics);
+        var selfTest = McpToolCatalog.TryGet("mcp__unity__agent_bridge_self_test", diagnostics);
+
+        CollectionAssert.Contains(toolNames, "mcp__unity__run_editmode_tests");
+        CollectionAssert.Contains(toolNames, "mcp__unity__run_playmode_tests");
+        CollectionAssert.Contains(toolNames, "mcp__unity__agent_bridge_self_test");
+        Assert.IsNotNull(editMode);
+        Assert.IsNotNull(playMode);
+        Assert.IsNotNull(selfTest);
+        Assert.AreEqual("unity.run_editmode_tests", editMode.BridgeTool);
+        Assert.AreEqual("unity.run_playmode_tests", playMode.BridgeTool);
+        Assert.AreEqual("unity.agent_bridge_self_test", selfTest.BridgeTool);
+    }
+
+    [TestMethod]
     public void CatalogPreservesBuiltInToolsWhenPluginCatalogIsInvalid()
     {
         var projectRoot = CreateUnityProject();
@@ -144,6 +174,7 @@ public sealed class McpToolCatalogTests
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_info");
         CollectionAssert.Contains(toolNames, "mcp__unity__ping");
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_get_info");
+        CollectionAssert.DoesNotContain(toolNames, "mcp__unity__run_editmode_tests");
     }
 
     [TestMethod]
@@ -161,6 +192,7 @@ public sealed class McpToolCatalogTests
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_info");
         CollectionAssert.Contains(toolNames, "mcp__unity__ping");
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_get_info");
+        CollectionAssert.DoesNotContain(toolNames, "mcp__unity__run_editmode_tests");
     }
 
     [TestMethod]

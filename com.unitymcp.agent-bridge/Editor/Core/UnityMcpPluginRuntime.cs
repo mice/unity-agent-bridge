@@ -16,7 +16,8 @@ namespace UnityMcp.AgentBridge
             AgentToolRegistry registry,
             AgentBridgeSettings settings,
             AgentBridgePaths paths,
-            FileAgentBridgeLogger logger)
+            FileAgentBridgeLogger logger,
+            UnityMcpPluginHostServices hostServices = null)
         {
             if (registry == null)
             {
@@ -34,6 +35,17 @@ namespace UnityMcp.AgentBridge
             }
 
             var result = new UnityMcpPluginDiscoveryResult();
+            hostServices ??= new UnityMcpPluginHostServices
+            {
+                Settings = settings,
+                Queue = new AgentCommandQueue(paths.ProjectRoot, settings.tempRoot),
+                Registry = registry,
+                Logger = logger
+            };
+            hostServices.Settings ??= settings;
+            hostServices.Queue ??= new AgentCommandQueue(paths.ProjectRoot, settings.tempRoot);
+            hostServices.Registry ??= registry;
+            hostServices.Logger ??= logger;
             var registrations = settings.pluginRegistrations ?? new List<UnityMcpPluginRegistration>();
             var builtInNames = new HashSet<string>(registry.ListTools().Select(descriptor => descriptor.Name), StringComparer.Ordinal);
             var pluginNames = new HashSet<string>(StringComparer.Ordinal);
@@ -42,7 +54,7 @@ namespace UnityMcp.AgentBridge
             {
                 try
                 {
-                    ProcessRegistration(registration, registry, paths, logger, result, builtInNames, pluginNames);
+                    ProcessRegistration(registration, registry, paths, logger, result, builtInNames, pluginNames, hostServices);
                 }
                 catch (Exception exception)
                 {
@@ -61,7 +73,8 @@ namespace UnityMcp.AgentBridge
             FileAgentBridgeLogger logger,
             UnityMcpPluginDiscoveryResult result,
             ISet<string> builtInNames,
-            ISet<string> pluginNames)
+            ISet<string> pluginNames,
+            UnityMcpPluginHostServices hostServices)
         {
             var assembly = ResolveAssembly(registration, paths.ProjectRoot);
             if (assembly == null)
@@ -92,7 +105,8 @@ namespace UnityMcp.AgentBridge
                     var pluginContext = new UnityMcpPluginContext
                     {
                         ProjectRoot = paths.ProjectRoot,
-                        AssemblyName = assembly.GetName().Name ?? string.Empty
+                        AssemblyName = assembly.GetName().Name ?? string.Empty,
+                        HostServices = hostServices
                     };
 
                     var tools = provider.GetTools(pluginContext) ?? Array.Empty<IUnityMcpTool>();
@@ -280,6 +294,17 @@ namespace UnityMcp.AgentBridge
     public sealed class UnityMcpPluginDiscoveryResult
     {
         public UnityMcpPluginCatalog Catalog { get; } = new UnityMcpPluginCatalog();
+    }
+
+    public sealed class UnityMcpPluginHostServices
+    {
+        public AgentBridgeSettings Settings { get; set; }
+
+        public AgentCommandQueue Queue { get; set; }
+
+        public AgentToolRegistry Registry { get; set; }
+
+        public FileAgentBridgeLogger Logger { get; set; }
     }
 
     internal sealed class UnityMcpPluginToolAdapter : IAgentTool

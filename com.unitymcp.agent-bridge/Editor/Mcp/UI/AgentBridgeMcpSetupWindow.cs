@@ -848,13 +848,14 @@ namespace UnityMcp.AgentBridge.Mcp
             var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
             var registry = new AgentToolRegistry();
             registry.Discover();
-            UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, logger);
+            UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, logger, new UnityMcpPluginHostServices
+            {
+                Settings = settings,
+                Queue = new AgentCommandQueue(projectRoot, settings.tempRoot),
+                Registry = registry,
+                Logger = logger
+            });
             var facade = new UnityToolFacade(registry, settings, logger);
-            registry.Register(new UnitySelfTestTool(new AgentBridgeSelfTestRunner(
-                facade,
-                new AgentCommandQueue(projectRoot, settings.tempRoot),
-                settings,
-                logger)));
             return facade;
         }
 

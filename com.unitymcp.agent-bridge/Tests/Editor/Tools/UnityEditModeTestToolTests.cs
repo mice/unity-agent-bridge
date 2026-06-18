@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using UnityEditor.TestTools.TestRunner.Api;
+using UnityMcp.BuiltInPlugins.TestRunner;
 
 namespace UnityMcp.AgentBridge.Tests
 {

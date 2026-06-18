@@ -47,6 +47,8 @@ namespace UnityMcp.Plugin
         public string ProjectRoot { get; set; }
 
         public string AssemblyName { get; set; }
+
+        public object HostServices { get; set; }
     }
 
     public sealed class UnityMcpToolContext

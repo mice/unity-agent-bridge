@@ -303,6 +303,13 @@ namespace UnityMcp.AgentBridge
                 {
                     enabled = true,
                     kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
+                    assemblyName = "UnityMcp.BuiltInPlugins.TestRunner",
+                    providerTypeName = "UnityMcp.BuiltInPlugins.TestRunner.TestRunnerProvider"
+                },
+                new UnityMcpPluginRegistration
+                {
+                    enabled = true,
+                    kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
                     assemblyName = "UnityMcp.BuiltInPlugins.RoslynExecution",
                     providerTypeName = "UnityMcp.BuiltInPlugins.RoslynExecution.RoslynExecutionProvider"
                 }

@@ -13,7 +13,7 @@ using UnityEngine;
 namespace UnityMcp.AgentBridge
 {
     [InitializeOnLoad]
-    internal static class UnityTestOperationManager
+    public static class UnityTestOperationManager
     {
         private static readonly Dictionary<string, TestRunOperationState> OperationsById = new Dictionary<string, TestRunOperationState>(StringComparer.Ordinal);
         private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);

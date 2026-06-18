@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using NUnit.Framework;
 using UnityEngine;
+using TestRunnerPlugin = UnityMcp.BuiltInPlugins.TestRunner;
 
 namespace UnityMcp.AgentBridge.Tests
 {
@@ -11,14 +12,15 @@ namespace UnityMcp.AgentBridge.Tests
         [Test]
         [Category("AGB_TestTools")]
         [Category("AGB_063")]
-        public void AgentToolRegistry_Discover_FindsTestTools()
+        public void AgentToolRegistry_Discover_DoesNotOwnMigratedTestTools()
         {
             var registry = new AgentToolRegistry();
 
             registry.Discover();
 
-            Assert.That(registry.TryGetTool("unity.run_editmode_tests", out _), Is.True);
-            Assert.That(registry.TryGetTool("unity.run_playmode_tests", out _), Is.True);
+            Assert.That(registry.TryGetTool("unity.run_editmode_tests", out _), Is.False);
+            Assert.That(registry.TryGetTool("unity.run_playmode_tests", out _), Is.False);
+            Assert.That(registry.TryGetTool("unity.agent_bridge_self_test", out _), Is.False);
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_088.md
@@ -34,7 +36,7 @@ namespace UnityMcp.AgentBridge.Tests
             var settings = ScriptableObject.CreateInstance<AgentBridgeSettings>();
             var facade = new StubFacade();
             var runner = new AgentBridgeSelfTestRunner(facade, queue, settings);
-            var tool = new UnitySelfTestTool(runner);
+            var tool = new TestRunnerPlugin.UnitySelfTestTool(runner);
 
             registry.Register(tool);
 
