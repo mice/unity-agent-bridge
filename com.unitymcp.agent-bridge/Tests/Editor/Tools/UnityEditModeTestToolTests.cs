@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using UnityEngine;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityMcp.BuiltInPlugins.TestRunner;
 
@@ -10,6 +11,17 @@ namespace UnityMcp.AgentBridge.Tests
         private const string DemoAssembly = "UnityMcp.AgentBridge.Tests.Editor";
         private const string DemoCategory = "AGB_061";
         private const string DemoGroup = "UnityMcp.AgentBridge.Tests.AgentBridgeEditModeProbeTests";
+        private AgentBridgeSettings _settings;
+
+        [TearDown]
+        public void TearDown()
+        {
+            if (_settings != null)
+            {
+                Object.DestroyImmediate(_settings);
+                _settings = null;
+            }
+        }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_065.md
         [Test]
@@ -220,7 +232,7 @@ namespace UnityMcp.AgentBridge.Tests
             }
         }
 
-        private static void AssertWildcardInvalidArgs(string rawArgsJson)
+        private void AssertWildcardInvalidArgs(string rawArgsJson)
         {
             var tool = new UnityEditModeTestTool();
             var settings = CreateSettings();
@@ -232,13 +244,12 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(result.errors[0].code, Is.EqualTo("AGENTBRIDGE_TEST_FILTER_WILDCARD_UNSUPPORTED"));
         }
 
-        private static AgentBridgeSettings CreateSettings()
+        private AgentBridgeSettings CreateSettings()
         {
-            return new AgentBridgeSettings
-            {
-                maxToolDurationMs = 30000,
-                tempRoot = "Temp/AgentBridge"
-            };
+            _settings = ScriptableObject.CreateInstance<AgentBridgeSettings>();
+            _settings.maxToolDurationMs = 30000;
+            _settings.tempRoot = "Temp/AgentBridge";
+            return _settings;
         }
 
         private static AgentToolContext CreateContext(string commandId, string rawArgsJson, AgentBridgeSettings settings, int timeoutMs = 5000)

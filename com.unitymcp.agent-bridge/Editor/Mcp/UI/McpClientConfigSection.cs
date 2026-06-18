@@ -19,7 +19,12 @@ namespace UnityMcp.AgentBridge.Mcp
 
         internal bool IsCodexSelected => _selectedClient == ClientConfigTarget.Codex;
 
-        public void Draw(IMcpClientConfigWriter codexWriter, IMcpClientConfigWriter claudeWriter, McpEditorSettings settings)
+        public void Draw(
+            IMcpClientConfigWriter codexWriter,
+            IMcpClientConfigWriter claudeWriter,
+            IMcpClientConfigWriter cursorWriter,
+            IMcpClientConfigWriter copilotWriter,
+            McpEditorSettings settings)
         {
             if (Event.current == null)
             {
@@ -30,21 +35,21 @@ namespace UnityMcp.AgentBridge.Mcp
             {
                 EditorGUILayout.LabelField("Step 2: Apply MCP Client Config", EditorStyles.boldLabel);
 
-                var tabs = new[] { "Codex", "Claude Code" };
-                _selectedClient = GUILayout.Toolbar(_selectedClient == ClientConfigTarget.ClaudeCode ? 1 : 0, tabs) == 1
-                    ? ClientConfigTarget.ClaudeCode
-                    : ClientConfigTarget.Codex;
+                var tabs = new[] { "Codex", "Claude Code", "Cursor", "GitHub Copilot" };
+                _selectedClient = (ClientConfigTarget)GUILayout.Toolbar((int)_selectedClient, tabs);
 
-                var activeWriter = _selectedClient == ClientConfigTarget.ClaudeCode ? claudeWriter : codexWriter;
-                var scopeLabel = _selectedClient == ClientConfigTarget.ClaudeCode
-                    ? "Project Scope (.mcp.json)"
-                    : "Project Scope (.codex/config.toml)";
+                var activeWriter = GetActiveWriter(codexWriter, claudeWriter, cursorWriter, copilotWriter);
+                var scopeLabel = GetScopeLabel(_selectedClient);
 
                 EditorGUILayout.Space(6f);
                 EditorGUILayout.LabelField("Scope", scopeLabel);
                 if (_selectedClient == ClientConfigTarget.Codex)
                 {
                     EditorGUILayout.HelpBox("Direct MCP launcher plus project-local ToolsRoot is the recommended path. Start-Codex-With-UnityMcp.cmd has been removed from the supported workflow.", MessageType.Info);
+                }
+                else if (_selectedClient == ClientConfigTarget.GitHubCopilot)
+                {
+                    EditorGUILayout.HelpBox("GitHub Copilot uses the VS Code project MCP file. Copilot Chat Agent mode has been confirmed to call the Unity Agent Bridge MCP server.", MessageType.Info);
                 }
                 EditorGUILayout.Space(4f);
 
@@ -160,10 +165,48 @@ namespace UnityMcp.AgentBridge.Mcp
             _lastMessageType = type;
         }
 
+        private IMcpClientConfigWriter GetActiveWriter(
+            IMcpClientConfigWriter codexWriter,
+            IMcpClientConfigWriter claudeWriter,
+            IMcpClientConfigWriter cursorWriter,
+            IMcpClientConfigWriter copilotWriter)
+        {
+            switch (_selectedClient)
+            {
+                case ClientConfigTarget.ClaudeCode:
+                    return claudeWriter;
+                case ClientConfigTarget.Cursor:
+                    return cursorWriter;
+                case ClientConfigTarget.GitHubCopilot:
+                    return copilotWriter;
+                case ClientConfigTarget.Codex:
+                default:
+                    return codexWriter;
+            }
+        }
+
+        private static string GetScopeLabel(ClientConfigTarget selectedClient)
+        {
+            switch (selectedClient)
+            {
+                case ClientConfigTarget.ClaudeCode:
+                    return "Project Scope (.mcp.json)";
+                case ClientConfigTarget.Cursor:
+                    return "Project Scope (.cursor/mcp.json)";
+                case ClientConfigTarget.GitHubCopilot:
+                    return "Project Scope (.vscode/mcp.json)";
+                case ClientConfigTarget.Codex:
+                default:
+                    return "Project Scope (.codex/config.toml)";
+            }
+        }
+
         private enum ClientConfigTarget
         {
             Codex,
             ClaudeCode,
+            Cursor,
+            GitHubCopilot,
         }
     }
 }

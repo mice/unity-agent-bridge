@@ -1080,14 +1080,14 @@ namespace UnityMcp.AgentBridge.Tests
             }
 
             var assetPath = folder + "/SampledSubAssets.asset";
-            if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(assetPath) == null)
+            if (AssetDatabase.LoadAssetAtPath<AnimationClip>(assetPath) == null)
             {
-                var main = ScriptableObject.CreateInstance<AssetQueryDummyAsset>();
+                var main = new AnimationClip();
                 AssetDatabase.CreateAsset(main, assetPath);
                 _assetPathsToDelete.Add(assetPath);
                 for (var index = 0; index < 25; index++)
                 {
-                    var child = ScriptableObject.CreateInstance<AssetQueryDummyAsset>();
+                    var child = new AnimationClip();
                     child.name = "Child" + index;
                     AssetDatabase.AddObjectToAsset(child, assetPath);
                 }
@@ -2269,10 +2269,6 @@ namespace UnityMcp.AgentBridge.Tests
         private sealed class TestObjectReferenceComponent : MonoBehaviour
         {
             public UnityEngine.Object reference;
-        }
-
-        private sealed class AssetQueryDummyAsset : ScriptableObject
-        {
         }
 
         private sealed class ThrowingAgentCancellation : IAgentCancellation

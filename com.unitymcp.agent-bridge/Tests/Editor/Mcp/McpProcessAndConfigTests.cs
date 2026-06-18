@@ -364,6 +364,23 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Contain("\"unity_agent_bridge\""));
         }
 
+        [Test]
+        [Category("AGBM_P3")]
+        [Category("AGBM_177")]
+        public void ManagedJsonMerger_Apply_CreatesCopilotServersEntry()
+        {
+            var targetPath = Path.Combine(_tempDirectory, "mcp.json");
+            var merger = new ManagedJsonMerger();
+
+            var result = merger.Apply(targetPath, "{ \"command\": \"cmd\", \"args\": [\"/d\"] }", "servers");
+            var content = File.ReadAllText(targetPath);
+
+            Assert.That(result.Applied, Is.True);
+            Assert.That(content, Does.Contain("\"servers\""));
+            Assert.That(content, Does.Contain("\"unity_agent_bridge\""));
+            Assert.That(content, Does.Not.Contain("\"mcpServers\""));
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_036.md
         [Test]
         [Category("AGBM_P3")]
@@ -437,6 +454,56 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(preview, Does.Contain("\"unity_agent_bridge\""));
             Assert.That(preview, Does.Contain(executablePath.Replace("\\", "\\\\")));
             Assert.That(preview, Does.Contain("\"args\": [\"mcp-server\"]"));
+        }
+
+        [Test]
+        [Category("AGBM_P3")]
+        [Category("AGBM_178")]
+        public void CursorProjectConfigWriter_Preview_ContainsMcpServersEntry()
+        {
+            var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
+            var launcherPath = CreatePreparedLauncher(projectRoot);
+            var writer = new CursorProjectConfigWriter(new ManagedJsonMerger(), new McpPathResolver(() => projectRoot));
+
+            var preview = writer.Preview(new McpEditorSettings());
+
+            Assert.That(preview, Does.Contain("\"mcpServers\""));
+            Assert.That(preview, Does.Contain("\"unity_agent_bridge\""));
+            Assert.That(preview, Does.Contain(launcherPath.Replace("\\", "\\\\")));
+            Assert.That(preview, Does.Contain("\"UNITY_AGENT_BRIDGE_PROJECT_PATH\""));
+            Assert.That(preview, Does.Contain(projectRoot.Replace("\\", "\\\\")));
+        }
+
+        [Test]
+        [Category("AGBM_P3")]
+        public void GitHubCopilotProjectConfigWriter_Preview_ContainsServersEntry()
+        {
+            var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
+            var launcherPath = CreatePreparedLauncher(projectRoot);
+            var writer = new GitHubCopilotProjectConfigWriter(new ManagedJsonMerger(), new McpPathResolver(() => projectRoot));
+
+            var preview = writer.Preview(new McpEditorSettings());
+
+            Assert.That(preview, Does.Contain("\"servers\""));
+            Assert.That(preview, Does.Contain("\"unity_agent_bridge\""));
+            Assert.That(preview, Does.Contain(launcherPath.Replace("\\", "\\\\")));
+            Assert.That(preview, Does.Contain("\"UNITY_AGENT_BRIDGE_PROJECT_PATH\""));
+            Assert.That(preview, Does.Contain(projectRoot.Replace("\\", "\\\\")));
+            Assert.That(preview, Does.Not.Contain("\"mcpServers\""));
+        }
+
+        [Test]
+        [Category("AGBM_P3")]
+        public void CursorAndCopilotConfigWriters_TargetWorkspaceClientFiles()
+        {
+            var workspaceRoot = Path.Combine(_tempDirectory, "workspace");
+
+            Assert.That(
+                CursorProjectConfigWriter.GetTargetPath(workspaceRoot),
+                Is.EqualTo(Path.Combine(workspaceRoot, ".cursor", "mcp.json")));
+            Assert.That(
+                GitHubCopilotProjectConfigWriter.GetTargetPath(workspaceRoot),
+                Is.EqualTo(Path.Combine(workspaceRoot, ".vscode", "mcp.json")));
         }
 
         [Test]

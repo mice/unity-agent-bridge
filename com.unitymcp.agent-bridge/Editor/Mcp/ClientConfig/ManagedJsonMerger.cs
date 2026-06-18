@@ -9,8 +9,14 @@ namespace UnityMcp.AgentBridge.Mcp
     public sealed class ManagedJsonMerger
     {
         private const string ManagedKey = "unity_agent_bridge";
+        private const string DefaultContainerName = "mcpServers";
 
         public ManagedBlockApplyResult Apply(string targetPath, string managedJson)
+        {
+            return Apply(targetPath, managedJson, DefaultContainerName);
+        }
+
+        public ManagedBlockApplyResult Apply(string targetPath, string managedJson, string containerName)
         {
             if (string.IsNullOrWhiteSpace(targetPath))
             {
@@ -41,7 +47,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 }
             }
 
-            var merged = MergeJsonText(originalText, managedJson);
+            var merged = MergeJsonText(originalText, managedJson, NormalizeContainerName(containerName));
             File.WriteAllText(targetPath, merged);
             return new ManagedBlockApplyResult
             {
@@ -51,6 +57,11 @@ namespace UnityMcp.AgentBridge.Mcp
         }
 
         public ManagedBlockApplyResult Remove(string targetPath)
+        {
+            return Remove(targetPath, DefaultContainerName);
+        }
+
+        public ManagedBlockApplyResult Remove(string targetPath, string containerName)
         {
             if (string.IsNullOrWhiteSpace(targetPath))
             {
@@ -80,7 +91,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 };
             }
 
-            var updated = RemoveManagedServer(originalText);
+            var updated = RemoveManagedServer(originalText, NormalizeContainerName(containerName));
             File.WriteAllText(targetPath, updated);
             return new ManagedBlockApplyResult
             {
@@ -89,28 +100,28 @@ namespace UnityMcp.AgentBridge.Mcp
             };
         }
 
-        private static string MergeJsonText(string originalText, string managedJson)
+        private static string MergeJsonText(string originalText, string managedJson, string containerName)
         {
             var managedEntry = "\"unity_agent_bridge\": " + managedJson.Trim();
 
             if (string.IsNullOrWhiteSpace(originalText))
             {
-                return "{\n  \"mcpServers\": {\n    " + managedEntry + "\n  }\n}";
+                return "{\n  \"" + containerName + "\": {\n    " + managedEntry + "\n  }\n}";
             }
 
             var existing = originalText.Trim();
             if (existing == "{}")
             {
-                return "{\n  \"mcpServers\": {\n    " + managedEntry + "\n  }\n}";
+                return "{\n  \"" + containerName + "\": {\n    " + managedEntry + "\n  }\n}";
             }
 
-            var mcpServersIndex = existing.IndexOf("\"mcpServers\"", StringComparison.Ordinal);
-            if (mcpServersIndex < 0)
+            var containerIndex = existing.IndexOf("\"" + containerName + "\"", StringComparison.Ordinal);
+            if (containerIndex < 0)
             {
                 var insertIndex = existing.LastIndexOf('}');
                 if (insertIndex < 0)
                 {
-                    return "{\n  \"mcpServers\": {\n    " + managedEntry + "\n  }\n}";
+                    return "{\n  \"" + containerName + "\": {\n    " + managedEntry + "\n  }\n}";
                 }
 
                 var prefix = existing.Substring(0, insertIndex).TrimEnd();
@@ -122,13 +133,15 @@ namespace UnityMcp.AgentBridge.Mcp
                     builder.Append(',');
                 }
 
-                builder.Append("\n  \"mcpServers\": {\n    ");
+                builder.Append("\n  \"");
+                builder.Append(containerName);
+                builder.Append("\": {\n    ");
                 builder.Append(managedEntry);
                 builder.Append("\n  }\n}");
                 return builder.ToString();
             }
 
-            var openBraceIndex = existing.IndexOf('{', mcpServersIndex);
+            var openBraceIndex = existing.IndexOf('{', containerIndex);
             var closeBraceIndex = FindMatchingBrace(existing, openBraceIndex);
             if (openBraceIndex < 0 || closeBraceIndex < 0)
             {
@@ -157,16 +170,16 @@ namespace UnityMcp.AgentBridge.Mcp
             return builderWithSection.ToString();
         }
 
-        private static string RemoveManagedServer(string originalText)
+        private static string RemoveManagedServer(string originalText, string containerName)
         {
             var existing = originalText.Trim();
-            var mcpServersIndex = existing.IndexOf("\"mcpServers\"", StringComparison.Ordinal);
-            if (mcpServersIndex < 0)
+            var containerIndex = existing.IndexOf("\"" + containerName + "\"", StringComparison.Ordinal);
+            if (containerIndex < 0)
             {
                 return existing;
             }
 
-            var openBraceIndex = existing.IndexOf('{', mcpServersIndex);
+            var openBraceIndex = existing.IndexOf('{', containerIndex);
             var closeBraceIndex = FindMatchingBrace(existing, openBraceIndex);
             if (openBraceIndex < 0 || closeBraceIndex < 0)
             {
@@ -228,6 +241,13 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             return sectionContent.Remove(entryStart, entryEnd - entryStart).Trim().Trim(',');
+        }
+
+        private static string NormalizeContainerName(string containerName)
+        {
+            return string.IsNullOrWhiteSpace(containerName)
+                ? DefaultContainerName
+                : containerName.Trim();
         }
 
         private static int FindMatchingBrace(string text, int openBraceIndex)

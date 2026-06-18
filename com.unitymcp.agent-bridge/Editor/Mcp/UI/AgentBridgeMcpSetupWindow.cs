@@ -23,6 +23,8 @@ namespace UnityMcp.AgentBridge.Mcp
         private McpEnvironmentSnapshot _snapshot;
         private IMcpClientConfigWriter _codexWriter;
         private IMcpClientConfigWriter _claudeWriter;
+        private IMcpClientConfigWriter _cursorWriter;
+        private IMcpClientConfigWriter _copilotWriter;
         private IMcpEditorSettingsStore _settingsStore;
         private McpEnvironmentProbe _environmentProbe;
         private McpPathResolver _pathResolver;
@@ -69,6 +71,8 @@ namespace UnityMcp.AgentBridge.Mcp
             _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
             _codexWriter = new CodexProjectConfigWriter();
             _claudeWriter = new ClaudeCodeProjectConfigWriter();
+            _cursorWriter = new CursorProjectConfigWriter();
+            _copilotWriter = new GitHubCopilotProjectConfigWriter();
             _diagnosticChecks = new McpDiagnosticCheck[0];
             _readiness = McpReadiness.NotChecked;
             _diagnosticReport = string.Empty;
@@ -90,7 +94,7 @@ namespace UnityMcp.AgentBridge.Mcp
             DrawSetupFlowControls();
             EditorGUILayout.Space(12f);
 
-            _clientConfigSection.Draw(_codexWriter, _claudeWriter, _settings);
+            _clientConfigSection.Draw(_codexWriter, _claudeWriter, _cursorWriter, _copilotWriter, _settings);
             EditorGUILayout.Space(12f);
 
             _diagnosticsSection.Draw(
@@ -264,7 +268,7 @@ namespace UnityMcp.AgentBridge.Mcp
             var effectiveSettings = _settings ?? McpEditorSettingsDefaults.Create();
             var resolver = _pathResolver ?? new McpPathResolver();
             var workspaceRoot = resolver.GetWorkspaceRoot(effectiveSettings);
-            var tooltip = "Managed Codex and Claude config files are written under this workspace root. Edit it in Advanced Details when the detected root is wrong.";
+            var tooltip = "Managed Codex, Claude Code, Cursor, and GitHub Copilot config files are written under this workspace root. Edit it in Advanced Details when the detected root is wrong.";
 
             EditorGUILayout.LabelField(new GUIContent("Workspace Config Target", tooltip), EditorStyles.boldLabel);
             EditorGUILayout.SelectableLabel(
@@ -276,6 +280,8 @@ namespace UnityMcp.AgentBridge.Mcp
             {
                 EditorGUILayout.LabelField(".codex/config.toml", Path.Combine(workspaceRoot, ".codex", "config.toml"));
                 EditorGUILayout.LabelField(".mcp.json", Path.Combine(workspaceRoot, ".mcp.json"));
+                EditorGUILayout.LabelField(".cursor/mcp.json", Path.Combine(workspaceRoot, ".cursor", "mcp.json"));
+                EditorGUILayout.LabelField(".vscode/mcp.json", Path.Combine(workspaceRoot, ".vscode", "mcp.json"));
             }
         }
 

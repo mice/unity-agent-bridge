@@ -133,7 +133,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
         {
             var section = new McpClientConfigSection(AgentBridgeMcpSetupWindow.DisabledActionTooltip);
 
-            Assert.DoesNotThrow(() => section.Draw(new StubWriter(), new StubWriter(), new McpEditorSettings()));
+            Assert.DoesNotThrow(() => section.Draw(new StubWriter(), new StubWriter(), new StubWriter(), new StubWriter(), new McpEditorSettings()));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_168.md
@@ -201,8 +201,25 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
             Assert.That(content, Does.Contain("GUILayout.Button(\"Apply\""));
             Assert.That(content, Does.Contain("GUILayout.Button(\"Remove\""));
+            Assert.That(content, Does.Contain("\"Cursor\""));
+            Assert.That(content, Does.Contain("\"GitHub Copilot\""));
+            Assert.That(content, Does.Contain(".cursor/mcp.json"));
+            Assert.That(content, Does.Contain(".vscode/mcp.json"));
             Assert.That(content, Does.Not.Contain("GUILayout.Button(\"Copy\""));
             Assert.That(content, Does.Not.Contain("GUILayout.Button(\"Reveal\""));
+        }
+
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_179")]
+        public void SetupWindow_Source_WiresCursorAndCopilotConfigWriters()
+        {
+            var content = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/UI/AgentBridgeMcpSetupWindow.cs"));
+
+            Assert.That(content, Does.Contain("new CursorProjectConfigWriter()"));
+            Assert.That(content, Does.Contain("new GitHubCopilotProjectConfigWriter()"));
+            Assert.That(content, Does.Contain(".cursor/mcp.json"));
+            Assert.That(content, Does.Contain(".vscode/mcp.json"));
         }
 
         [Test]
