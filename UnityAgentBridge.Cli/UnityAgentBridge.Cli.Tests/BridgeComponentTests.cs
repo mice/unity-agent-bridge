@@ -62,8 +62,11 @@ public sealed class BridgeComponentTests
         Assert.AreEqual("success", result.Status);
         var parsed = JObject.Parse(result.RawJson);
         Assert.AreEqual(false, parsed.Value<bool>("statusFileExists"));
-        Assert.AreEqual("reconnect-required", parsed.Value<string>("lifecycleState"));
+        Assert.AreEqual("degraded", parsed.Value<string>("lifecycleState"));
+        Assert.AreEqual("UnityUnavailable", parsed.Value<string>("healthReason"));
         Assert.AreEqual(true, parsed.Value<bool>("reconnectRequired"));
+        Assert.AreEqual("Reconnect", parsed.Value<string>("recommendedActionCode"));
+        Assert.AreEqual("BlockedBeforeDispatch", parsed.Value<string>("toolExecution"));
         Assert.IsFalse(string.IsNullOrWhiteSpace(parsed.Value<string>("recommendedAction")));
         Assert.IsNotNull(parsed["currentCompileEpoch"]);
         Assert.IsNotNull(parsed["compileLifecycleStage"]);
@@ -89,6 +92,72 @@ public sealed class BridgeComponentTests
         var parsed = JObject.Parse(result.RawJson);
         Assert.AreEqual("bound", parsed.Value<string>("staleProjectBindingKind"));
         Assert.AreEqual(root.Replace("\\", "/"), parsed.Value<string>("staleDetectedProjectPath"));
+    }
+
+    [TestMethod]
+    public void BridgeHealthProjectMismatchReportsLayeredDegradedStatus()
+    {
+        var root = CreateUnityProject();
+        var paths = new QueuePaths(root, "Temp/AgentBridge");
+        CommandStore.EnsureQueueDirectories(paths);
+        WriteStatus(paths,
+            "{\"heartbeatUtc\":\"" + DateTime.UtcNow.ToString("O") + "\",\"currentStage\":\"unity.poller.idle\",\"projectPath\":\"" + root.Replace("\\", "/") + "\",\"staleProjectBindingKind\":\"explicit\",\"staleConfiguredProjectPath\":\"C:/OtherProject\",\"staleDetectedProjectPath\":\"" + root.Replace("\\", "/") + "\"}");
+        var spec = new BridgeCommandSpec("unity.bridge_health", 5000, "{}");
+
+        var handled = new BridgeHealthClient().TryHandleLocalCommand(paths, spec, "health-mismatch", out var result);
+
+        Assert.IsTrue(handled);
+        var parsed = JObject.Parse(result.RawJson);
+        Assert.AreEqual("degraded", parsed.Value<string>("lifecycleState"));
+        Assert.AreEqual("ProjectMismatch", parsed.Value<string>("healthReason"));
+        Assert.AreEqual("UpdateConfig", parsed.Value<string>("recommendedActionCode"));
+        Assert.AreEqual("BlockedBeforeDispatch", parsed.Value<string>("toolExecution"));
+        Assert.AreEqual(true, parsed.Value<bool>("reconnectRequired"));
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_ProjectMismatchBlocksBeforeDispatch()
+    {
+        var root = CreateUnityProject();
+        var paths = new QueuePaths(root, "Temp/AgentBridge");
+        CommandStore.EnsureQueueDirectories(paths);
+        WriteStatus(paths,
+            "{\"heartbeatUtc\":\"" + DateTime.UtcNow.ToString("O") + "\",\"currentStage\":\"unity.poller.idle\",\"projectPath\":\"" + root.Replace("\\", "/") + "\",\"staleProjectBindingKind\":\"explicit\",\"staleConfiguredProjectPath\":\"C:/OtherProject\",\"staleDetectedProjectPath\":\"" + root.Replace("\\", "/") + "\"}");
+
+        var result = await new ExternalBridgeClient().ExecuteAsync(
+            paths,
+            "cmd-blocked",
+            new BridgeCommandSpec("unity.ping", 5000, "{}"),
+            CancellationToken.None);
+
+        var parsed = JObject.Parse(result.RawJson);
+        Assert.AreEqual("blocked", result.Status);
+        Assert.AreEqual("degraded", parsed.Value<string>("lifecycleState"));
+        Assert.AreEqual("ProjectMismatch", parsed.Value<string>("healthReason"));
+        Assert.AreEqual("BlockedBeforeDispatch", parsed.Value<string>("toolExecution"));
+        Assert.AreEqual(false, File.Exists(Path.Combine(paths.InboxDirectory, "cmd-blocked.json")));
+    }
+
+    [TestMethod]
+    public async Task ExecuteAsync_UnityUnavailableBlocksBeforeDispatch()
+    {
+        var root = CreateUnityProject();
+        var paths = new QueuePaths(root, "Temp/AgentBridge");
+        CommandStore.EnsureQueueDirectories(paths);
+
+        var result = await new ExternalBridgeClient().ExecuteAsync(
+            paths,
+            "cmd-unavailable",
+            new BridgeCommandSpec("unity.ping", 5000, "{}"),
+            CancellationToken.None);
+
+        var parsed = JObject.Parse(result.RawJson);
+        Assert.AreEqual("blocked", result.Status);
+        Assert.AreEqual("degraded", parsed.Value<string>("lifecycleState"));
+        Assert.AreEqual("UnityUnavailable", parsed.Value<string>("healthReason"));
+        Assert.AreEqual("Reconnect", parsed.Value<string>("recommendedActionCode"));
+        Assert.AreEqual("BlockedBeforeDispatch", parsed.Value<string>("toolExecution"));
+        Assert.AreEqual(false, File.Exists(Path.Combine(paths.InboxDirectory, "cmd-unavailable.json")));
     }
 
     [TestMethod]
@@ -223,5 +292,11 @@ public sealed class BridgeComponentTests
         Directory.CreateDirectory(Path.Combine(root, "ProjectSettings"));
         File.WriteAllText(Path.Combine(root, "ProjectSettings", "ProjectVersion.txt"), "m_EditorVersion: 2022.3.0f1");
         return root;
+    }
+
+    private static void WriteStatus(QueuePaths paths, string json)
+    {
+        Directory.CreateDirectory(paths.StatusDirectory);
+        File.WriteAllText(Path.Combine(paths.StatusDirectory, "unity_bridge_status.json"), json);
     }
 }

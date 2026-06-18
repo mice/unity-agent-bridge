@@ -324,8 +324,11 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(File.Exists(cliHostPath), Is.True);
             var text = File.ReadAllText(cliHostPath);
             Assert.That(text, Does.Contain("lifecycleState"));
+            Assert.That(text, Does.Contain("healthReason"));
             Assert.That(text, Does.Contain("reconnectRequired"));
+            Assert.That(text, Does.Contain("recommendedActionCode"));
             Assert.That(text, Does.Contain("recommendedAction"));
+            Assert.That(text, Does.Contain("toolExecution"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_138.md
@@ -339,8 +342,9 @@ namespace UnityMcp.AgentBridge.Tests
 
             Assert.That(File.Exists(cliHostPath), Is.True);
             var text = File.ReadAllText(cliHostPath);
-            Assert.That(text, Does.Contain("(\"stale\", true"));
+            Assert.That(text, Does.Contain("BridgeLifecycleStatus.Degraded(\"UnityUnavailable\", \"Reconnect\""));
             Assert.That(text, Does.Contain("Restart Unity or reconnect the MCP server because the bridge heartbeat is stale."));
+            Assert.That(text, Does.Contain("BlockedBeforeDispatch"));
         }
 
         private static string CreateCommandJson(string commandId, int timeoutMs = 1000, string toolName = "unity.echo")

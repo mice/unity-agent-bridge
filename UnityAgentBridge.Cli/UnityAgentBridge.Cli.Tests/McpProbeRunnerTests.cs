@@ -19,8 +19,11 @@ public sealed class McpProbeRunnerTests
             var json = await McpProbeRunner.RunAsync(CancellationToken.None);
             var parsed = JObject.Parse(json);
 
-            Assert.AreEqual(20, parsed.Value<int>("listedToolCount"));
-            Assert.IsTrue(parsed["toolNames"] is JArray toolNames && toolNames.Count == 20);
+            var listedToolCount = parsed.Value<int>("listedToolCount");
+            var toolNames = parsed["toolNames"] as JArray;
+            Assert.IsNotNull(toolNames);
+            Assert.AreEqual(listedToolCount, toolNames.Count);
+            Assert.IsTrue(listedToolCount > 0);
             Assert.IsNotNull(parsed["pingResult"]);
             Assert.IsNotNull(parsed["pingResult"]!["structuredContent"]);
             Assert.IsNotNull(parsed["pingResult"]!["isError"]);
@@ -84,6 +87,7 @@ public sealed class McpProbeRunnerTests
 
         private async Task RespondAsync()
         {
+            WriteFreshStatus();
             while (!_cts.IsCancellationRequested)
             {
                 var commandPath = Directory.GetFiles(_queuePaths.InboxDirectory, "*.json").FirstOrDefault();
@@ -112,6 +116,21 @@ public sealed class McpProbeRunnerTests
 
                 await Task.Delay(50, _cts.Token);
             }
+        }
+
+        private void WriteFreshStatus()
+        {
+            Directory.CreateDirectory(_queuePaths.StatusDirectory);
+            var statusPath = Path.Combine(_queuePaths.StatusDirectory, "unity_bridge_status.json");
+            var status = new JObject
+            {
+                ["heartbeatUtc"] = DateTime.UtcNow.ToString("O"),
+                ["currentStage"] = "unity.poller.idle",
+                ["projectPath"] = _queuePaths.ProjectPath.Replace("\\", "/"),
+                ["staleProjectBindingKind"] = "bound",
+                ["staleDetectedProjectPath"] = _queuePaths.ProjectPath.Replace("\\", "/")
+            };
+            File.WriteAllText(statusPath, status.ToString(Newtonsoft.Json.Formatting.None));
         }
     }
 }

@@ -213,7 +213,7 @@ namespace UnityMcp.AgentBridge.Mcp
 
             if (!string.Equals(probeResult.PingStatus, "success", StringComparison.OrdinalIgnoreCase) || probeResult.PingIsError)
             {
-                return CreateProbeFailureCheck("MCP010", "MCP Ping", "Ping did not return status=success.", probeResult.Duration);
+                return CreateProbeFailureCheck("MCP010", "MCP Ping", BuildPingFailureDetails(probeResult), probeResult.Duration);
             }
 
             return new McpDiagnosticCheck
@@ -238,6 +238,22 @@ namespace UnityMcp.AgentBridge.Mcp
                 Remediation = "Check the C# MCP executable, prepared runtime payload, and Unity bridge availability.",
                 Duration = duration ?? TimeSpan.Zero,
             };
+        }
+
+        private static string BuildPingFailureDetails(ProbeRunResult probeResult)
+        {
+            var details = "Ping did not return status=success.";
+            if (probeResult == null || string.IsNullOrWhiteSpace(probeResult.HealthLifecycleState))
+            {
+                return details;
+            }
+
+            return details +
+                   " lifecycleState=" + probeResult.HealthLifecycleState +
+                   " healthReason=" + probeResult.HealthReason +
+                   " recommendedActionCode=" + probeResult.RecommendedActionCode +
+                   " toolExecution=" + probeResult.ToolExecution +
+                   " recommendedAction=" + probeResult.RecommendedAction;
         }
 
         private static McpDiagnosticCheck CreateExceptionCheck(string code, string summary, string remediation, Exception exception)
@@ -524,6 +540,11 @@ namespace UnityMcp.AgentBridge.Mcp
             public HashSet<string> ToolNames { get; } = new HashSet<string>(StringComparer.Ordinal);
             public string PingStatus { get; private set; } = string.Empty;
             public bool PingIsError { get; private set; }
+            public string HealthLifecycleState { get; private set; } = string.Empty;
+            public string HealthReason { get; private set; } = string.Empty;
+            public string RecommendedActionCode { get; private set; } = string.Empty;
+            public string RecommendedAction { get; private set; } = string.Empty;
+            public string ToolExecution { get; private set; } = string.Empty;
             public TimeSpan Duration { get; private set; }
 
             public static ProbeRunResult Fail(string errorDetails, TimeSpan? duration = null)
@@ -551,6 +572,7 @@ namespace UnityMcp.AgentBridge.Mcp
                     var structuredContentToken = pingResultToken?["structuredContent"] as JObject;
                     var pingStatus = structuredContentToken?["status"]?.Value<string>() ?? string.Empty;
                     var pingIsError = pingResultToken?["isError"]?.Value<bool>() ?? false;
+                    var healthStructuredContentToken = (document["healthResult"] as JObject)?["structuredContent"] as JObject;
 
                     if (toolNamesToken == null || toolNamesToken.Count == 0 || string.IsNullOrEmpty(pingStatus))
                     {
@@ -562,6 +584,11 @@ namespace UnityMcp.AgentBridge.Mcp
                         Success = true,
                         PingStatus = pingStatus,
                         PingIsError = pingIsError,
+                        HealthLifecycleState = healthStructuredContentToken?["lifecycleState"]?.Value<string>() ?? string.Empty,
+                        HealthReason = healthStructuredContentToken?["healthReason"]?.Value<string>() ?? string.Empty,
+                        RecommendedActionCode = healthStructuredContentToken?["recommendedActionCode"]?.Value<string>() ?? string.Empty,
+                        RecommendedAction = healthStructuredContentToken?["recommendedAction"]?.Value<string>() ?? string.Empty,
+                        ToolExecution = healthStructuredContentToken?["toolExecution"]?.Value<string>() ?? string.Empty,
                         Duration = duration,
                     };
 

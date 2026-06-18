@@ -36,6 +36,15 @@ public sealed class ExternalBridgeClient
             return localResult;
         }
 
+        var lifecycle = _healthClient.EvaluateLifecycle(queuePaths);
+        if (lifecycle.ToolExecution == BridgeLifecycleStatus.BlockedBeforeDispatch)
+        {
+            return new ToolResultEnvelope(
+                BridgeHealthClient.CreateLifecycleBlocked(commandId, commandSpec.Tool, commandSpec.Tool, lifecycle).ToString(Newtonsoft.Json.Formatting.None),
+                "blocked",
+                false);
+        }
+
         var commandJson = AgentCommandEnvelope.Build(commandId, commandSpec.Tool, commandSpec.TimeoutMs, commandSpec.ArgsJson);
         _store.WriteInboxAtomic(queuePaths, commandId, commandJson);
         return await _store.WaitForResultAsync(queuePaths, commandId, commandSpec.TimeoutMs + 15000, cancellationToken);

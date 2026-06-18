@@ -7,6 +7,14 @@ namespace UnityAgentBridge.ExternalBridgeClientCore;
 
 public sealed class BridgeHealthClient
 {
+    public BridgeLifecycleStatus EvaluateLifecycle(QueuePaths queuePaths)
+    {
+        var statusPath = Path.Combine(queuePaths.StatusDirectory, "unity_bridge_status.json");
+        var statusFileExists = File.Exists(statusPath);
+        var status = statusFileExists ? SafeParseJsonObject(File.ReadAllText(statusPath, Encoding.UTF8)) : new JObject();
+        return ClassifyLifecycle(statusFileExists, GetHeartbeatAgeMs(status), status);
+    }
+
     public bool TryHandleLocalCommand(QueuePaths queuePaths, BridgeCommandSpec commandSpec, string commandId, out ToolResultEnvelope result)
     {
         result = default!;
@@ -31,6 +39,7 @@ public sealed class BridgeHealthClient
             {
                 var statusPath = Path.Combine(queuePaths.StatusDirectory, "unity_bridge_status.json");
                 var status = File.Exists(statusPath) ? SafeParseJsonObject(File.ReadAllText(statusPath, Encoding.UTF8)) : new JObject();
+                var lifecycle = ClassifyLifecycle(File.Exists(statusPath), GetHeartbeatAgeMs(status), status);
                 var payload = new JObject
                 {
                     ["schemaVersion"] = AgentCommandEnvelope.SchemaVersion,
@@ -45,9 +54,12 @@ public sealed class BridgeHealthClient
                     ["outboxRecentCount"] = CommandStore.CountJsonFiles(queuePaths.OutboxDirectory),
                     ["statusFileExists"] = File.Exists(statusPath),
                     ["heartbeatAgeMs"] = GetHeartbeatAgeMs(status),
-                    ["lifecycleState"] = ClassifyLifecycle(File.Exists(statusPath), GetHeartbeatAgeMs(status), status).LifecycleState,
-                    ["reconnectRequired"] = ClassifyLifecycle(File.Exists(statusPath), GetHeartbeatAgeMs(status), status).ReconnectRequired,
-                    ["recommendedAction"] = ClassifyLifecycle(File.Exists(statusPath), GetHeartbeatAgeMs(status), status).RecommendedAction,
+                    ["lifecycleState"] = lifecycle.LifecycleState,
+                    ["healthReason"] = lifecycle.HealthReason,
+                    ["reconnectRequired"] = lifecycle.ReconnectRequired,
+                    ["recommendedActionCode"] = lifecycle.RecommendedActionCode,
+                    ["recommendedAction"] = lifecycle.RecommendedAction,
+                    ["toolExecution"] = lifecycle.ToolExecution,
                     ["currentCommandId"] = status.Value<string>("currentCommandId") ?? string.Empty,
                     ["currentStage"] = status.Value<string>("currentStage") ?? string.Empty,
                     ["isCompiling"] = status["isCompiling"] ?? JValue.CreateNull(),
@@ -86,6 +98,13 @@ public sealed class BridgeHealthClient
 
                 var targetTimeoutMs = args.Value<int?>("timeoutMs") ?? commandSpec.TimeoutMs;
                 EnsurePositiveTimeout(targetTimeoutMs);
+                var lifecycle = EvaluateLifecycle(queuePaths);
+                if (lifecycle.ToolExecution == BridgeLifecycleStatus.BlockedBeforeDispatch)
+                {
+                    result = CreateLocalResult(CreateLifecycleBlocked(commandId, "unity.bridge_submit_only", targetTool, lifecycle));
+                    return true;
+                }
+
                 var targetArgs = args["args"] is JObject argsObject ? argsObject.ToString(Formatting.None) : "{}";
                 var targetCommandJson = AgentCommandEnvelope.Build(commandId, targetTool, targetTimeoutMs, targetArgs);
                 new CommandStore().WriteInboxAtomic(queuePaths, commandId, targetCommandJson);
@@ -139,6 +158,35 @@ public sealed class BridgeHealthClient
             default:
                 return false;
         }
+    }
+
+    public static JObject CreateLifecycleBlocked(string commandId, string tool, string targetTool, BridgeLifecycleStatus lifecycle)
+    {
+        var message = $"Unity bridge tool execution is blocked before dispatch because lifecycleState={lifecycle.LifecycleState}, healthReason={lifecycle.HealthReason}. {lifecycle.RecommendedAction}";
+        return new JObject
+        {
+            ["schemaVersion"] = AgentCommandEnvelope.SchemaVersion,
+            ["commandId"] = commandId,
+            ["tool"] = tool,
+            ["success"] = false,
+            ["status"] = "blocked",
+            ["summary"] = message,
+            ["targetTool"] = targetTool ?? string.Empty,
+            ["lifecycleState"] = lifecycle.LifecycleState,
+            ["healthReason"] = lifecycle.HealthReason,
+            ["reconnectRequired"] = lifecycle.ReconnectRequired,
+            ["recommendedActionCode"] = lifecycle.RecommendedActionCode,
+            ["recommendedAction"] = lifecycle.RecommendedAction,
+            ["toolExecution"] = lifecycle.ToolExecution,
+            ["errors"] = new JArray
+            {
+                new JObject
+                {
+                    ["code"] = "CLI_BRIDGE_LIFECYCLE_BLOCKED",
+                    ["message"] = message
+                }
+            }
+        };
     }
 
     private static ToolResultEnvelope CreateLocalResult(JObject payload)
@@ -199,38 +247,66 @@ public sealed class BridgeHealthClient
         }
     }
 
-    private static (string LifecycleState, bool ReconnectRequired, string RecommendedAction) ClassifyLifecycle(
+    private static BridgeLifecycleStatus ClassifyLifecycle(
         bool statusFileExists,
         JToken heartbeatAgeMs,
         JObject status)
     {
         if (!statusFileExists)
         {
-            return ("reconnect-required", true, "Start Unity or reconnect the MCP server so the bridge can publish status.");
+            return BridgeLifecycleStatus.Degraded("UnityUnavailable", "Reconnect", "Start Unity or reconnect the MCP server so the bridge can publish status.");
         }
 
         if (heartbeatAgeMs.Type is JTokenType.Null)
         {
-            return ("starting", false, "Wait for the Unity bridge heartbeat to initialize.");
+            return new BridgeLifecycleStatus("starting", "BridgeQueueUnavailable", false, "Retry", "Wait for the Unity bridge heartbeat to initialize.", "RetryableTimeout");
         }
 
         var ageMs = heartbeatAgeMs.Value<long>();
         if (ageMs > 10_000)
         {
-            return ("stale", true, "Restart Unity or reconnect the MCP server because the bridge heartbeat is stale.");
+            return BridgeLifecycleStatus.Degraded("UnityUnavailable", "Reconnect", "Restart Unity or reconnect the MCP server because the bridge heartbeat is stale.");
         }
 
         var currentStage = status.Value<string>("currentStage") ?? string.Empty;
         if (currentStage.IndexOf("shutting", StringComparison.OrdinalIgnoreCase) >= 0)
         {
-            return ("shutting-down", true, "Wait for shutdown to finish, then reconnect the MCP server.");
+            return new BridgeLifecycleStatus("stopping", "ShutdownRequested", true, "Reconnect", "Wait for shutdown to finish, then reconnect the MCP server.", BridgeLifecycleStatus.BlockedBeforeDispatch);
         }
 
-        return ("ready", false, "No action required.");
+        var projectBindingKind = status.Value<string>("staleProjectBindingKind") ?? string.Empty;
+        if (string.Equals(projectBindingKind, "explicit", StringComparison.OrdinalIgnoreCase))
+        {
+            return BridgeLifecycleStatus.Degraded("ProjectMismatch", "UpdateConfig", "Update the configured Unity project binding or reconnect the MCP server for the intended project.");
+        }
+
+        var stalePrimaryClassification = status.Value<string>("stalePrimaryClassification") ?? string.Empty;
+        if (string.Equals(stalePrimaryClassification, "stale_runtime", StringComparison.OrdinalIgnoreCase))
+        {
+            return BridgeLifecycleStatus.Degraded("RuntimePathMismatch", "Reconnect", "Reconnect the MCP server so runtime identity and project binding can be refreshed.");
+        }
+
+        return new BridgeLifecycleStatus("ready", "None", false, "None", "No action required.", "Allowed");
     }
 
     private static bool CommandStoreIsKnownStatus(string status)
     {
         return status is "success" or "failed" or "timeout" or "invalid_args" or "unsupported" or "blocked" or "exception" or "cancelled";
+    }
+}
+
+public sealed record BridgeLifecycleStatus(
+    string LifecycleState,
+    string HealthReason,
+    bool ReconnectRequired,
+    string RecommendedActionCode,
+    string RecommendedAction,
+    string ToolExecution)
+{
+    public const string BlockedBeforeDispatch = "BlockedBeforeDispatch";
+
+    public static BridgeLifecycleStatus Degraded(string healthReason, string recommendedActionCode, string recommendedAction)
+    {
+        return new BridgeLifecycleStatus("degraded", healthReason, true, recommendedActionCode, recommendedAction, BlockedBeforeDispatch);
     }
 }

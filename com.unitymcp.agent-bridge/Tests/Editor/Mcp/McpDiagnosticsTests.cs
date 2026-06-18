@@ -1158,6 +1158,49 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(Find(results, "MCP010").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_180.md
+        [Test]
+        [Category("AGBM_180")]
+        [Category("AGBM_P4")]
+        public void RunAsync_ProbePingBlocked_IncludesLayeredHealthDetails()
+        {
+            var root = CreateMcpServerRoot(includeDependencies: true, includeProbe: true);
+            var settings = new McpEditorSettings
+            {
+                McpServerRoot = root,
+                CliExecutablePath = GetCliExecutablePath(root),
+            };
+            var fakeRunner = new FakeRunner
+            {
+                Handler = request =>
+                {
+                    if (request.Arguments.Count > 0 && request.Arguments[0] == "mcp-probe")
+                    {
+                        return new ProcessExecutionResult
+                        {
+                            Outcome = ProcessOutcome.Completed,
+                            Stdout = "{\"listedToolCount\":17,\"toolNames\":[\"mcp_echo\",\"unity_bridge_health\",\"unity_bridge_submit_only\",\"unity_bridge_wait_result\",\"mcp__unity__ping\",\"mcp__unity__project_get_info\",\"mcp__unity__compile\",\"mcp__unity__get_console\",\"mcp__unity__assetdatabase_search\",\"mcp__unity__get_selection_info\",\"mcp__unity__get_gameobject_component_info\",\"mcp__unity__read_report\",\"mcp__unity__run_static_method\",\"mcp__unity__run_diagnostic\",\"mcp__unity__run_editmode_tests\",\"mcp__unity__run_playmode_tests\",\"mcp__unity__agent_bridge_self_test\"],\"pingResult\":{\"isError\":true,\"structuredContent\":{\"status\":\"blocked\"}},\"healthResult\":{\"isError\":false,\"structuredContent\":{\"status\":\"success\",\"lifecycleState\":\"degraded\",\"healthReason\":\"ProjectMismatch\",\"recommendedActionCode\":\"UpdateConfig\",\"recommendedAction\":\"Update the configured Unity project binding.\",\"toolExecution\":\"BlockedBeforeDispatch\"}}}",
+                            Duration = TimeSpan.FromMilliseconds(19),
+                        };
+                    }
+
+                    return VersionSuccess("v22.0.0");
+                },
+            };
+
+            var probe = new McpEnvironmentProbe(new McpPathResolver(), new ToolVersionParser(), fakeRunner);
+            var runner = new McpDiagnosticsRunner(probe, new McpPathResolver(), fakeRunner);
+
+            var results = runner.RunAsync(settings, CancellationToken.None).GetAwaiter().GetResult();
+
+            var ping = Find(results, "MCP010");
+            Assert.That(ping.Severity, Is.EqualTo(McpDiagnosticSeverity.Error));
+            Assert.That(ping.Details, Does.Contain("lifecycleState=degraded"));
+            Assert.That(ping.Details, Does.Contain("healthReason=ProjectMismatch"));
+            Assert.That(ping.Details, Does.Contain("recommendedActionCode=UpdateConfig"));
+            Assert.That(ping.Details, Does.Contain("toolExecution=BlockedBeforeDispatch"));
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_129.md
         [Test]
         [Category("AGBM_P4")]

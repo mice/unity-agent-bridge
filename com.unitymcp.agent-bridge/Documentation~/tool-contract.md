@@ -666,8 +666,11 @@ ToolResult and report examples for the asset query tools must preserve the same 
   - `statusFileExists`
   - `heartbeatAgeMs`
   - `lifecycleState`
+  - `healthReason`
   - `reconnectRequired`
+  - `recommendedActionCode`
   - `recommendedAction`
+  - `toolExecution`
   - `currentCommandId`
 - `currentStage`
 - `isCompiling`
@@ -690,11 +693,13 @@ ToolResult and report examples for the asset query tools must preserve the same 
 - `staleRuntimeIdentity`
 - `lastError`
 - lifecycle interpretation:
-  - `ready`: bridge heartbeat is fresh
-  - `starting`: status file exists but heartbeat is not initialized yet
-  - `stale`: heartbeat is too old and callers should reconnect or restart Unity
-  - `reconnect-required`: bridge status is absent or no longer trustworthy
-  - `shutting-down`: shutdown is in progress and callers should reconnect after it finishes
+  - `lifecycleState` is a compact server availability state: `starting`, `ready`, `degraded`, `stopping`, or `stopped`
+  - `healthReason` explains degraded evidence, such as `UnityUnavailable`, `ProjectMismatch`, `RuntimePathMismatch`, `BridgeQueueUnavailable`, `ShutdownRequested`, or `None`
+  - `recommendedActionCode` gives machine-readable recovery guidance, such as `Retry`, `Reconnect`, `RestartUnity`, `UpdateConfig`, `StopServer`, or `None`
+  - `recommendedAction` gives the human-readable recovery message
+  - `toolExecution` is `Allowed`, `BlockedBeforeDispatch`, or `RetryableTimeout`
+  - `reconnectRequired` remains for compatibility and is derived from the recommended action / execution decision
+  - stale sessions, project mismatches, and reconnect-required conditions are represented as `degraded` plus reason/action details rather than as top-level lifecycle states
 - `statusPath`
 
 ## Plugin Discovery Contract
