@@ -1024,11 +1024,10 @@ namespace UnityMcp.AgentBridge.Tests
             var alphaPath = folder + "/AlphaScene.unity";
             _assetPathsToDelete.Add(zetaPath);
             _assetPathsToDelete.Add(alphaPath);
-            File.Copy(GetProjectRelativePath("Assets/Scenes/AppMain.unity"), GetProjectRelativePath(zetaPath), true);
-            File.Copy(GetProjectRelativePath("Assets/Scenes/AppMain.unity.meta"), GetProjectRelativePath(zetaPath + ".meta"), true);
-            File.Copy(GetProjectRelativePath("Assets/Scenes/AppMain.unity"), GetProjectRelativePath(alphaPath), true);
-            File.Copy(GetProjectRelativePath("Assets/Scenes/AppMain.unity.meta"), GetProjectRelativePath(alphaPath + ".meta"), true);
-            AssetDatabase.Refresh();
+            Assert.That(AssetDatabase.CopyAsset("Assets/Scenes/AppMain.unity", zetaPath), Is.True);
+            Assert.That(AssetDatabase.CopyAsset("Assets/Scenes/AppMain.unity", alphaPath), Is.True);
+            AssetDatabase.ImportAsset(zetaPath, ImportAssetOptions.ForceUpdate);
+            AssetDatabase.ImportAsset(alphaPath, ImportAssetOptions.ForceUpdate);
 
             var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
             var result = tool.Execute(
@@ -1053,11 +1052,9 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var folder = EnsureAssetQueryTestFolder();
             var baseScenePath = folder + "/DetailBase.unity";
-            var sceneMetaPath = "Assets/Scenes/AppMain.unity.meta";
             if (!File.Exists(GetProjectRelativePath(baseScenePath)))
             {
-                File.Copy(GetProjectRelativePath("Assets/Scenes/AppMain.unity"), GetProjectRelativePath(baseScenePath), true);
-                File.Copy(GetProjectRelativePath(sceneMetaPath), GetProjectRelativePath(baseScenePath + ".meta"), true);
+                Assert.That(AssetDatabase.CopyAsset("Assets/Scenes/AppMain.unity", baseScenePath), Is.True);
                 _assetPathsToDelete.Add(baseScenePath);
             }
 
@@ -1091,7 +1088,7 @@ namespace UnityMcp.AgentBridge.Tests
                     child.name = "Child" + index;
                     AssetDatabase.AddObjectToAsset(child, assetPath);
                 }
-                AssetDatabase.ImportAsset(assetPath);
+                AssetDatabase.SaveAssets();
             }
 
             var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
