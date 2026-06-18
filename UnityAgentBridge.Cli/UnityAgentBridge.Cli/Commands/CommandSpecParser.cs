@@ -131,6 +131,7 @@ internal static class CommandSpecParser
         var timeoutMs = 10000;
         var types = new List<string>();
         var count = 100;
+        string? filter = null;
 
         while (reader.HasMore)
         {
@@ -148,6 +149,12 @@ internal static class CommandSpecParser
             if (reader.TryConsumeIntOption("--count", out var parsedCount))
             {
                 count = parsedCount;
+                continue;
+            }
+
+            if (reader.TryConsumeStringOption("--filter", out var parsedFilter))
+            {
+                filter = parsedFilter;
                 continue;
             }
 
@@ -195,6 +202,12 @@ internal static class CommandSpecParser
             ["types"] = new JArray(types),
             ["count"] = count
         };
+
+        if (!string.IsNullOrWhiteSpace(filter))
+        {
+            argsObject["filter"] = filter;
+        }
+
         return new CommandSpec("unity.get_console", timeoutMs, argsObject.ToString(Formatting.None));
     }
 

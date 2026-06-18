@@ -75,6 +75,16 @@ public sealed class CommandSpecParserTests
     }
 
     [TestMethod]
+    public void ConsoleFilterMapsToUnityGetConsole()
+    {
+        var parsed = CommandSpecParser.Parse(["console", "--type", "warning", "--count", "5", "--filter", "unique-marker"]);
+
+        Assert.AreEqual("unity.get_console", parsed.Spec.Tool);
+        Assert.AreEqual(10000, parsed.Spec.TimeoutMs);
+        AssertJson("""{"types":["warning"],"count":5,"filter":"unique-marker"}""", parsed.Spec.ArgsJson);
+    }
+
+    [TestMethod]
     public void OpenSceneMapsStructuredArgs()
     {
         var parsed = CommandSpecParser.Parse([

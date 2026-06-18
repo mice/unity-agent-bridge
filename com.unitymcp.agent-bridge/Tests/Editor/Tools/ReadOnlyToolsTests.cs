@@ -222,6 +222,42 @@ namespace UnityMcp.AgentBridge.Tests
             TrackReport(result.ReportPath);
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_168.md
+        [Test]
+        [Category("AGB_ReadOnly")]
+        [Category("AGB_168")]
+        public void UnityConsoleLogTool_Filter_MatchesConditionAndStackTraceBeforeCount()
+        {
+            const string olderMatchingWarning = "AGB168 condition unique-marker older";
+            const string newerNonMatchingWarning = "AGB168 unrelated warning";
+            const string newestMatchingStackWarning = "AGB168 stack-only warning";
+            EditorBasics.EditorBasicsConsoleLogStore.AppendTestEntry(olderMatchingWarning, string.Empty, LogType.Warning);
+            EditorBasics.EditorBasicsConsoleLogStore.AppendTestEntry(newerNonMatchingWarning, string.Empty, LogType.Warning);
+            EditorBasics.EditorBasicsConsoleLogStore.AppendTestEntry(newestMatchingStackWarning, "at UNIQUE-MARKER.StackTrace()", LogType.Warning);
+
+            var tool = new EditorBasics.UnityConsoleLogTool();
+            var result = tool.Execute(CreatePluginContext("agb.console.168", "unity.get_console", "{\"types\":[\"warning\"],\"count\":1,\"filter\":\"unique-marker\"}"), NoOpUnityMcpCancellation.Instance);
+            var metrics = JsonUtility.FromJson<EditorBasics.UnityConsoleLogMetrics>(result.MetricsObjectJson);
+            var bucket = metrics.results[0];
+
+            Assert.That(result.Status, Is.EqualTo(UnityMcpToolStatus.Success));
+            Assert.That(metrics.filter, Is.EqualTo("unique-marker"));
+            Assert.That(metrics.requestedTypes, Is.EqualTo(new[] { "warning" }));
+            Assert.That(metrics.requestedCountPerType, Is.EqualTo(1));
+            Assert.That(bucket.type, Is.EqualTo("warning"));
+            Assert.That(bucket.returnedCount, Is.EqualTo(1));
+            Assert.That(bucket.entries[0].condition, Is.EqualTo(newestMatchingStackWarning));
+
+            var allMatchingResult = tool.Execute(CreatePluginContext("agb.console.168.all", "unity.get_console", "{\"types\":[\"warning\"],\"count\":0,\"filter\":\"unique-marker\"}"), NoOpUnityMcpCancellation.Instance);
+            var allMatchingMetrics = JsonUtility.FromJson<EditorBasics.UnityConsoleLogMetrics>(allMatchingResult.MetricsObjectJson);
+
+            Assert.That(allMatchingMetrics.results[0].returnedCount, Is.EqualTo(2));
+            Assert.That(allMatchingMetrics.results[0].entries, Has.Some.Matches<EditorBasics.UnityConsoleLogEntry>(entry => entry.condition == olderMatchingWarning));
+            Assert.That(allMatchingMetrics.results[0].entries, Has.None.Matches<EditorBasics.UnityConsoleLogEntry>(entry => entry.condition == newerNonMatchingWarning));
+            TrackReport(result.ReportPath);
+            TrackReport(allMatchingResult.ReportPath);
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_091.md
         [Test]
         [Category("AGB_ReadOnly")]

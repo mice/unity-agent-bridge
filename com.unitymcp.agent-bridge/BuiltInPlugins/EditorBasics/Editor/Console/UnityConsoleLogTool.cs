@@ -21,7 +21,7 @@ namespace UnityMcp.BuiltInPlugins.EditorBasics
         public UnityMcpSchemaDeclaration InputSchema { get; } = new UnityMcpSchemaDeclaration
         {
             Kind = UnityMcpSchemaKind.InlineJson,
-            Value = "{\"type\":\"object\",\"properties\":{\"types\":{\"minItems\":1,\"maxItems\":3,\"type\":\"array\",\"items\":{\"type\":\"string\",\"enum\":[\"error\",\"warning\",\"info\"]}},\"count\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":1000},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":9007199254740991}},\"required\":[\"types\"],\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"
+            Value = "{\"type\":\"object\",\"properties\":{\"types\":{\"minItems\":1,\"maxItems\":3,\"type\":\"array\",\"items\":{\"type\":\"string\",\"enum\":[\"error\",\"warning\",\"info\"]}},\"count\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":1000},\"filter\":{\"type\":\"string\"},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":9007199254740991}},\"required\":[\"types\"],\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"
         };
 
         public UnityMcpToolResult Execute(UnityMcpToolContext context, IUnityMcpCancellation cancellation)
@@ -43,12 +43,14 @@ namespace UnityMcp.BuiltInPlugins.EditorBasics
                 return EditorBasicsResult.InvalidArgs("AGENTBRIDGE_CONSOLE_COUNT_INVALID", $"count must be in the range 0..{EditorBasicsConsoleLogStore.MaxEntriesPerType}.");
             }
 
-            var results = normalizedTypes.Select(type => CreateBucket(type, args.count)).ToArray();
+            var filter = string.IsNullOrEmpty(args.filter) ? null : args.filter;
+            var results = normalizedTypes.Select(type => CreateBucket(type, args.count, filter)).ToArray();
             var totalEntryCount = results.Sum(bucket => bucket.returnedCount);
             var metrics = new UnityConsoleLogMetrics
             {
                 requestedTypes = requestedTypes,
                 requestedCountPerType = args.count,
+                filter = filter,
                 results = results
             };
 
@@ -62,9 +64,9 @@ namespace UnityMcp.BuiltInPlugins.EditorBasics
             };
         }
 
-        private static UnityConsoleLogBucket CreateBucket(ConsoleLogQueryType queryType, int requestedCount)
+        private static UnityConsoleLogBucket CreateBucket(ConsoleLogQueryType queryType, int requestedCount, string filter)
         {
-            var entries = EditorBasicsConsoleLogStore.GetSnapshot(queryType, requestedCount)
+            var entries = EditorBasicsConsoleLogStore.GetSnapshot(queryType, requestedCount, filter)
                 .Select(entry => new UnityConsoleLogEntry
                 {
                     condition = entry.Condition,
