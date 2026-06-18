@@ -211,6 +211,42 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_editor_state" && item.mcpName == "mcp__unity__get_editor_state"), Is.True);
         }
 
+        [Test]
+        [Category("AGB_Core")]
+        public void Discovery_UnityQueriesPlugin_RegistersQueryToolsAndExcludesOpenScene()
+        {
+            var settings = CreatePluginOnlySettings();
+            settings.pluginRegistrations.Add(new UnityMcpPluginRegistration
+            {
+                enabled = true,
+                kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
+                assemblyName = "UnityMcp.BuiltInPlugins.UnityQueries",
+                providerTypeName = "UnityMcp.BuiltInPlugins.UnityQueries.UnityQueriesProvider"
+            });
+
+            var paths = new AgentBridgePaths(_projectRoot, settings);
+            paths.EnsureDirectories();
+            var registry = new AgentToolRegistry();
+            registry.Discover();
+            var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
+
+            var result = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, logger);
+
+            AssertPluginTool(registry, "unity.assetdatabase_search");
+            AssertPluginTool(registry, "unity.get_hierarchy");
+            AssertPluginTool(registry, "unity.get_gameobject_component_info");
+            AssertPluginTool(registry, "unity.get_selection_info");
+            AssertPluginTool(registry, "unity.read_report");
+            Assert.That(registry.TryGetTool("unity.open_scene", out var openSceneTool), Is.True);
+            Assert.That(openSceneTool, Is.Not.TypeOf<UnityMcpPluginToolAdapter>());
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.open_scene"), Is.False);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.assetdatabase_search" && item.mcpName == "mcp__unity__assetdatabase_search"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_hierarchy" && item.mcpName == "mcp__unity__get_hierarchy"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_gameobject_component_info" && item.mcpName == "mcp__unity__get_gameobject_component_info"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_selection_info" && item.mcpName == "mcp__unity__get_selection_info"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.read_report" && item.mcpName == "mcp__unity__read_report"), Is.True);
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_159.md
         [Test]
         [Category("AGB_Core")]
@@ -416,6 +452,12 @@ namespace UnityMcp.AgentBridge.Tests
             var parameters = new object[] { settings, null };
             var isValid = (bool)method.Invoke(null, parameters);
             return (isValid, parameters[1] as string);
+        }
+
+        private static void AssertPluginTool(AgentToolRegistry registry, string toolName)
+        {
+            Assert.That(registry.TryGetTool(toolName, out var tool), Is.True, toolName);
+            Assert.That(tool, Is.TypeOf<UnityMcpPluginToolAdapter>(), toolName);
         }
 
         private AgentBridgeSettings CreatePluginOnlySettings()

@@ -1,0 +1,19 @@
+{
+  "name": "UnityMcp.BuiltInPlugins.UnityQueries",
+  "rootNamespace": "UnityMcp.BuiltInPlugins.UnityQueries",
+  "references": [
+    "Unity.Newtonsoft.Json",
+    "UnityMcp.Plugin.Abstractions"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

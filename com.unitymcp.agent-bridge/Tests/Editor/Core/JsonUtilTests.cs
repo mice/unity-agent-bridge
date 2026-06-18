@@ -103,7 +103,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_151")]
         public void ToolResultMetadata_Recommended_ValidAndInvalidShapesAreEnforced()
         {
-            var editorAssembly = typeof(UnityGetHierarchyTool).Assembly;
+            var editorAssembly = typeof(UnityCompileTool).Assembly;
             var metadataType = editorAssembly.GetType("UnityMcp.AgentBridge.ToolResultMetadata");
             var optionType = editorAssembly.GetType("UnityMcp.AgentBridge.ToolFollowUpOption");
 

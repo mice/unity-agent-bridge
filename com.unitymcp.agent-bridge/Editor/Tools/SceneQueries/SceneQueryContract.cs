@@ -7,15 +7,8 @@ namespace UnityMcp.AgentBridge
     {
         public const string EditorStateContractVersion = "editor_state.v1";
         public const string OpenSceneContractVersion = "open_scene.v1";
-        public const string HierarchyContractVersion = "hierarchy.v2";
-
         public const string OpenSceneModeSingle = "single";
         public const string OpenSceneModeAdditive = "additive";
-
-        public const int DefaultHierarchyMaxDepth = 4;
-        public const int DefaultHierarchyLimit = 150;
-        public const int MaxHierarchyLimit = 5000;
-        public const int HierarchyComponentSummaryLimit = 8;
 
         public static string CreateGeneratedAtUtc()
         {

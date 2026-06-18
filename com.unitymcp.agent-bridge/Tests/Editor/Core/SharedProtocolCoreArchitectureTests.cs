@@ -72,6 +72,21 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(editorBasicsAsmdefText, Does.Not.Contain("UnityMcp.AgentBridge.SharedProtocolCore"));
         }
 
+        [Test]
+        [Category("AGB_Core")]
+        public void UnityQueriesPlugin_DoesNotReferenceAgentBridgeEditorOrSharedProtocolCore()
+        {
+            var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
+            var packageRoot = Path.Combine(projectRoot, "Packages", "com.unitymcp.agent-bridge");
+            var asmdefPath = Path.Combine(packageRoot, "BuiltInPlugins", "UnityQueries", "Editor", "UnityMcp.BuiltInPlugins.UnityQueries.asmdef");
+
+            Assert.That(File.Exists(asmdefPath), Is.True, "UnityQueries plugin asmdef must exist.");
+
+            var asmdefText = File.ReadAllText(asmdefPath);
+            Assert.That(asmdefText, Does.Not.Contain("UnityMcp.AgentBridge.Editor"));
+            Assert.That(asmdefText, Does.Not.Contain("UnityMcp.AgentBridge.SharedProtocolCore"));
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_167.md
         [Test]
         [Category("AGB_Core")]
@@ -93,6 +108,29 @@ namespace UnityMcp.AgentBridge.Tests
             {
                 var lineCount = File.ReadAllLines(sourceFile).Length;
                 Assert.That(lineCount, Is.LessThanOrEqualTo(300), sourceFile);
+            }
+        }
+
+        [Test]
+        [Category("AGB_Core")]
+        public void UnityQueriesPlugin_SourceFilesRemainGroupedAndExcludeSceneMutationTools()
+        {
+            var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
+            var sourceRoot = Path.Combine(projectRoot, "Packages", "com.unitymcp.agent-bridge", "BuiltInPlugins", "UnityQueries", "Editor");
+
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "UnityQueriesProvider.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "UnityAssetDatabaseSearchTool.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "UnityGetHierarchyTool.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "UnityGameObjectComponentInfoTool.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "UnitySelectionInfoTool.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "UnityReadReportTool.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "UnityOpenSceneTool.cs")), Is.False);
+
+            foreach (var sourceFile in Directory.GetFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
+            {
+                var content = File.ReadAllText(sourceFile);
+                Assert.That(content, Does.Not.Contain("[AgentTool("), sourceFile);
+                Assert.That(content, Does.Not.Contain("EditorSceneManager.OpenScene("), sourceFile);
             }
         }
     }

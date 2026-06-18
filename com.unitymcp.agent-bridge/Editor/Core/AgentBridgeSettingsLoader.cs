@@ -296,6 +296,13 @@ namespace UnityMcp.AgentBridge
                 {
                     enabled = true,
                     kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
+                    assemblyName = "UnityMcp.BuiltInPlugins.UnityQueries",
+                    providerTypeName = "UnityMcp.BuiltInPlugins.UnityQueries.UnityQueriesProvider"
+                },
+                new UnityMcpPluginRegistration
+                {
+                    enabled = true,
+                    kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
                     assemblyName = "UnityMcp.BuiltInPlugins.RoslynExecution",
                     providerTypeName = "UnityMcp.BuiltInPlugins.RoslynExecution.RoslynExecutionProvider"
                 }

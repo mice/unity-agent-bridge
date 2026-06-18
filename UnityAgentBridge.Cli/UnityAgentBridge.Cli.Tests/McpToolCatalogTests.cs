@@ -15,14 +15,9 @@ public sealed class McpToolCatalogTests
         var expectedNames = new[]
         {
             "mcp__unity__agent_bridge_self_test",
-            "mcp__unity__assetdatabase_search",
             "mcp__unity__compile",
             "mcp__unity__get_console",
             "mcp__unity__get_editor_state",
-            "mcp__unity__get_gameobject_component_info",
-            "mcp__unity__get_hierarchy",
-            "mcp__unity__read_report",
-            "mcp__unity__get_selection_info",
             "mcp__unity__open_scene",
             "mcp__unity__ping",
             "mcp__unity__run_diagnostic",
@@ -42,7 +37,7 @@ public sealed class McpToolCatalogTests
             .ToArray();
 
         CollectionAssert.AreEqual(expectedNames.OrderBy(name => name, StringComparer.Ordinal).ToArray(), actualNames);
-        Assert.AreEqual(19, actualNames.Length);
+        Assert.AreEqual(14, actualNames.Length);
     }
 
     [TestMethod]
@@ -98,6 +93,40 @@ public sealed class McpToolCatalogTests
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_info");
         Assert.IsNotNull(tool);
         Assert.AreEqual("unity.project.get_info", tool.BridgeTool);
+    }
+
+    [TestMethod]
+    public void CatalogAddsUnityQueriesOnlyFromPluginCatalogAndKeepsOpenSceneStatic()
+    {
+        var projectRoot = CreateUnityProject();
+        var catalogDirectory = Path.Combine(projectRoot, "Library", "AgentBridge");
+        Directory.CreateDirectory(catalogDirectory);
+        File.WriteAllText(
+            Path.Combine(catalogDirectory, "plugin-catalog.json"),
+            """
+            {"version":1,"tools":[
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.assetdatabase_search","mcpName":"mcp__unity__assetdatabase_search","title":"Unity AssetDatabase Search","description":"Search assets.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}},\"required\":[\"query\"],\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.get_hierarchy","mcpName":"mcp__unity__get_hierarchy","title":"Unity Get Hierarchy","description":"Read hierarchy.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.get_gameobject_component_info","mcpName":"mcp__unity__get_gameobject_component_info","title":"Unity GameObject Component Info","description":"Read component info.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.get_selection_info","mcpName":"mcp__unity__get_selection_info","title":"Unity Selection Info","description":"Read selection.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.read_report","mcpName":"mcp__unity__read_report","title":"Unity Read Report","description":"Read report.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"reportPath\":{\"type\":\"string\"}},\"required\":[\"reportPath\"],\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}
+            ]}
+            """);
+
+        var diagnostics = CreateDiagnostics(projectRoot);
+        var toolNames = McpToolCatalog.GetTools(diagnostics).Select(tool => tool.ProtocolTool.Name).ToArray();
+        var assetSearch = McpToolCatalog.TryGet("mcp__unity__assetdatabase_search", diagnostics);
+        var openScene = McpToolCatalog.TryGet("mcp__unity__open_scene", diagnostics);
+
+        CollectionAssert.Contains(toolNames, "mcp__unity__assetdatabase_search");
+        CollectionAssert.Contains(toolNames, "mcp__unity__get_hierarchy");
+        CollectionAssert.Contains(toolNames, "mcp__unity__get_gameobject_component_info");
+        CollectionAssert.Contains(toolNames, "mcp__unity__get_selection_info");
+        CollectionAssert.Contains(toolNames, "mcp__unity__read_report");
+        Assert.IsNotNull(assetSearch);
+        Assert.AreEqual("unity.assetdatabase_search", assetSearch.BridgeTool);
+        Assert.IsNotNull(openScene);
+        Assert.AreEqual("unity.open_scene", openScene.BridgeTool);
     }
 
     [TestMethod]

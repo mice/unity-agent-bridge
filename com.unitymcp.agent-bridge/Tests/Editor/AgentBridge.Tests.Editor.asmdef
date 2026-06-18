@@ -6,6 +6,7 @@
     "UnityMcp.AgentBridge.Editor",
     "UnityMcp.BuiltInPlugins.ProjectInfo",
     "UnityMcp.BuiltInPlugins.EditorBasics",
+    "UnityMcp.BuiltInPlugins.UnityQueries",
     "UnityMcp.BuiltInPlugins.RoslynExecution",
     "UnityMcp.Plugin.Abstractions",
     "Unity.Newtonsoft.Json"

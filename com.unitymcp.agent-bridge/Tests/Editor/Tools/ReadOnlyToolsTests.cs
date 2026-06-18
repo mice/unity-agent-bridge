@@ -12,6 +12,7 @@ using UnityEngine.SceneManagement;
 using UnityMcp.Plugin;
 using EditorBasics = UnityMcp.BuiltInPlugins.EditorBasics;
 using ProjectInfo = UnityMcp.BuiltInPlugins.ProjectInfo;
+using UnityQueries = UnityMcp.BuiltInPlugins.UnityQueries;
 
 namespace UnityMcp.AgentBridge.Tests
 {
@@ -298,13 +299,13 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(registry.TryGetTool("unity.project_info", out _), Is.False);
             Assert.That(registry.TryGetTool("unity.project.get_info", out _), Is.False);
             Assert.That(registry.TryGetTool("unity.get_console", out _), Is.False);
-            Assert.That(registry.TryGetTool("unity.assetdatabase_search", out _), Is.True);
+            Assert.That(registry.TryGetTool("unity.assetdatabase_search", out _), Is.False);
             Assert.That(registry.TryGetTool("unity.get_editor_state", out _), Is.False);
             Assert.That(registry.TryGetTool("unity.open_scene", out _), Is.True);
-            Assert.That(registry.TryGetTool("unity.get_hierarchy", out _), Is.True);
-            Assert.That(registry.TryGetTool("unity.read_report", out _), Is.True);
-            Assert.That(registry.TryGetTool("unity.get_selection_info", out _), Is.True);
-            Assert.That(registry.TryGetTool("unity.get_gameobject_component_info", out _), Is.True);
+            Assert.That(registry.TryGetTool("unity.get_hierarchy", out _), Is.False);
+            Assert.That(registry.TryGetTool("unity.read_report", out _), Is.False);
+            Assert.That(registry.TryGetTool("unity.get_selection_info", out _), Is.False);
+            Assert.That(registry.TryGetTool("unity.get_gameobject_component_info", out _), Is.False);
             Assert.That(registry.TryGetTool("unity.compile", out _), Is.True);
         }
 
@@ -327,25 +328,10 @@ namespace UnityMcp.AgentBridge.Tests
                 descriptor.AllowedModes == ToolExecutionModes.Edit &&
                 descriptor.SideEffect == ToolSideEffect.MutatesProject));
             Assert.That(descriptors, Has.Some.Matches<ToolDescriptor>(descriptor =>
-                descriptor.Name == "unity.assetdatabase_search" &&
-                descriptor.AllowedModes == ToolExecutionModes.EditAndPlay &&
-                descriptor.SideEffect == ToolSideEffect.ReadsProject &&
-                descriptor.ArgsSchemaPath == "Documentation~/schemas/unity.assetdatabase_search.args.schema.json"));
-            Assert.That(descriptors, Has.Some.Matches<ToolDescriptor>(descriptor =>
                 descriptor.Name == "unity.open_scene" &&
                 descriptor.AllowedModes == ToolExecutionModes.Edit &&
                 descriptor.SideEffect == ToolSideEffect.MutatesProject &&
                 descriptor.ArgsSchemaPath == "Documentation~/schemas/unity.open_scene.args.schema.json"));
-            Assert.That(descriptors, Has.Some.Matches<ToolDescriptor>(descriptor =>
-                descriptor.Name == "unity.get_hierarchy" &&
-                descriptor.AllowedModes == ToolExecutionModes.EditAndPlay &&
-                descriptor.SideEffect == ToolSideEffect.ReadsProject &&
-                descriptor.ArgsSchemaPath == "Documentation~/schemas/unity.get_hierarchy.args.schema.json"));
-            Assert.That(descriptors, Has.Some.Matches<ToolDescriptor>(descriptor =>
-                descriptor.Name == "unity.read_report" &&
-                descriptor.AllowedModes == ToolExecutionModes.EditAndPlay &&
-                descriptor.SideEffect == ToolSideEffect.ReadsProject &&
-                descriptor.ArgsSchemaPath == "Documentation~/schemas/unity.read_report.args.schema.json"));
             Assert.That(descriptors, Has.Some.Matches<ToolDescriptor>(descriptor =>
                 descriptor.Name == "unity.run_static_method" &&
                 descriptor.AllowedModes == ToolExecutionModes.EditAndPlay &&
@@ -416,14 +402,14 @@ namespace UnityMcp.AgentBridge.Tests
             try
             {
                 EditorSceneManager.SetActiveScene(activeScene);
-                var tool = new UnityGetHierarchyTool();
+                var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
                 var result = tool.Execute(CreateContext("agb.hierarchy.001", "{}"), NoOpAgentCancellation.Instance);
 
                 Assert.That(result.status, Is.EqualTo(ToolResultStatus.Success));
                 Assert.That(result.metricsObjectJson, Does.Contain("\"contractVersion\":\"hierarchy.v2\""));
                 Assert.That(result.metricsObjectJson, Does.Contain("\"targetKind\":\"scene_root\""));
-                Assert.That(result.metricsObjectJson, Does.Contain("\"maxDepth\":" + SceneQueryContract.DefaultHierarchyMaxDepth));
-                Assert.That(result.metricsObjectJson, Does.Contain("\"limit\":" + SceneQueryContract.DefaultHierarchyLimit));
+                Assert.That(result.metricsObjectJson, Does.Contain("\"maxDepth\":" + UnityQueries.SceneQueryContract.DefaultHierarchyMaxDepth));
+                Assert.That(result.metricsObjectJson, Does.Contain("\"limit\":" + UnityQueries.SceneQueryContract.DefaultHierarchyLimit));
                 Assert.That(result.metricsObjectJson, Does.Contain("\"details\":{\"available\":true"));
                 Assert.That(result.metricsObjectJson, Does.Contain("\"recommendedRead\":false"));
                 Assert.That(result.metricsObjectJson, Does.Contain("\"recommendedPointers\":[\"/result/nodes\"]"));
@@ -456,7 +442,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             Selection.activeObject = AssetDatabase.LoadMainAssetAtPath("Assets/Scenes/AppMain.unity");
             Assume.That(Selection.activeObject, Is.Not.Null);
-            var tool = new UnityGetHierarchyTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
 
             var result = tool.Execute(CreateContext("agb.hierarchy.002", "{\"locator\":\"selection:active\"}"), NoOpAgentCancellation.Instance);
 
@@ -654,7 +640,7 @@ namespace UnityMcp.AgentBridge.Tests
             var additiveRoot = new GameObject("LoadedSceneRoot");
             SceneManager.MoveGameObjectToScene(additiveRoot, additiveScene);
             Assert.That(EditorSceneManager.SaveScene(additiveScene), Is.True);
-            var tool = new UnityGetHierarchyTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
 
             try
             {
@@ -688,7 +674,7 @@ namespace UnityMcp.AgentBridge.Tests
         public void UnityGetHierarchyTool_PrefabLocator_IncludeComponents_ReturnsPrefabRoot()
         {
             var prefabPath = EnsureTempPrefabAsset();
-            var tool = new UnityGetHierarchyTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
 
             var result = tool.Execute(
                 CreateContext("agb.hierarchy.004", "{\"locator\":\"" + prefabPath + "\",\"includeComponents\":true}"),
@@ -712,7 +698,7 @@ namespace UnityMcp.AgentBridge.Tests
             new GameObject("SelectionChild").transform.SetParent(root.transform, false);
             Selection.activeObject = root;
             Selection.objects = new UnityEngine.Object[] { root };
-            var tool = new UnityGetHierarchyTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
 
             var result = tool.Execute(
                 CreateContext("agb.hierarchy.005", "{\"locator\":\"selection:active\"}"),
@@ -731,7 +717,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var root = CreateTempComponentHost("InstanceHierarchyRoot");
             new GameObject("InstanceHierarchyChild").transform.SetParent(root.transform, false);
-            var tool = new UnityGetHierarchyTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
 
             var result = tool.Execute(
                 CreateContext(
@@ -757,7 +743,7 @@ namespace UnityMcp.AgentBridge.Tests
             inactiveChild.transform.SetParent(root.transform, false);
             inactiveChild.SetActive(false);
             _runtimeObjectsToDestroy.Add(inactiveChild);
-            var tool = new UnityGetHierarchyTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
 
             var result = tool.Execute(
                 CreateContext(
@@ -779,7 +765,7 @@ namespace UnityMcp.AgentBridge.Tests
         public void UnityGetHierarchyTool_ComponentSummaries_AreCappedAndMissingScriptUsesNullType()
         {
             var prefabPath = EnsureTempMissingScriptPrefabAsset();
-            var tool = new UnityGetHierarchyTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
 
             var result = tool.Execute(
                 CreateContext("agb.hierarchy.007.missing", "{\"locator\":\"" + prefabPath + "\",\"includeComponents\":true}"),
@@ -802,8 +788,8 @@ namespace UnityMcp.AgentBridge.Tests
                 root.AddComponent<TestStringComponent>();
             }
 
-            var tool = new UnityGetHierarchyTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(root);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(root);
             var result = tool.Execute(
                 CreateContext("agb.hierarchy.007.cap", "{\"locator\":\"" + locator + "\",\"includeComponents\":true}"),
                 NoOpAgentCancellation.Instance);
@@ -811,7 +797,7 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Success));
             Assert.That(result.metricsObjectJson, Does.Contain("\"componentsTruncated\":true"));
             Assert.That(result.metricsObjectJson, Does.Contain("\"componentCount\":10"));
-            Assert.That(CountOccurrences(result.metricsObjectJson, "\"type\":\""), Is.EqualTo(SceneQueryContract.HierarchyComponentSummaryLimit));
+            Assert.That(CountOccurrences(result.metricsObjectJson, "\"type\":\""), Is.EqualTo(UnityQueries.SceneQueryContract.HierarchyComponentSummaryLimit));
             TrackReport(result.reportPath);
         }
 
@@ -826,7 +812,7 @@ namespace UnityMcp.AgentBridge.Tests
             _runtimeObjectsToDestroy.Add(second);
             first.transform.SetParent(root.transform, false);
             second.transform.SetParent(root.transform, false);
-            var tool = new UnityGetHierarchyTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
 
             var result = tool.Execute(
                 CreateContext("agb.hierarchy.007.duplicate", "{\"locator\":\"currentScene#HierarchyDuplicateRoot/Dup\"}"),
@@ -845,7 +831,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var tempScenePath = EnsureTempSceneAsset("HierarchyUnloadedScene");
             EditorSceneManager.OpenScene("Assets/Scenes/AppMain.unity", OpenSceneMode.Single);
-            var tool = new UnityGetHierarchyTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
 
             var result = tool.Execute(
                 CreateContext("agb.hierarchy.008", "{\"locator\":\"" + tempScenePath + "\"}"),
@@ -861,7 +847,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityGetHierarchyTool_InvalidBounds_ReturnInvalidArgs()
         {
-            var tool = new UnityGetHierarchyTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool());
 
             var negativeDepthResult = tool.Execute(
                 CreateContext("agb.hierarchy.009.depth", "{\"maxDepth\":-1}"),
@@ -885,7 +871,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityAssetDatabaseSearchTool_AssetSearch_WritesReportAndPaginates()
         {
-            var tool = new UnityAssetDatabaseSearchTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
 
             var result = tool.Execute(CreateContext("agb.assetsearch.001", "{\"query\":\"t:Scene\",\"limit\":1,\"offset\":0,\"includeDetails\":true}"), NoOpAgentCancellation.Instance);
             var report = File.ReadAllText(GetReportAbsolutePath(result.reportPath));
@@ -910,7 +896,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityAssetDatabaseSearchTool_InvalidFolder_ReturnsInvalidArgs()
         {
-            var tool = new UnityAssetDatabaseSearchTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
 
             var result = tool.Execute(CreateContext("agb.assetsearch.002", "{\"query\":\"t:Scene\",\"folders\":[\"Packages\"]}"), NoOpAgentCancellation.Instance);
 
@@ -922,7 +908,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityAssetDatabaseSearchTool_MissingQuery_ReturnsInvalidArgs()
         {
-            var tool = new UnityAssetDatabaseSearchTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
 
             var result = tool.Execute(CreateContext("agb.assetsearch.002.required", "{}"), NoOpAgentCancellation.Instance);
 
@@ -934,7 +920,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityAssetDatabaseSearchTool_ZeroLimit_ReturnsInvalidArgs()
         {
-            var tool = new UnityAssetDatabaseSearchTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
 
             var result = tool.Execute(CreateContext("agb.assetsearch.003", "{\"query\":\"t:Scene\",\"limit\":0}"), NoOpAgentCancellation.Instance);
 
@@ -946,7 +932,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityAssetDatabaseSearchTool_DefaultLimitAndOffset_AreApplied()
         {
-            var tool = new UnityAssetDatabaseSearchTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
 
             var result = tool.Execute(CreateContext("agb.assetsearch.004", "{\"query\":\"t:Scene\"}"), NoOpAgentCancellation.Instance);
 
@@ -961,7 +947,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityAssetDatabaseSearchTool_NegativeOffset_ReturnsInvalidArgs()
         {
-            var tool = new UnityAssetDatabaseSearchTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
 
             var result = tool.Execute(CreateContext("agb.assetsearch.005", "{\"query\":\"t:Scene\",\"offset\":-1}"), NoOpAgentCancellation.Instance);
 
@@ -973,7 +959,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityAssetDatabaseSearchTool_OverMaxLimit_ReturnsInvalidArgs()
         {
-            var tool = new UnityAssetDatabaseSearchTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
 
             var result = tool.Execute(CreateContext("agb.assetsearch.006", "{\"query\":\"t:Scene\",\"limit\":201}"), NoOpAgentCancellation.Instance);
 
@@ -985,7 +971,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityAssetDatabaseSearchTool_NegativeLimit_ReturnsInvalidArgs()
         {
-            var tool = new UnityAssetDatabaseSearchTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
 
             var result = tool.Execute(CreateContext("agb.assetsearch.006.negative", "{\"query\":\"t:Scene\",\"limit\":-1}"), NoOpAgentCancellation.Instance);
 
@@ -1008,7 +994,7 @@ namespace UnityMcp.AgentBridge.Tests
             File.Copy(GetProjectRelativePath("Assets/Scenes/AppMain.unity.meta"), GetProjectRelativePath(alphaPath + ".meta"), true);
             AssetDatabase.Refresh();
 
-            var tool = new UnityAssetDatabaseSearchTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
             var result = tool.Execute(
                 CreateContext("agb.assetsearch.007", "{\"query\":\"t:Scene\",\"folders\":[\"" + folder + "\"],\"limit\":1,\"offset\":0}"),
                 NoOpAgentCancellation.Instance);
@@ -1072,7 +1058,7 @@ namespace UnityMcp.AgentBridge.Tests
                 AssetDatabase.ImportAsset(assetPath);
             }
 
-            var tool = new UnityAssetDatabaseSearchTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityAssetDatabaseSearchTool());
             var result = tool.Execute(
                 CreateContext("agb.assetsearch.008", "{\"query\":\"SampledSubAssets\",\"folders\":[\"" + folder + "\"],\"includeDetails\":true}"),
                 NoOpAgentCancellation.Instance);
@@ -1090,7 +1076,7 @@ namespace UnityMcp.AgentBridge.Tests
         public void UnitySelectionInfoTool_EmptySelection_ReturnsSuccess()
         {
             Selection.objects = Array.Empty<UnityEngine.Object>();
-            var tool = new UnitySelectionInfoTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnitySelectionInfoTool());
 
             var result = tool.Execute(CreateContext("agb.selection.001", "{}"), NoOpAgentCancellation.Instance);
 
@@ -1107,7 +1093,7 @@ namespace UnityMcp.AgentBridge.Tests
             var sceneObject = CreateTempComponentHost("SceneSelectionHost");
             Selection.activeObject = sceneObject;
             Selection.objects = new UnityEngine.Object[] { sceneObject };
-            var tool = new UnitySelectionInfoTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnitySelectionInfoTool());
 
             var result = tool.Execute(CreateContext("agb.selection.002", "{}"), NoOpAgentCancellation.Instance);
 
@@ -1125,7 +1111,7 @@ namespace UnityMcp.AgentBridge.Tests
             Assume.That(asset, Is.Not.Null);
             Selection.activeObject = asset;
             Selection.objects = new[] { asset };
-            var tool = new UnitySelectionInfoTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnitySelectionInfoTool());
 
             var result = tool.Execute(CreateContext("agb.selection.003", "{}"), NoOpAgentCancellation.Instance);
             var report = File.ReadAllText(GetReportAbsolutePath(result.reportPath));
@@ -1148,7 +1134,7 @@ namespace UnityMcp.AgentBridge.Tests
             var component = sceneObject.AddComponent<Camera>();
             Selection.activeObject = component;
             Selection.objects = new UnityEngine.Object[] { component };
-            var tool = new UnitySelectionInfoTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnitySelectionInfoTool());
 
             var result = tool.Execute(CreateContext("agb.selection.004", "{}"), NoOpAgentCancellation.Instance);
             var report = File.ReadAllText(GetReportAbsolutePath(result.reportPath));
@@ -1170,9 +1156,9 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var sceneObject = CreateTempComponentHost("ListModeHost");
             sceneObject.AddComponent<Camera>();
-            var tool = new UnityGameObjectComponentInfoTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
 
-            var locator = GameObjectLocatorFormatter.GetLocator(sceneObject);
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(sceneObject);
             var result = tool.Execute(CreateContext("agb.components.001", "{\"locator\":\"" + locator + "\"}"), NoOpAgentCancellation.Instance);
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Success));
@@ -1193,7 +1179,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityGameObjectComponentInfoTool_InvalidPropertyMode_ReturnsInvalidArgs()
         {
-            var tool = new UnityGameObjectComponentInfoTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
 
             var result = tool.Execute(CreateContext("agb.components.002", "{\"propertyMode\":\"summary\"}"), NoOpAgentCancellation.Instance);
 
@@ -1207,8 +1193,8 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var sceneObject = CreateTempComponentHost("DefaultPropertyModeHost");
             sceneObject.AddComponent<Camera>();
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(sceneObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(sceneObject);
 
             var result = tool.Execute(
                 CreateContext("agb.components.003", "{\"locator\":\"" + locator + "\",\"componentName\":\"Camera\",\"propertyLimit\":0}"),
@@ -1225,7 +1211,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityGameObjectComponentInfoTool_NegativePropertyLimit_ReturnsInvalidArgs()
         {
-            var tool = new UnityGameObjectComponentInfoTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
 
             var result = tool.Execute(CreateContext("agb.components.004", "{\"propertyLimit\":-1}"), NoOpAgentCancellation.Instance);
 
@@ -1241,7 +1227,7 @@ namespace UnityMcp.AgentBridge.Tests
             var component = sceneObject.AddComponent<Camera>();
             Selection.activeObject = component;
 
-            var success = GameObjectLocatorResolver.TryResolve("selection:active", out var resolved, out var failure);
+            var success = UnityQueries.GameObjectLocatorResolver.TryResolve("selection:active", out var resolved, out var failure);
 
             Assert.That(success, Is.True);
             Assert.That(failure, Is.Null);
@@ -1254,7 +1240,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var sceneObject = CreateTempComponentHost("InstanceResolverHost");
 
-            var success = GameObjectLocatorResolver.TryResolve("instance:" + sceneObject.GetInstanceID(), out var resolved, out var failure);
+            var success = UnityQueries.GameObjectLocatorResolver.TryResolve("instance:" + sceneObject.GetInstanceID(), out var resolved, out var failure);
 
             Assert.That(success, Is.True);
             Assert.That(failure, Is.Null);
@@ -1265,11 +1251,11 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void GameObjectLocatorResolver_InvalidHierarchySyntax_ReturnsInvalidArgs()
         {
-            var success = GameObjectLocatorResolver.TryResolve("currentScene#/Main Camera", out _, out var failure);
+            var success = UnityQueries.GameObjectLocatorResolver.TryResolve("currentScene#/Main Camera", out _, out var failure);
 
             Assert.That(success, Is.False);
-            Assert.That(failure.status, Is.EqualTo(ToolResultStatus.InvalidArgs));
-            Assert.That(failure.errors[0].code, Is.EqualTo("AGENTBRIDGE_LOCATOR_UNSUPPORTED"));
+            Assert.That(failure.Status, Is.EqualTo(ToolResultStatus.InvalidArgs));
+            Assert.That(failure.Errors[0].Code, Is.EqualTo("AGENTBRIDGE_LOCATOR_UNSUPPORTED"));
         }
 
         [Test]
@@ -1282,7 +1268,7 @@ namespace UnityMcp.AgentBridge.Tests
             child.transform.SetParent(root.transform, false);
             child.SetActive(false);
 
-            var success = GameObjectLocatorResolver.TryResolve("currentScene#InactiveRoot/InactiveChild", out var resolved, out var failure);
+            var success = UnityQueries.GameObjectLocatorResolver.TryResolve("currentScene#InactiveRoot/InactiveChild", out var resolved, out var failure);
 
             Assert.That(success, Is.True);
             Assert.That(failure, Is.Null);
@@ -1301,7 +1287,7 @@ namespace UnityMcp.AgentBridge.Tests
             first.transform.SetParent(root.transform, false);
             second.transform.SetParent(root.transform, false);
 
-            var success = GameObjectLocatorResolver.TryResolve("currentScene#DuplicateRoot/Dup", out var resolved, out var failure);
+            var success = UnityQueries.GameObjectLocatorResolver.TryResolve("currentScene#DuplicateRoot/Dup", out var resolved, out var failure);
 
             Assert.That(success, Is.True);
             Assert.That(failure, Is.Null);
@@ -1314,9 +1300,9 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var root = CreateTempComponentHost("LoadedSceneLookupRoot");
 
-            var success = GameObjectLocatorResolver.TryResolve("Assets/Scenes/AppMain.unity#LoadedSceneLookupRoot", out var resolved, out var failure);
+            var success = UnityQueries.GameObjectLocatorResolver.TryResolve("Assets/Scenes/AppMain.unity#LoadedSceneLookupRoot", out var resolved, out var failure);
 
-            Assert.That(success, Is.True, failure != null ? failure.summary : string.Empty);
+            Assert.That(success, Is.True, failure != null ? failure.Summary : string.Empty);
             Assert.That(failure, Is.Null);
             Assert.That(resolved, Is.EqualTo(root));
         }
@@ -1327,34 +1313,34 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var tempScenePath = EnsureTempSceneAsset("LocatorScene");
 
-            var success = GameObjectLocatorResolver.TryResolve(tempScenePath + "#Root", out _, out var failure);
+            var success = UnityQueries.GameObjectLocatorResolver.TryResolve(tempScenePath + "#Root", out _, out var failure);
 
             Assert.That(success, Is.False);
-            Assert.That(failure.status, Is.EqualTo(ToolResultStatus.InvalidArgs));
-            Assert.That(failure.errors[0].code, Is.EqualTo("AGENTBRIDGE_SCENE_NOT_LOADED"));
+            Assert.That(failure.Status, Is.EqualTo(ToolResultStatus.InvalidArgs));
+            Assert.That(failure.Errors[0].Code, Is.EqualTo("AGENTBRIDGE_SCENE_NOT_LOADED"));
         }
 
         [Test]
         [Category("AGB_ReadOnly")]
         public void GameObjectLocatorResolver_UnsupportedLocator_ReturnsInvalidArgs()
         {
-            var success = GameObjectLocatorResolver.TryResolve("Packages/com.foo/Thing.prefab", out _, out var failure);
+            var success = UnityQueries.GameObjectLocatorResolver.TryResolve("Packages/com.foo/Thing.prefab", out _, out var failure);
 
             Assert.That(success, Is.False);
-            Assert.That(failure.status, Is.EqualTo(ToolResultStatus.InvalidArgs));
-            Assert.That(failure.errors[0].code, Is.EqualTo("AGENTBRIDGE_LOCATOR_UNSUPPORTED"));
+            Assert.That(failure.Status, Is.EqualTo(ToolResultStatus.InvalidArgs));
+            Assert.That(failure.Errors[0].Code, Is.EqualTo("AGENTBRIDGE_LOCATOR_UNSUPPORTED"));
         }
 
         [Test]
         [Category("AGB_ReadOnly")]
         public void GameObjectLocatorResolver_NamesContainingSlashOrHash_AreNotAddressableByHierarchyLocator()
         {
-            var successSlash = GameObjectLocatorResolver.TryResolve("currentScene#Bad/Name", out _, out var slashFailure);
-            var successHash = GameObjectLocatorResolver.TryResolve("currentScene#Bad#Name", out _, out var hashFailure);
+            var successSlash = UnityQueries.GameObjectLocatorResolver.TryResolve("currentScene#Bad/Name", out _, out var slashFailure);
+            var successHash = UnityQueries.GameObjectLocatorResolver.TryResolve("currentScene#Bad#Name", out _, out var hashFailure);
 
             Assert.That(successSlash, Is.False);
-            Assert.That(slashFailure.status, Is.EqualTo(ToolResultStatus.InvalidArgs));
-            Assert.That(hashFailure.status, Is.EqualTo(ToolResultStatus.InvalidArgs));
+            Assert.That(slashFailure.Status, Is.EqualTo(ToolResultStatus.InvalidArgs));
+            Assert.That(hashFailure.Status, Is.EqualTo(ToolResultStatus.InvalidArgs));
             Assert.That(successHash, Is.False);
         }
 
@@ -1367,10 +1353,10 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(prefabAsset, Is.Not.Null);
             Assert.That(prefabAsset.transform.childCount, Is.EqualTo(1));
             var childGameObject = prefabAsset.transform.GetChild(0).gameObject;
-            var childLocator = GameObjectLocatorFormatter.GetLocator(childGameObject);
+            var childLocator = UnityQueries.GameObjectLocatorFormatter.GetLocator(childGameObject);
 
-            var rootSuccess = GameObjectLocatorResolver.TryResolve(prefabPath, out var prefabRoot, out var rootFailure);
-            var childSuccess = GameObjectLocatorResolver.TryResolve(childLocator, out var prefabChild, out var childFailure);
+            var rootSuccess = UnityQueries.GameObjectLocatorResolver.TryResolve(prefabPath, out var prefabRoot, out var rootFailure);
+            var childSuccess = UnityQueries.GameObjectLocatorResolver.TryResolve(childLocator, out var prefabChild, out var childFailure);
 
             Assert.That(rootSuccess, Is.True);
             Assert.That(rootFailure, Is.Null);
@@ -1387,7 +1373,7 @@ namespace UnityMcp.AgentBridge.Tests
             var sceneObject = CreateTempComponentHost("SelectionDefaultHost");
             sceneObject.AddComponent<Camera>();
             Selection.activeObject = sceneObject;
-            var tool = new UnityGameObjectComponentInfoTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
 
             var result = tool.Execute(CreateContext("agb.components.005", "{}"), NoOpAgentCancellation.Instance);
 
@@ -1402,8 +1388,8 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var sceneObject = CreateTempComponentHost("ComponentMissHost");
             sceneObject.AddComponent<Camera>();
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(sceneObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(sceneObject);
 
             var result = tool.Execute(
                 CreateContext("agb.components.006", "{\"locator\":\"" + locator + "\",\"componentName\":\"MissingComponent\"}"),
@@ -1420,8 +1406,8 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var sceneObject = CreateTempComponentHost("ComponentIndexHost");
             sceneObject.AddComponent<Camera>();
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(sceneObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(sceneObject);
 
             var result = tool.Execute(
                 CreateContext("agb.components.007", "{\"locator\":\"" + locator + "\",\"componentIndex\":999}"),
@@ -1438,8 +1424,8 @@ namespace UnityMcp.AgentBridge.Tests
             var sceneObject = CreateTempComponentHost("RepeatedCameraHost");
             sceneObject.AddComponent<Camera>();
             sceneObject.AddComponent<Camera>();
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(sceneObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(sceneObject);
             var components = sceneObject.GetComponents<Component>();
             var secondCameraIndex = Array.FindLastIndex(components, component => component is Camera);
             Assume.That(secondCameraIndex, Is.GreaterThanOrEqualTo(0));
@@ -1464,8 +1450,8 @@ namespace UnityMcp.AgentBridge.Tests
             var sceneObject = CreateTempComponentHost("ComponentIndexInspectHost");
             sceneObject.AddComponent<Camera>();
             var second = sceneObject.AddComponent<Light>();
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(sceneObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(sceneObject);
             var components = sceneObject.GetComponents<Component>();
             var lightIndex = Array.FindIndex(components, component => component == second);
 
@@ -1495,7 +1481,7 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(prefabAsset, Is.Not.Null);
             Assert.That(prefabAsset.GetComponents<Component>(), Has.Some.Null);
 
-            var tool = new UnityGameObjectComponentInfoTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
             var result = tool.Execute(
                 CreateContext("agb.components.007.missing", "{\"locator\":\"" + prefabPath + "\"}"),
                 NoOpAgentCancellation.Instance);
@@ -1514,8 +1500,8 @@ namespace UnityMcp.AgentBridge.Tests
             var tempObject = CreateTempComponentHost("LongStringComponent");
             var component = tempObject.AddComponent<TestStringComponent>();
             component.text = new string('x', 40);
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(tempObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(tempObject);
 
             var result = tool.Execute(
                 CreateContext("agb.components.008", "{\"locator\":\"" + locator + "\",\"componentName\":\"TestStringComponent\",\"propertyMode\":\"serialized\",\"stringMaxLength\":16}"),
@@ -1540,8 +1526,8 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var sceneObject = CreateTempComponentHost("PropertyLimitHost");
             sceneObject.AddComponent<Camera>();
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(sceneObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(sceneObject);
             var result = tool.Execute(
                 CreateContext("agb.components.009", "{\"locator\":\"" + locator + "\",\"componentName\":\"Camera\",\"propertyLimit\":0}"),
                 NoOpAgentCancellation.Instance);
@@ -1562,8 +1548,8 @@ namespace UnityMcp.AgentBridge.Tests
             var tempObject = CreateTempComponentHost("ArrayComponent");
             var component = tempObject.AddComponent<TestIntArrayComponent>();
             component.values = new[] { 1, 2, 3 };
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(tempObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(tempObject);
             var result = tool.Execute(
                 CreateContext("agb.components.010", "{\"locator\":\"" + locator + "\",\"componentName\":\"TestIntArrayComponent\",\"arrayElementLimit\":0}"),
                 NoOpAgentCancellation.Instance);
@@ -1583,8 +1569,8 @@ namespace UnityMcp.AgentBridge.Tests
             var tempObject = CreateTempComponentHost("DefaultLimitsComponent");
             var component = tempObject.AddComponent<TestStringComponent>();
             component.text = new string('x', 400);
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(tempObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(tempObject);
 
             var result = tool.Execute(
                 CreateContext("agb.components.011", "{\"locator\":\"" + locator + "\",\"componentName\":\"TestStringComponent\"}"),
@@ -1593,7 +1579,7 @@ namespace UnityMcp.AgentBridge.Tests
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Success));
             Assert.That(result.metricsObjectJson, Does.Contain("\"propertyMode\":\"debug\""));
-            Assert.That(report, Does.Contain("\"value\":\"" + new string('x', AssetQueryContract.DefaultStringMaxLength) + "\""));
+            Assert.That(report, Does.Contain("\"value\":\"" + new string('x', UnityQueries.AssetQueryContract.DefaultStringMaxLength) + "\""));
             TrackReport(result.reportPath);
         }
 
@@ -1604,8 +1590,8 @@ namespace UnityMcp.AgentBridge.Tests
             var tempObject = CreateTempComponentHost("DefaultArrayLimitComponent");
             var component = tempObject.AddComponent<TestIntArrayComponent>();
             component.values = CreateSequentialArray(25);
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(tempObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(tempObject);
 
             var result = tool.Execute(
                 CreateContext("agb.components.011.array", "{\"locator\":\"" + locator + "\",\"componentName\":\"TestIntArrayComponent\",\"propertyMode\":\"serialized\"}"),
@@ -1623,7 +1609,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityGameObjectComponentInfoTool_OverMaxArrayAndStringLimits_ReturnInvalidArgs()
         {
-            var tool = new UnityGameObjectComponentInfoTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
 
             var propertyLimitResult = tool.Execute(CreateContext("agb.components.012.property", "{\"propertyLimit\":1001}"), NoOpAgentCancellation.Instance);
             var arrayLimitResult = tool.Execute(CreateContext("agb.components.012", "{\"arrayElementLimit\":201}"), NoOpAgentCancellation.Instance);
@@ -1641,14 +1627,14 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_ReadOnly")]
         public void UnityGameObjectComponentInfoArgs_Defaults_MatchContract()
         {
-            var success = AssetQueryJson.TryDeserializeArgs<UnityGetGameObjectComponentInfoArgs>("{}", out var args, out var failure);
+            var success = UnityQueries.AssetQueryJson.TryDeserializeArgs<UnityQueries.UnityGetGameObjectComponentInfoArgs>("{}", out var args, out var failure);
 
-            Assert.That(success, Is.True, failure != null ? failure.summary : string.Empty);
+            Assert.That(success, Is.True, failure != null ? failure.Summary : string.Empty);
             Assert.That(args, Is.Not.Null);
-            Assert.That(args.propertyMode, Is.EqualTo(AssetQueryContract.DefaultPropertyMode));
-            Assert.That(args.propertyLimit, Is.EqualTo(AssetQueryContract.DefaultPropertyLimit));
-            Assert.That(args.arrayElementLimit, Is.EqualTo(AssetQueryContract.DefaultArrayElementLimit));
-            Assert.That(args.stringMaxLength, Is.EqualTo(AssetQueryContract.DefaultStringMaxLength));
+            Assert.That(args.propertyMode, Is.EqualTo(UnityQueries.AssetQueryContract.DefaultPropertyMode));
+            Assert.That(args.propertyLimit, Is.EqualTo(UnityQueries.AssetQueryContract.DefaultPropertyLimit));
+            Assert.That(args.arrayElementLimit, Is.EqualTo(UnityQueries.AssetQueryContract.DefaultArrayElementLimit));
+            Assert.That(args.stringMaxLength, Is.EqualTo(UnityQueries.AssetQueryContract.DefaultStringMaxLength));
         }
 
         [Test]
@@ -1657,8 +1643,8 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var sceneObject = CreateTempComponentHost("ExplicitDebugModeHost");
             sceneObject.AddComponent<Camera>();
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(sceneObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(sceneObject);
 
             var result = tool.Execute(
                 CreateContext("agb.components.013.debug", "{\"locator\":\"" + locator + "\",\"componentName\":\"Camera\",\"propertyMode\":\"debug\",\"propertyLimit\":0}"),
@@ -1677,8 +1663,8 @@ namespace UnityMcp.AgentBridge.Tests
             var component = tempObject.AddComponent<TestObjectReferenceComponent>();
             component.reference = AssetDatabase.LoadMainAssetAtPath("Assets/Scenes/AppMain.unity");
             Assume.That(component.reference, Is.Not.Null);
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(tempObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(tempObject);
 
             var result = tool.Execute(
                 CreateContext("agb.components.013.objectref", "{\"locator\":\"" + locator + "\",\"componentName\":\"TestObjectReferenceComponent\",\"propertyMode\":\"serialized\"}"),
@@ -1700,8 +1686,8 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var tempObject = CreateTempComponentHost("CancellationComponent");
             tempObject.AddComponent<TestStringComponent>();
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(tempObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(tempObject);
 
             Assert.Throws<OperationCanceledException>(() =>
                 tool.Execute(
@@ -1715,8 +1701,8 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var tempObject = CreateTempComponentHost("ChangedFilesHost");
             tempObject.AddComponent<TestStringComponent>();
-            var tool = new UnityGameObjectComponentInfoTool();
-            var locator = GameObjectLocatorFormatter.GetLocator(tempObject);
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityGameObjectComponentInfoTool());
+            var locator = UnityQueries.GameObjectLocatorFormatter.GetLocator(tempObject);
 
             var result = tool.Execute(
                 CreateContext("agb.components.015", "{\"locator\":\"" + locator + "\",\"componentName\":\"TestStringComponent\",\"propertyLimit\":0}"),
@@ -1732,12 +1718,12 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_149")]
         public void UnityReadReportTool_ArrayPaging_ReturnsGovernedMetricsAndSlice()
         {
-            var hierarchyResult = new UnityGetHierarchyTool().Execute(
+            var hierarchyResult = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool()).Execute(
                 CreateContext("agb.readreport.001.source", "{\"locator\":\"currentScene\"}"),
                 NoOpAgentCancellation.Instance);
             TrackReport(hierarchyResult.reportPath);
 
-            var tool = new UnityReadReportTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityReadReportTool());
             var result = tool.Execute(
                 CreateContext(
                     "agb.readreport.001",
@@ -1760,12 +1746,12 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_149")]
         public void UnityReadReportTool_NonArraySelection_UsesValueAndNoPagingCounts()
         {
-            var hierarchyResult = new UnityGetHierarchyTool().Execute(
+            var hierarchyResult = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool()).Execute(
                 CreateContext("agb.readreport.002.source", "{\"locator\":\"currentScene\"}"),
                 NoOpAgentCancellation.Instance);
             TrackReport(hierarchyResult.reportPath);
 
-            var tool = new UnityReadReportTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityReadReportTool());
             var result = tool.Execute(
                 CreateContext(
                     "agb.readreport.002",
@@ -1786,7 +1772,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_149")]
         public void UnityReadReportTool_UnsafeAndInvalidPaths_ReturnInvalidArgs()
         {
-            var tool = new UnityReadReportTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityReadReportTool());
 
             var absolutePathResult = tool.Execute(
                 CreateContext("agb.readreport.003.abs", "{\"reportPath\":\"C:/temp/not-allowed.json\"}"),
@@ -1815,12 +1801,12 @@ namespace UnityMcp.AgentBridge.Tests
             var nonReportPath = AgentBridgeReportWriter.WriteReport(settings, "agb.readreport.004.fake", "manual", new ManualReportPayload { hello = "world" });
             TrackReport(nonReportPath);
 
-            var hierarchyResult = new UnityGetHierarchyTool().Execute(
+            var hierarchyResult = CreateUnityQueriesAdapter(new UnityQueries.UnityGetHierarchyTool()).Execute(
                 CreateContext("agb.readreport.004.source", "{\"locator\":\"currentScene\"}"),
                 NoOpAgentCancellation.Instance);
             TrackReport(hierarchyResult.reportPath);
 
-            var tool = new UnityReadReportTool();
+            var tool = CreateUnityQueriesAdapter(new UnityQueries.UnityReadReportTool());
             var shapeResult = tool.Execute(
                 CreateContext("agb.readreport.004.shape", "{\"reportPath\":\"" + nonReportPath + "\"}"),
                 NoOpAgentCancellation.Instance);
@@ -1843,7 +1829,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_149")]
         public void UnityReadReportTool_Source_StaysReadOnly()
         {
-            var content = File.ReadAllText(GetPackageRelativePath("Editor/Tools/UnityReadReportTool.cs"));
+            var content = File.ReadAllText(GetPackageRelativePath("BuiltInPlugins/UnityQueries/Editor/UnityReadReportTool.cs"));
             Assert.That(content, Does.Not.Contain("AssetDatabase."));
             Assert.That(content, Does.Not.Contain("Selection."));
             Assert.That(content, Does.Not.Contain("CompilationPipeline."));
@@ -1944,22 +1930,22 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var sourceFiles = new[]
             {
-                "Editor/Tools/UnityAssetDatabaseSearchTool.cs",
-                "Editor/Tools/UnitySelectionInfoTool.cs",
-                "Editor/Tools/UnityGameObjectComponentInfoTool.cs",
-                "Editor/Tools/AssetQueries/AssetQueryResultBuilder.cs",
-                "Editor/Tools/AssetQueries/AssetQueryReportBuilder.cs",
-                "Editor/Tools/AssetQueries/AssetQueryPathValidator.cs",
-                "Editor/Tools/AssetQueries/GameObjectLocatorFormatter.cs",
-                "Editor/Tools/AssetQueries/GameObjectLocatorResolver.cs",
-                "Editor/Tools/AssetQueries/SerializedComponentSampler.cs",
+                "BuiltInPlugins/UnityQueries/Editor/UnityAssetDatabaseSearchTool.cs",
+                "BuiltInPlugins/UnityQueries/Editor/UnitySelectionInfoTool.cs",
+                "BuiltInPlugins/UnityQueries/Editor/UnityGameObjectComponentInfoTool.cs",
+                "BuiltInPlugins/UnityQueries/Editor/AssetQueries/AssetQueryResultBuilder.cs",
+                "BuiltInPlugins/UnityQueries/Editor/AssetQueries/AssetQueryReportBuilder.cs",
+                "BuiltInPlugins/UnityQueries/Editor/AssetQueries/AssetQueryPathValidator.cs",
+                "BuiltInPlugins/UnityQueries/Editor/AssetQueries/GameObjectLocatorFormatter.cs",
+                "BuiltInPlugins/UnityQueries/Editor/AssetQueries/GameObjectLocatorResolver.cs",
+                "BuiltInPlugins/UnityQueries/Editor/AssetQueries/SerializedComponentSampler.cs",
                 "BuiltInPlugins/EditorBasics/Editor/EditorBasicsProvider.cs",
-                "Editor/Tools/UnityGetHierarchyTool.cs",
-                "Editor/Tools/SceneQueries/SceneQueryReportBuilder.cs",
-                "Editor/Tools/SceneQueries/SceneQueryJson.cs",
-                "Editor/Tools/SceneQueries/SceneQueryDtos.cs",
-                "Editor/Tools/SceneQueries/SceneQueryContract.cs",
-                "Editor/Tools/SceneQueries/HierarchyTargetResolver.cs"
+                "BuiltInPlugins/UnityQueries/Editor/UnityGetHierarchyTool.cs",
+                "BuiltInPlugins/UnityQueries/Editor/SceneQueries/SceneQueryReportBuilder.cs",
+                "BuiltInPlugins/UnityQueries/Editor/SceneQueries/SceneQueryJson.cs",
+                "BuiltInPlugins/UnityQueries/Editor/SceneQueries/SceneQueryDtos.cs",
+                "BuiltInPlugins/UnityQueries/Editor/SceneQueries/SceneQueryContract.cs",
+                "BuiltInPlugins/UnityQueries/Editor/SceneQueries/HierarchyTargetResolver.cs"
             };
 
             foreach (var relativeFile in sourceFiles)
@@ -2026,6 +2012,12 @@ namespace UnityMcp.AgentBridge.Tests
                 ProjectRoot = projectRoot,
                 TempRoot = "Temp/AgentBridge"
             };
+        }
+
+        private static IAgentTool CreateUnityQueriesAdapter(IUnityMcpTool tool)
+        {
+            var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
+            return new UnityMcpPluginToolAdapter(tool, projectRoot, "Temp/AgentBridge");
         }
 
         private void TrackReport(string reportPath)
