@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.read_report metrics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "reportPath",
+    "jsonPointer",
+    "offset",
+    "limit",
+    "maxBytes",
+    "selectedIsArray",
+    "returnedCount",
+    "totalCount",
+    "nextOffset",
+    "truncated",
+    "byteCount",
+    "items",
+    "value"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "report_read.v1"
+    },
+    "reportPath": {
+      "type": "string"
+    },
+    "jsonPointer": {
+      "type": "string"
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+    },
+    "maxBytes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 262144
+    },
+    "selectedIsArray": {
+      "type": "boolean"
+    },
+    "returnedCount": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "totalCount": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "nextOffset": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "byteCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "items": {
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "value": {}
+  }
+}

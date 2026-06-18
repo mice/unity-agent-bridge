@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.run_diagnostic args",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "diagnosticType",
+    "targetPath"
+  ],
+  "properties": {
+    "diagnosticType": {
+      "type": "string",
+      "enum": [
+        "fx_prefab",
+        "scene",
+        "prefab",
+        "texture_import",
+        "shader_variant",
+        "material_instance",
+        "vat_mesh",
+        "bakeroot"
+      ]
+    },
+    "targetPath": {
+      "type": "string",
+      "minLength": 1
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

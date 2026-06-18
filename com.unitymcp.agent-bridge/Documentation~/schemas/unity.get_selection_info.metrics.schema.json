@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.get_selection_info metrics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "selectionCount",
+    "active",
+    "counts",
+    "items"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "selection_info.v1"
+    },
+    "selectionCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "active": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/selectionSummary"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assets",
+        "sceneObjects",
+        "components",
+        "other"
+      ],
+      "properties": {
+        "assets": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sceneObjects": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "components": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "other": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/selectionSummary"
+      }
+    }
+  },
+  "$defs": {
+    "selectionSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "kind",
+        "name",
+        "locator",
+        "type"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "asset",
+            "sceneObject",
+            "component",
+            "other"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

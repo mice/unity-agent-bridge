@@ -1,0 +1,27 @@
+{
+  "name": "UnityMcp.AgentBridge.Tests.Editor",
+  "rootNamespace": "UnityMcp.AgentBridge.Tests",
+  "references": [
+    "UnityMcp.AgentBridge.SharedProtocolCore",
+    "UnityMcp.AgentBridge.Editor",
+    "UnityMcp.BuiltInPlugins.ProjectInfo",
+    "UnityMcp.BuiltInPlugins.EditorBasics",
+    "UnityMcp.BuiltInPlugins.RoslynExecution",
+    "UnityMcp.Plugin.Abstractions",
+    "Unity.Newtonsoft.Json"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

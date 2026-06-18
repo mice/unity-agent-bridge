@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.assetdatabase_search metrics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "query",
+    "folders",
+    "totalCount",
+    "returnedCount",
+    "offset",
+    "limit",
+    "truncated",
+    "nextOffset",
+    "results"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "assetdatabase_search.v1"
+    },
+    "query": {
+      "type": "string"
+    },
+    "folders": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "totalCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "returnedCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "nextOffset": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/assetSummary"
+      }
+    }
+  },
+  "$defs": {
+    "assetSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "guid",
+        "name",
+        "locator",
+        "path",
+        "kind",
+        "type",
+        "extension",
+        "isFolder"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "guid": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "const": "asset"
+        },
+        "type": {
+          "type": "string"
+        },
+        "extension": {
+          "type": "string"
+        },
+        "isFolder": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

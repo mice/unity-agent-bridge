@@ -1,0 +1,16 @@
+{
+  "name": "UnityMcp.AgentBridge.SharedProtocolCore",
+  "rootNamespace": "UnityMcp.AgentBridge",
+  "references": [
+    "Unity.Newtonsoft.Json"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": true
+}

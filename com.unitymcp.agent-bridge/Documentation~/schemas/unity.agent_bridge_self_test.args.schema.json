@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "includeEditModeCase": {
+      "type": "boolean"
+    },
+    "includeDiagnosticCase": {
+      "type": "boolean"
+    },
+    "continueOnFailure": {
+      "type": "boolean"
+    },
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false
+}

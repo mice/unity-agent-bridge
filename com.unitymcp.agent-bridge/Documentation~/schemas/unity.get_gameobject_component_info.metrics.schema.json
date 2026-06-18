@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.get_gameobject_component_info metrics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "mode",
+    "target",
+    "componentCount",
+    "components"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "gameobject_component_info.v1"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "component_list",
+        "component_inspect"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/gameObjectTarget"
+    },
+    "componentQuery": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "componentName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "componentIndex": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "propertyMode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "debug",
+            "serialized",
+            null
+          ]
+        }
+      }
+    },
+    "componentCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "matchedCount": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "propertyCount": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "returnedPropertyCount": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "truncated": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/componentSummary"
+      }
+    },
+    "details": {
+      "$ref": "#/$defs/details"
+    },
+    "followUp": {
+      "$ref": "#/$defs/followUp"
+    }
+  },
+  "$defs": {
+    "details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "reportPath",
+        "recommendedRead",
+        "recommendedPointers"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "reportPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recommendedRead": {
+          "type": "boolean"
+        },
+        "recommendedPointers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "followUpOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "reason",
+        "args"
+      ],
+      "properties": {
+        "tool": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "args": {
+          "type": "object"
+        }
+      }
+    },
+    "followUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recommended",
+        "options"
+      ],
+      "properties": {
+        "recommended": {
+          "type": "boolean"
+        },
+        "options": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/followUpOption"
+          }
+        }
+      }
+    },
+    "gameObjectTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "locator",
+        "path",
+        "scenePath",
+        "instanceId"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scenePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instanceId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "componentSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "name",
+        "type"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scriptPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "propertyCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "returnedPropertyCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

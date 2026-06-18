@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.get_gameobject_component_info args",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "locator": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "description": "Canonical GameObject locator string. Null or omitted means selection:active."
+    },
+    "componentName": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "componentIndex": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "propertyMode": {
+      "type": "string",
+      "enum": [
+        "debug",
+        "serialized"
+      ],
+      "default": "debug"
+    },
+    "propertyLimit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000,
+      "default": 200
+    },
+    "arrayElementLimit": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 200,
+      "default": 20
+    },
+    "stringMaxLength": {
+      "type": "integer",
+      "minimum": 16,
+      "maximum": 4000,
+      "default": 300
+    }
+  }
+}

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <rect width="1200" height="760" fill="#edeff4"/>
+  <rect x="40" y="32" width="1120" height="696" rx="18" fill="#ffffff" stroke="#28364f" stroke-width="4"/>
+  <text x="72" y="78" font-family="Segoe UI, Arial, sans-serif" font-size="30" fill="#172131">Quick Diagnostics Report</text>
+  <rect x="72" y="108" width="1056" height="86" rx="12" fill="#f2f6ff" stroke="#6980a7" stroke-width="2"/>
+  <text x="96" y="144" font-family="Consolas, monospace" font-size="22" fill="#22324f">GeneratedAtUtc: 2026-06-06T08:00:00Z</text>
+  <text x="96" y="176" font-family="Consolas, monospace" font-size="22" fill="#22324f">Readiness: Degraded   ProjectPath: D:\ProjCommon\UnityMCPTools\UnityMCP</text>
+  <rect x="72" y="220" width="1056" height="384" rx="12" fill="#fbfcff" stroke="#9aa7bf" stroke-width="2"/>
+  <text x="96" y="262" font-family="Consolas, monospace" font-size="22" fill="#1f2c45">MCP001 [Info]  Bridge settings loaded                                 2 ms</text>
+  <text x="96" y="302" font-family="Consolas, monospace" font-size="22" fill="#1f2c45">MCP002 [Info]  Queue path writable                                     1 ms</text>
+  <text x="96" y="342" font-family="Consolas, monospace" font-size="22" fill="#1f2c45">MCP003 [Info]  node --version 22.x                                     8 ms</text>
+  <text x="96" y="382" font-family="Consolas, monospace" font-size="22" fill="#1f2c45">MCP009 [Error] unity_agent_bridge not listed                          23 ms</text>
+  <text x="96" y="422" font-family="Consolas, monospace" font-size="22" fill="#1f2c45">MCP010 [Info]  ping returned summary                                   7 ms</text>
+  <text x="96" y="482" font-family="Segoe UI, Arial, sans-serif" font-size="22" fill="#314a78">Details are redacted before Copy Report leaves the window.</text>
+  <rect x="72" y="628" width="180" height="42" rx="8" fill="#d7dfef"/>
+  <text x="104" y="656" font-family="Segoe UI, Arial, sans-serif" font-size="22" fill="#22324f">Copy Report</text>
+  <rect x="268" y="628" width="164" height="42" rx="8" fill="#d7dfef"/>
+  <text x="302" y="656" font-family="Segoe UI, Arial, sans-serif" font-size="22" fill="#22324f">Open Log</text>
+  <rect x="448" y="628" width="120" height="42" rx="8" fill="#d7dfef"/>
+  <text x="484" y="656" font-family="Segoe UI, Arial, sans-serif" font-size="22" fill="#22324f">Clear</text>
+</svg>

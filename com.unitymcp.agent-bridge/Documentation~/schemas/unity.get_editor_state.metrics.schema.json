@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.get_editor_state metrics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "editorState",
+    "runtimeMode",
+    "isCompiling",
+    "isUpdating",
+    "isPlaying",
+    "isPlayingOrWillChangePlaymode",
+    "activeScene",
+    "loadedScenes"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "editor_state.v1"
+    },
+    "editorState": {
+      "$ref": "#/$defs/editorStateSnapshot"
+    },
+    "runtimeMode": {
+      "type": "string",
+      "enum": [
+        "edit_mode",
+        "entering_play_mode",
+        "play_mode",
+        "exiting_play_mode"
+      ]
+    },
+    "isCompiling": {
+      "type": "boolean"
+    },
+    "isUpdating": {
+      "type": "boolean"
+    },
+    "isPlaying": {
+      "type": "boolean"
+    },
+    "isPlayingOrWillChangePlaymode": {
+      "type": "boolean"
+    },
+    "activeScene": {
+      "$ref": "#/$defs/sceneSummary"
+    },
+    "loadedScenes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/loadedSceneSummary"
+      }
+    }
+  },
+  "$defs": {
+    "editorStateSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtimeMode",
+        "activityState",
+        "flags",
+        "sceneMutation",
+        "activeScene",
+        "loadedScenes"
+      ],
+      "properties": {
+        "runtimeMode": {
+          "type": "string",
+          "enum": [
+            "edit_mode",
+            "entering_play_mode",
+            "play_mode",
+            "exiting_play_mode"
+          ]
+        },
+        "activityState": {
+          "type": "string",
+          "enum": [
+            "idle",
+            "compiling",
+            "updating",
+            "compiling_and_updating"
+          ]
+        },
+        "flags": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "isCompiling",
+            "isUpdating",
+            "isPlaying",
+            "isPlayingOrWillChangePlaymode"
+          ],
+          "properties": {
+            "isCompiling": {
+              "type": "boolean"
+            },
+            "isUpdating": {
+              "type": "boolean"
+            },
+            "isPlaying": {
+              "type": "boolean"
+            },
+            "isPlayingOrWillChangePlaymode": {
+              "type": "boolean"
+            }
+          }
+        },
+        "sceneMutation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "canOpenScene",
+            "blockers"
+          ],
+          "properties": {
+            "canOpenScene": {
+              "type": "boolean"
+            },
+            "blockers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "compiling",
+                  "updating",
+                  "entering_play_mode",
+                  "play_mode",
+                  "exiting_play_mode",
+                  "dirty_scene",
+                  "untitled_dirty_scene"
+                ]
+              }
+            }
+          }
+        },
+        "activeScene": {
+          "$ref": "#/$defs/sceneSummary"
+        },
+        "loadedScenes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/loadedSceneSummary"
+          }
+        }
+      }
+    },
+    "sceneSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "name",
+        "isLoaded",
+        "isDirty",
+        "isActive",
+        "rootCount",
+        "buildIndex"
+      ],
+      "properties": {
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "isLoaded": {
+          "type": "boolean"
+        },
+        "isDirty": {
+          "type": "boolean"
+        },
+        "isActive": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "rootCount": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "buildIndex": {
+          "type": "integer"
+        }
+      }
+    },
+    "loadedSceneSummary": {
+      "$ref": "#/$defs/sceneSummary"
+    }
+  }
+}

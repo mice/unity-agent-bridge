@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.get_selection_info args",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "includeDetails": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, emits full selection identity fields in the report payload."
+    }
+  }
+}

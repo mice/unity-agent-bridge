@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Deterministic>true</Deterministic>
+    <AssemblyName>UnityAgentBridge.ExternalBridgeClientCore</AssemblyName>
+    <RootNamespace>UnityAgentBridge.ExternalBridgeClientCore</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\UnityAgentBridge.SharedProtocolCore\UnityAgentBridge.SharedProtocolCore.csproj" />
+  </ItemGroup>
+</Project>

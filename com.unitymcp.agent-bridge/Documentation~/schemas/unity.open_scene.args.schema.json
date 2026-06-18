@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.open_scene args",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "scenePath"
+  ],
+  "properties": {
+    "scenePath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unity scene asset path under Assets/ ending with .unity."
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "single",
+        "additive"
+      ],
+      "default": "single"
+    },
+    "setActive": {
+      "type": "boolean",
+      "default": true
+    },
+    "saveModifiedScenes": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

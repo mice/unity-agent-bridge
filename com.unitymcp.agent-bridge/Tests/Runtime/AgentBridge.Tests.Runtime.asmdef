@@ -1,0 +1,17 @@
+{
+  "name": "UnityMcp.AgentBridge.Tests.Runtime",
+  "rootNamespace": "UnityMcp.AgentBridge.Tests",
+  "references": [],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

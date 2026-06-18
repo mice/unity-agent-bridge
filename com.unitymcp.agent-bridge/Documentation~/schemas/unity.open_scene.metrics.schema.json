@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.open_scene metrics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "scenePath",
+    "mode",
+    "setActive",
+    "savedModifiedScenes",
+    "alreadyLoaded",
+    "openedScene",
+    "activeScene",
+    "loadedScenes",
+    "editorState"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "open_scene.v1"
+    },
+    "scenePath": {
+      "type": "string"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "single",
+        "additive"
+      ]
+    },
+    "setActive": {
+      "type": "boolean"
+    },
+    "savedModifiedScenes": {
+      "type": "boolean"
+    },
+    "alreadyLoaded": {
+      "type": "boolean"
+    },
+    "openedScene": {
+      "$ref": "unity.get_editor_state.metrics.schema.json#/$defs/sceneSummary"
+    },
+    "activeScene": {
+      "$ref": "unity.get_editor_state.metrics.schema.json#/$defs/sceneSummary"
+    },
+    "loadedScenes": {
+      "type": "array",
+      "items": {
+        "$ref": "unity.get_editor_state.metrics.schema.json#/$defs/loadedSceneSummary"
+      }
+    },
+    "editorState": {
+      "$ref": "unity.get_editor_state.metrics.schema.json#/$defs/editorStateSnapshot"
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "UnityMcp.AgentBridge.Tests.Editor.Mcp",
+  "rootNamespace": "UnityMcp.AgentBridge.Tests.Mcp",
+  "references": [
+    "UnityMcp.AgentBridge.Editor.Mcp",
+    "UnityMcp.AgentBridge.Editor",
+    "UnityMcp.Plugin.Abstractions"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

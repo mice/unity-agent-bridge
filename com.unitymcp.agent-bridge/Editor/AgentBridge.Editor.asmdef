@@ -1,0 +1,22 @@
+{
+  "name": "UnityMcp.AgentBridge.Editor",
+  "rootNamespace": "UnityMcp.AgentBridge",
+  "references": [
+    "UnityMcp.AgentBridge.SharedProtocolCore",
+    "UnityMcp.Plugin.Abstractions",
+    "UnityEditor.TestRunner",
+    "UnityEngine.TestRunner",
+    "Unity.Newtonsoft.Json"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

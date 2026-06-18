@@ -1,0 +1,322 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.get_hierarchy metrics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "target",
+    "rootCount",
+    "nodeCount",
+    "returnedNodeCount",
+    "truncated",
+    "limit",
+    "maxDepth",
+    "visitedCount",
+    "nodes"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "hierarchy.v2"
+    },
+    "target": {
+      "$ref": "#/$defs/hierarchyTarget"
+    },
+    "rootCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nodeCount": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "returnedNodeCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5000
+    },
+    "maxDepth": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "visitedCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/hierarchyNode"
+      }
+    },
+    "details": {
+      "$ref": "#/$defs/details"
+    },
+    "followUp": {
+      "$ref": "#/$defs/followUp"
+    }
+  },
+  "$defs": {
+    "details": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "reportPath",
+        "recommendedRead",
+        "recommendedPointers"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "reportPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recommendedRead": {
+          "type": "boolean"
+        },
+        "recommendedPointers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "followUpOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "reason",
+        "args"
+      ],
+      "properties": {
+        "tool": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "args": {
+          "type": "object"
+        }
+      }
+    },
+    "followUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recommended",
+        "options"
+      ],
+      "properties": {
+        "recommended": {
+          "type": "boolean"
+        },
+        "options": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/followUpOption"
+          }
+        }
+      }
+    },
+    "hierarchyTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locator",
+        "targetKind",
+        "scenePath",
+        "path",
+        "name",
+        "instanceId"
+      ],
+      "properties": {
+        "locator": {
+          "type": "string"
+        },
+        "targetKind": {
+          "type": "string",
+          "enum": [
+            "scene_root",
+            "selection",
+            "instance",
+            "scene_subtree",
+            "prefab_root",
+            "prefab_subtree"
+          ]
+        },
+        "scenePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instanceId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "componentSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "type"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "null represents a missing or unresolved component slot."
+        }
+      }
+    },
+    "hierarchyNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nodeIndex",
+        "parentIndex",
+        "name",
+        "locator",
+        "path",
+        "scenePath",
+        "instanceId",
+        "depth",
+        "siblingIndex",
+        "activeSelf",
+        "activeInHierarchy",
+        "childCount",
+        "componentCount",
+        "isPrefabInstance",
+        "prefabAssetPath",
+        "components",
+        "componentsTruncated",
+        "hasMissingScripts"
+      ],
+      "properties": {
+        "nodeIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parentIndex": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "scenePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instanceId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "depth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "siblingIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activeSelf": {
+          "type": "boolean"
+        },
+        "activeInHierarchy": {
+          "type": "boolean"
+        },
+        "childCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "componentCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "isPrefabInstance": {
+          "type": "boolean"
+        },
+        "prefabAssetPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "components": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/componentSummary"
+          }
+        },
+        "componentsTruncated": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "hasMissingScripts": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

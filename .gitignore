@@ -1,0 +1,58 @@
+# Unity Agent Bridge product repository ignores
+
+# .NET build outputs
+**/bin/
+**/obj/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# Node/npm dependencies and logs
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+
+# Unity-generated files if this package is opened in a Unity project context
+Library/
+Logs/
+Temp/
+Obj/
+Build/
+Builds/
+UserSettings/
+MemoryCaptures/
+Recordings/
+*.suo
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# IDE/editor state
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Agent Bridge local runtime state
+.unitymcp/
+
+# Package-contained published executables are generated release artifacts.
+com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/**
+
+com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/roslyn-execution/out/**

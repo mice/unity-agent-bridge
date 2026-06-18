@@ -1,0 +1,19 @@
+{
+  "name": "UnityMcp.BuiltInPlugins.EditorBasics",
+  "rootNamespace": "UnityMcp.BuiltInPlugins.EditorBasics",
+  "references": [
+    "UnityMcp.Plugin.Abstractions",
+    "Unity.Newtonsoft.Json"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

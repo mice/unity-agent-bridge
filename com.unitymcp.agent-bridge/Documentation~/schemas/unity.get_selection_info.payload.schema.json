@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.get_selection_info payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "payloadVersion",
+    "generatedAt",
+    "selection",
+    "items"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "payloadVersion": {
+      "type": "string",
+      "const": "selection_info.v1"
+    },
+    "generatedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selectionCount",
+        "activeIndex"
+      ],
+      "properties": {
+        "selectionCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activeIndex": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/selectionDetail"
+      }
+    }
+  },
+  "$defs": {
+    "selectionDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "kind",
+        "name",
+        "locator",
+        "type",
+        "path",
+        "assetPath",
+        "hierarchyPath",
+        "scenePath",
+        "instanceId",
+        "guid",
+        "globalObjectId",
+        "isPersistent",
+        "isPrefabInstance",
+        "prefabAssetPath"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "asset",
+            "sceneObject",
+            "component",
+            "other"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "assetPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hierarchyPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scenePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instanceId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "guid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "globalObjectId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "isPersistent": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "isPrefabInstance": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "prefabAssetPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

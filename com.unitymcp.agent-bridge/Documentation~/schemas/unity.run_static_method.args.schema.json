@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.run_static_method args",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "typeName",
+    "methodName"
+  ],
+  "properties": {
+    "typeName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "methodName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

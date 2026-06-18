@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agentbridge.roslyn_spike args",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "timeoutMs": {
+      "type": "integer",
+      "minimum": 1000,
+      "maximum": 60000,
+      "default": 10000
+    }
+  }
+}

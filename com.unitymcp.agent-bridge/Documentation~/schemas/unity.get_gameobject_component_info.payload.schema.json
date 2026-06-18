@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.get_gameobject_component_info payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "payloadVersion",
+    "generatedAt",
+    "mode",
+    "target",
+    "components"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "payloadVersion": {
+      "type": "string",
+      "const": "gameobject_component_info.v1"
+    },
+    "generatedAt": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "mode": {
+      "type": "string",
+      "enum": [
+        "component_list",
+        "component_inspect"
+      ]
+    },
+    "target": {
+      "$ref": "#/$defs/gameObjectTargetDetail"
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/componentDetail"
+      }
+    }
+  },
+  "$defs": {
+    "gameObjectTargetDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "locator",
+        "path",
+        "scenePath",
+        "instanceId",
+        "globalObjectId",
+        "prefabAssetPath"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "locator": {
+          "type": "string"
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scenePath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "instanceId": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "globalObjectId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prefabAssetPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "componentDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "name",
+        "type",
+        "assemblyName",
+        "scriptGuid",
+        "scriptPath",
+        "properties",
+        "truncated"
+      ],
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "assemblyName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scriptGuid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scriptPath": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/serializedProperty"
+          }
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      }
+    },
+    "serializedProperty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "propertyType",
+        "type",
+        "isUnityObject",
+        "isNull",
+        "isContainer",
+        "value"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "propertyType": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        },
+        "isUnityObject": {
+          "type": "boolean"
+        },
+        "isNull": {
+          "type": "boolean"
+        },
+        "isContainer": {
+          "type": "boolean"
+        },
+        "value": {
+          "type": [
+            "string",
+            "number",
+            "integer",
+            "boolean",
+            "object",
+            "null"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "isUnityObject": {
+                "const": true
+              }
+            },
+            "required": [
+              "isUnityObject"
+            ]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "path",
+                  "guid",
+                  "instanceId",
+                  "isDestroyed"
+                ],
+                "properties": {
+                  "name": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "guid": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "instanceId": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "isDestroyed": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "isContainer": {
+                "const": true
+              }
+            },
+            "required": [
+              "isContainer"
+            ]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

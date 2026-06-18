@@ -1,0 +1,273 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.execute_csharp metrics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "success",
+    "phase",
+    "invocationId",
+    "sourceHash",
+    "stages",
+    "result",
+    "error",
+    "reportPath"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "execute_csharp.v1"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "invalid_args",
+        "validation_failed",
+        "proxy_failed",
+        "compile_failed",
+        "load_failed",
+        "execution_failed",
+        "executed",
+        "timeout",
+        "serialization_failed"
+      ]
+    },
+    "invocationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sourceHash": {
+      "type": "string",
+      "pattern": "^sha256:[A-Fa-f0-9]{64}$"
+    },
+    "stages": {
+      "$ref": "#/$defs/stages"
+    },
+    "result": {
+      "$ref": "#/$defs/resultEnvelope"
+    },
+    "error": {
+      "type": "string"
+    },
+    "reportPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "limit": {
+      "$ref": "#/$defs/limit"
+    }
+  },
+  "$defs": {
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compiler",
+        "load"
+      ],
+      "properties": {
+        "compiler": {
+          "$ref": "#/$defs/compilerStage"
+        },
+        "load": {
+          "$ref": "#/$defs/loadStage"
+        }
+      }
+    },
+    "compilerStage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy",
+        "proxy",
+        "durationMs",
+        "exitCode"
+      ],
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "const": "external_proxy"
+        },
+        "proxy": {
+          "type": "string",
+          "const": "unity-roslyn-compiler.exe"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "exitCode": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "loadStage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "durationMs",
+        "assemblyName",
+        "entryType",
+        "entryMethod",
+        "scriptBodyMethod"
+      ],
+      "properties": {
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "assemblyName": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "entryType": {
+          "type": "string",
+          "const": "Entry"
+        },
+        "entryMethod": {
+          "type": "string",
+          "const": "Run"
+        },
+        "scriptBodyMethod": {
+          "type": "string",
+          "const": "__Run"
+        }
+      }
+    },
+    "resultEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "null",
+            "primitive",
+            "json",
+            "unity_object",
+            "unity_objects",
+            "truncated"
+          ]
+        },
+        "value": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/scriptReturn"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "limit": {
+          "$ref": "#/$defs/limit"
+        }
+      }
+    },
+    "scriptReturn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result",
+        "error"
+      ],
+      "properties": {
+        "result": true,
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "diagnosticRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "severity",
+        "id",
+        "message",
+        "line",
+        "column"
+      ],
+      "properties": {
+        "severity": {
+          "type": "string",
+          "enum": [
+            "hidden",
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": "string"
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        }
+      }
+    },
+    "limit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxBytes",
+        "maxCollectionLength",
+        "maxDepth",
+        "maxStringLength"
+      ],
+      "properties": {
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxCollectionLength": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxDepth": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxStringLength": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

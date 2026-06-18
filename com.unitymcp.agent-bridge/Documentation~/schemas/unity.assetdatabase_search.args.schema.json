@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.assetdatabase_search args",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "query"
+  ],
+  "properties": {
+    "query": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Unity AssetDatabase search filter, for example 't:Prefab Player'."
+    },
+    "folders": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Optional Unity project folders to search, each of which must resolve under Assets/."
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 200,
+      "default": 20
+    },
+    "includeDetails": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, includes bounded importer, dependency, and sub-asset detail in the report payload."
+    }
+  }
+}

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760">
+  <rect width="1200" height="760" fill="#f3f1ea"/>
+  <rect x="32" y="28" width="1136" height="704" rx="18" fill="#fffdfa" stroke="#2f2a24" stroke-width="4"/>
+  <rect x="32" y="28" width="1136" height="58" rx="18" fill="#d9c7a6"/>
+  <text x="64" y="66" font-family="Segoe UI, Arial, sans-serif" font-size="30" fill="#1d1812">MCP Setup &amp; Diagnostics</text>
+  <rect x="64" y="112" width="1072" height="168" rx="14" fill="#f8efe1" stroke="#7e674c" stroke-width="3"/>
+  <text x="88" y="148" font-family="Segoe UI, Arial, sans-serif" font-size="28" fill="#2e2419">Status</text>
+  <text x="88" y="188" font-family="Consolas, monospace" font-size="22" fill="#3e3428">Bridge: Enabled   Node: 22.x   npm: 10.x   .NET: 10.x</text>
+  <text x="88" y="224" font-family="Consolas, monospace" font-size="22" fill="#3e3428">CLI: Found        Server Files: Ready        Auto-Launch State: Completed</text>
+  <rect x="64" y="304" width="516" height="388" rx="14" fill="#eef2e7" stroke="#5a6b43" stroke-width="3"/>
+  <text x="88" y="340" font-family="Segoe UI, Arial, sans-serif" font-size="28" fill="#223017">Client Config</text>
+  <rect x="88" y="362" width="152" height="40" rx="8" fill="#ccd9b8"/>
+  <text x="124" y="389" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#243317">Codex</text>
+  <rect x="250" y="362" width="178" height="40" rx="8" fill="#e4ebd8"/>
+  <text x="282" y="389" font-family="Segoe UI, Arial, sans-serif" font-size="20" fill="#243317">Claude Code</text>
+  <rect x="88" y="424" width="468" height="196" rx="10" fill="#fbfdf7" stroke="#87956e" stroke-width="2"/>
+  <text x="108" y="456" font-family="Consolas, monospace" font-size="20" fill="#324022">project launcher preview</text>
+  <text x="108" y="488" font-family="Consolas, monospace" font-size="20" fill="#324022">.codex/config.toml</text>
+  <text x="108" y="520" font-family="Consolas, monospace" font-size="20" fill="#324022">[mcp_servers.unity_agent_bridge]</text>
+  <text x="108" y="552" font-family="Consolas, monospace" font-size="20" fill="#324022">command = "Tools/AgentBridge/Start-UnityAgentBridge-Mcp.cmd"</text>
+  <rect x="88" y="640" width="96" height="32" rx="6" fill="#d7dfca"/><text x="107" y="662" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#243317">Apply</text>
+  <rect x="196" y="640" width="96" height="32" rx="6" fill="#d7dfca"/><text x="214" y="662" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#243317">Remove</text>
+  <rect x="304" y="640" width="96" height="32" rx="6" fill="#d7dfca"/><text x="327" y="662" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#243317">Copy</text>
+  <rect x="412" y="640" width="108" height="32" rx="6" fill="#d7dfca"/><text x="431" y="662" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#243317">Reveal</text>
+  <rect x="620" y="304" width="516" height="388" rx="14" fill="#eef0f8" stroke="#4a5f88" stroke-width="3"/>
+  <text x="644" y="340" font-family="Segoe UI, Arial, sans-serif" font-size="28" fill="#1f2a45">Diagnostics</text>
+  <rect x="644" y="362" width="468" height="258" rx="10" fill="#fafbff" stroke="#8190b1" stroke-width="2"/>
+  <text x="664" y="396" font-family="Consolas, monospace" font-size="20" fill="#29385a">MCP001  Info    Bridge settings loaded</text>
+  <text x="664" y="430" font-family="Consolas, monospace" font-size="20" fill="#29385a">MCP003  Info    node --version = 22.x</text>
+  <text x="664" y="464" font-family="Consolas, monospace" font-size="20" fill="#29385a">MCP009  Info    unity_agent_bridge listed</text>
+  <text x="664" y="498" font-family="Consolas, monospace" font-size="20" fill="#29385a">MCP010  Info    ping returned project info</text>
+  <text x="664" y="550" font-family="Segoe UI, Arial, sans-serif" font-size="22" fill="#1f2a45">Readiness: Ready</text>
+  <rect x="644" y="640" width="96" height="32" rx="6" fill="#d7dded"/><text x="669" y="662" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#22304a">Run</text>
+  <rect x="752" y="640" width="96" height="32" rx="6" fill="#d7dded"/><text x="773" y="662" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#22304a">Copy</text>
+  <rect x="860" y="640" width="116" height="32" rx="6" fill="#d7dded"/><text x="879" y="662" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#22304a">Open Log</text>
+  <rect x="988" y="640" width="96" height="32" rx="6" fill="#d7dded"/><text x="1012" y="662" font-family="Segoe UI, Arial, sans-serif" font-size="18" fill="#22304a">Clear</text>
+</svg>
