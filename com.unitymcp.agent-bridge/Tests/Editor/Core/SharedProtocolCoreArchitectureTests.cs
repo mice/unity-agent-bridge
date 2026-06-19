@@ -40,11 +40,14 @@ namespace UnityMcp.AgentBridge.Tests
         public void PluginAbstractions_AndProjectInfoPlugin_DoNotReferenceSharedProtocolCore()
         {
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
-            var packageRoot = Path.Combine(projectRoot, "Packages", "com.unitymcp.agent-bridge");
-            var abstractionsAsmdefPath = Path.Combine(packageRoot, "Runtime", "PluginAbstractions", "UnityMcp.Plugin.Abstractions.asmdef");
-            var projectInfoAsmdefPath = Path.Combine(packageRoot, "BuiltInPlugins", "ProjectInfo", "Editor", "UnityMcp.BuiltInPlugins.ProjectInfo.asmdef");
+            var agentBridgePackageRoot = Path.Combine(projectRoot, "Packages", "com.unitymcp.agent-bridge");
+            var abstractionsPackageRoot = Path.Combine(projectRoot, "Packages", "com.unitymcp.plugin-abstractions");
+            var abstractionsAsmdefPath = Path.Combine(abstractionsPackageRoot, "Runtime", "PluginAbstractions", "UnityMcp.Plugin.Abstractions.asmdef");
+            var oldAbstractionsAsmdefPath = Path.Combine(agentBridgePackageRoot, "Runtime", "PluginAbstractions", "UnityMcp.Plugin.Abstractions.asmdef");
+            var projectInfoAsmdefPath = Path.Combine(agentBridgePackageRoot, "BuiltInPlugins", "ProjectInfo", "Editor", "UnityMcp.BuiltInPlugins.ProjectInfo.asmdef");
 
             Assert.That(File.Exists(abstractionsAsmdefPath), Is.True, "Plugin abstractions asmdef must exist.");
+            Assert.That(File.Exists(oldAbstractionsAsmdefPath), Is.False, "Agent Bridge must not own a duplicate PluginAbstractions asmdef.");
             Assert.That(File.Exists(projectInfoAsmdefPath), Is.True, "ProjectInfo plugin asmdef must exist.");
 
             var abstractionsAsmdefText = File.ReadAllText(abstractionsAsmdefPath);

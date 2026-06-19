@@ -82,6 +82,23 @@ Expected result:
 
 `v1.2.1` adds a Unity-side plugin discovery loop for tools that should be visible through MCP without hard-coding new MCP catalog entries.
 
+### Plugin SDK dependency
+
+Plugin providers and tools compile against `com.unitymcp.plugin-abstractions`, which owns the `UnityMcp.Plugin.Abstractions` assembly and `UnityMcp.Plugin` namespace. External plugin projects should reference that package instead of referencing Agent Bridge host/editor internals.
+
+During local file or Git dependency development, host projects must make both packages resolvable:
+
+```json
+{
+  "dependencies": {
+    "com.unitymcp.agent-bridge": "file:D:/Path/To/com.unitymcp.agent-bridge",
+    "com.unitymcp.plugin-abstractions": "file:D:/Path/To/com.unitymcp.plugin-abstractions"
+  }
+}
+```
+
+This extraction does not define long-term binary compatibility rules for the plugin SDK; early external plugins may need to rebuild as the abstraction package evolves.
+
 ### Registration model
 
 Plugin activation is explicit and project-local. Register plugin sources in `AgentBridgeSettings.pluginRegistrations`.

@@ -12,6 +12,7 @@
     "ci"
   ],
   "dependencies": {
+    "com.unitymcp.plugin-abstractions": "0.1.0",
     "com.unity.nuget.newtonsoft-json": "3.2.1",
     "com.unity.test-framework": "1.1.33"
   }

@@ -67,6 +67,8 @@ MCP setup resolves the external CLI in this order: `UNITY_AGENT_BRIDGE_CLI_PATH`
 
 Version `1.2.1` adds Unity-side plugin discovery for explicitly registered asmdef and managed DLL providers.
 
+- Plugin authors compile against `com.unitymcp.plugin-abstractions`, which provides the `UnityMcp.Plugin.Abstractions` assembly and `UnityMcp.Plugin` namespace.
+- Projects that install Agent Bridge from local Git/file dependencies must also make `com.unitymcp.plugin-abstractions` resolvable until a registry-based dependency flow is available.
 - Registration lives in `AgentBridgeSettings.pluginRegistrations`.
 - Discovery inspects only enabled registrations; unregistered provider assemblies are ignored.
 - Valid plugin tools are exported to `Library/AgentBridge/plugin-catalog.json`.
