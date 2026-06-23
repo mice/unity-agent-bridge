@@ -6,6 +6,8 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-06-23
+
 ### Added
 
 - Added `UnityMcp.BuiltInPlugins.RoslynExecution` and the dynamic MCP tool `mcp__unity__execute_csharp`, gated by explicit project-local enablement and prepared runtime readiness.

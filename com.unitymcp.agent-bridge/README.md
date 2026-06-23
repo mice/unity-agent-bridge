@@ -1,6 +1,6 @@
 # Unity Agent Bridge
 
-`com.unitymcp.agent-bridge` is an Editor-only Unity package that provides the local Unity automation bridge, the frozen v1.0 tool surface, the v1.1 MCP Setup & Diagnostics workflow, and the v1.2.1 Unity-side plugin discovery loop.
+`com.unitymcp.agent-bridge` is an Editor-only Unity package that provides the local Unity automation bridge, the frozen v1.0 tool surface, the v1.1 MCP Setup & Diagnostics workflow, and the v1.2 plugin discovery and Roslyn execution loop.
 
 ## Scope
 
@@ -45,12 +45,14 @@ Documented release-style Git UPM usage:
 ```json
 {
   "dependencies": {
-    "com.unitymcp.agent-bridge": "git+ssh://mice@localRepo/Users/mice/repo2/unityagentbridge.git?path=/com.unitymcp.agent-bridge#v1.2.1"
+    "com.unitymcp.agent-bridge": "git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.2"
   }
 }
 ```
 
-Release validation for `v1.2.1` requires the tag, `package.json` version, and `CHANGELOG.md` entry to align.
+Release validation for `v1.2.2` requires the tag, `package.json` version, and `CHANGELOG.md` entry to align.
+
+Source Git tags do not track generated `.exe` binaries by default. To consume a binary-complete package, use the verified release distribution package produced by `Release-PackageDistribution.ps1`; it includes the generated `Tools~/UnityAgentBridge/**/out/` payload while keeping source Git history small.
 
 ## First Use
 
@@ -65,7 +67,7 @@ MCP setup resolves the external CLI in this order: `UNITY_AGENT_BRIDGE_CLI_PATH`
 
 ## Plugin Discovery
 
-Version `1.2.1` adds Unity-side plugin discovery for explicitly registered asmdef and managed DLL providers.
+Version `1.2.x` supports Unity-side plugin discovery for explicitly registered asmdef and managed DLL providers.
 
 - Plugin authors compile against `com.unitymcp.plugin-abstractions`, which provides the `UnityMcp.Plugin.Abstractions` assembly and `UnityMcp.Plugin` namespace.
 - Projects that install Agent Bridge from local Git/file dependencies must also make `com.unitymcp.plugin-abstractions` resolvable until a registry-based dependency flow is available.

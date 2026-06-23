@@ -9,7 +9,7 @@
 - Unity `2021.3+` package compatibility; the current required validation lane is Unity `2022.3.53f1`
 - Editor-only package usage; no Player/runtime integration
 - Local filesystem access for `Temp/AgentBridge` and `Library/AgentBridge`
-- The packaged `unity-agent-bridge[.exe]` binary for MCP workflows. `.NET` is required only for development builds and source-level diagnostics.
+- The packaged or prepared `unity-agent-bridge[.exe]` binary for MCP workflows. `.NET` is required only for development builds and source-level diagnostics.
 - No cloud dependency and no Unity AI Assistant dependency
 
 ## Package Layout
@@ -33,12 +33,12 @@ Add the package to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.unitymcp.agent-bridge": "git+ssh://mice@localRepo/Users/mice/repo2/unityagentbridge.git?path=/com.unitymcp.agent-bridge#v1.2.1"
+    "com.unitymcp.agent-bridge": "git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.2"
   }
 }
 ```
 
-Release validation for this change targets `v1.2.1`; tag creation and external project evidence are release-gate steps.
+Release validation for this change targets `v1.2.2`; tag creation and external project evidence are release-gate steps. Source Git tags do not track generated `.exe` binaries by default; binary-complete handoff uses the release distribution package produced by `Release-PackageDistribution.ps1`.
 
 ### Option B: local file dependency during development
 
@@ -80,7 +80,7 @@ Expected result:
 
 ## Plugin Discovery
 
-`v1.2.1` adds a Unity-side plugin discovery loop for tools that should be visible through MCP without hard-coding new MCP catalog entries.
+`v1.2.x` includes a Unity-side plugin discovery loop for tools that should be visible through MCP without hard-coding new MCP catalog entries.
 
 ### Plugin SDK dependency
 
@@ -543,6 +543,8 @@ Build/AgentBridge-PackageDistribution/
   - `Build/AgentBridge-PackageDistribution/docs/`
 - Build 日志位于：
   - `Build/logs/build.log`
+
+源码 Git 仓库默认不提交生成的 `.exe`。`Release-PackageDistribution.ps1` 会把本机已发布的 `Tools~/UnityAgentBridge/**/out/` 运行时 payload 复制进交付目录；需要二进制完整链路的外部项目应引用这个交付目录，而不是假设源码 Git tag 自带生成产物。
 
 `Release-PackageDistribution.ps1` 会输出：
 
