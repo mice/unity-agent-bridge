@@ -77,6 +77,26 @@ public static class McpToolCatalog
             "unity.bridge_wait_result",
             15000);
 
+        yield return CreateToolMetadata(
+            "unity_editor_list",
+            "Unity Editor List",
+            "Report running Unity Editor processes and project/version evidence without touching the Unity bridge queue.",
+            """
+            {"type":"object","properties":{"includeBridgeHealth":{"type":"boolean"},"projectPath":{"type":"string","minLength":1}},"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false}
+            """,
+            "unity.editor_list",
+            5000);
+
+        yield return CreateToolMetadata(
+            "unity_editor_open",
+            "Unity Editor Open",
+            "Open a Unity project through guarded local launch logic without dispatching through the Unity bridge queue.",
+            """
+            {"type":"object","properties":{"projectPath":{"type":"string","minLength":1},"unityExecutablePath":{"type":"string","minLength":1},"allowVersionFallback":{"type":"boolean","default":false},"waitForBridge":{"type":"boolean","default":false},"bridgeReadyTimeoutMs":{"type":"integer","minimum":1,"maximum":9007199254740991,"default":120000},"bridgePollIntervalMs":{"type":"integer","minimum":1,"maximum":9007199254740991,"default":1000},"maxRunningUnityEditors":{"type":"integer","minimum":1,"maximum":9007199254740991,"default":3}},"required":["projectPath"],"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false}
+            """,
+            "unity.editor_open",
+            120000);
+
         foreach (var metadata in CreateUnityBridgeForwardedTools())
         {
             yield return metadata;

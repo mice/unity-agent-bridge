@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityMcp.AgentBridge;
@@ -878,9 +879,26 @@ namespace UnityMcp.AgentBridge.Mcp
                 Directory.CreateDirectory(directory);
             }
 
-            var normalizedProjectPath = Path.GetFullPath(projectRoot).Replace("\\", "\\\\");
-            var content = "{\n  \"unityProjectPath\": \"" + normalizedProjectPath + "\"\n}\n";
-            File.WriteAllText(configPath, content);
+            var normalizedProjectPath = Path.GetFullPath(projectRoot);
+            JObject config;
+            if (File.Exists(configPath))
+            {
+                try
+                {
+                    config = JObject.Parse(File.ReadAllText(configPath));
+                }
+                catch
+                {
+                    config = new JObject();
+                }
+            }
+            else
+            {
+                config = new JObject();
+            }
+
+            config["unityProjectPath"] = normalizedProjectPath;
+            File.WriteAllText(configPath, config.ToString());
         }
 
         private void SyncConfiguredProject(string configPath, string projectRoot)

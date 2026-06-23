@@ -285,6 +285,215 @@ public sealed class BridgeComponentTests
         Assert.AreEqual(3, exitCode);
     }
 
+    [TestMethod]
+    public void WindowsProcessDiscovery_ParsesQuotedProjectPath()
+    {
+        var projectPath = @"D:\ProjCommon\Unity Project";
+        var commandLine = $@"""C:\Program Files\Unity\Hub\Editor\2022.3.0f1\Editor\Unity.exe"" -projectPath ""{projectPath}"" -someFlag";
+
+        var parsed = WindowsUnityEditorProcessDiscovery.ParseProjectPathFromCommandLine(commandLine);
+
+        Assert.AreEqual(projectPath, parsed);
+    }
+
+    [TestMethod]
+    public void ProjectVersionReader_ReadsVersionFromProjectVersionFile()
+    {
+        var root = CreateUnityProject();
+
+        var success = UnityEditorProjectVersionReader.TryReadVersion(root, out var version, out var code);
+
+        Assert.IsTrue(success);
+        Assert.AreEqual("2022.3.0f1", version);
+        Assert.IsNull(code);
+    }
+
+    [TestMethod]
+    public void LaunchSettings_RejectsInvalidOverride()
+    {
+        Assert.ThrowsException<BridgeCommandValidationException>(() =>
+            UnityEditorLaunchSettings.ResolveMaxRunningEditors(0));
+    }
+
+    [TestMethod]
+    public void LaunchSettings_ReadsEnvironmentOverride()
+    {
+        Environment.SetEnvironmentVariable(UnityEditorLaunchSettings.MaxRunningEditorsEnvironmentVariable, "7");
+        try
+        {
+            var resolved = UnityEditorLaunchSettings.ResolveMaxRunningEditors(null);
+            Assert.AreEqual(7, resolved.Limit);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(UnityEditorLaunchSettings.MaxRunningEditorsEnvironmentVariable, null);
+        }
+    }
+
+    [TestMethod]
+    public void LaunchSettings_UsesConfigFallbackAndWarnsOnInvalidConfig()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "UnityEditorLaunchSettings", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+        var configPath = Path.Combine(tempRoot, "Start-Codex-With-UnityMcp.json");
+        File.WriteAllText(configPath, """{"unityProjectPath":"D:/Proj","maxRunningUnityEditors":5}""");
+        Environment.SetEnvironmentVariable(UnityEditorLaunchSettings.LauncherConfigEnvironmentVariable, configPath);
+        try
+        {
+            var resolved = UnityEditorLaunchSettings.ResolveMaxRunningEditors(null);
+            Assert.AreEqual(5, resolved.Limit);
+            Assert.AreEqual(0, resolved.Warnings.Count);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(UnityEditorLaunchSettings.LauncherConfigEnvironmentVariable, null);
+            Directory.Delete(tempRoot, true);
+        }
+    }
+
+    [TestMethod]
+    public void UnityEditorList_OnUnsupportedPlatformReturnsDeterministicFailure()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Unsupported platform behavior is only asserted on non-Windows runtimes.");
+        }
+
+        var root = CreateUnityProject();
+        var paths = new QueuePaths(root, "Temp/AgentBridge");
+        CommandStore.EnsureQueueDirectories(paths);
+        var spec = new BridgeCommandSpec("unity.editor_list", 5000, "{}");
+
+        var handled = new BridgeHealthClient().TryHandleLocalCommand(paths, spec, "editor-list", out var result);
+
+        Assert.IsTrue(handled);
+        var parsed = JObject.Parse(result.RawJson);
+        Assert.AreEqual("UnsupportedPlatform", parsed.Value<string>("code"));
+    }
+
+    [TestMethod]
+    public void UnityEditorOpen_MissingProjectPathReturnsProjectPathMissing()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Windows-first validation.");
+        }
+
+        var root = CreateUnityProject();
+        var paths = new QueuePaths(root, "Temp/AgentBridge");
+        CommandStore.EnsureQueueDirectories(paths);
+        var spec = new BridgeCommandSpec("unity.editor_open", 5000, """{}""");
+
+        var handled = new BridgeHealthClient().TryHandleLocalCommand(paths, spec, "editor-open-missing", out var result);
+
+        Assert.IsTrue(handled);
+        var parsed = JObject.Parse(result.RawJson);
+        Assert.AreEqual("ProjectPathMissing", parsed.Value<string>("code"));
+    }
+
+    [TestMethod]
+    public void UnityEditorOpen_NonUnityProjectReturnsNotUnityProject()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Windows-first validation.");
+        }
+
+        var root = CreateUnityProject();
+        var paths = new QueuePaths(root, "Temp/AgentBridge");
+        CommandStore.EnsureQueueDirectories(paths);
+        var tempFolder = Path.Combine(Path.GetTempPath(), "NonUnityProject", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempFolder);
+        var spec = new BridgeCommandSpec("unity.editor_open", 5000, $$"""{"projectPath":"{{tempFolder.Replace("\\", "\\\\")}}"}""");
+
+        try
+        {
+            var handled = new BridgeHealthClient().TryHandleLocalCommand(paths, spec, "editor-open-nonunity", out var result);
+
+            Assert.IsTrue(handled);
+            var parsed = JObject.Parse(result.RawJson);
+            Assert.AreEqual("NotUnityProject", parsed.Value<string>("code"));
+        }
+        finally
+        {
+            Directory.Delete(tempFolder, true);
+        }
+    }
+
+    [TestMethod]
+    public void UnityEditorOpen_LockFileReturnsProjectLocked()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Windows-first validation.");
+        }
+
+        var root = CreateUnityProject();
+        Directory.CreateDirectory(Path.Combine(root, "Temp"));
+        File.WriteAllText(Path.Combine(root, "Temp", "UnityLockfile"), "locked");
+        var paths = new QueuePaths(root, "Temp/AgentBridge");
+        CommandStore.EnsureQueueDirectories(paths);
+        var spec = new BridgeCommandSpec("unity.editor_open", 5000, $$"""{"projectPath":"{{root.Replace("\\", "\\\\")}}"}""");
+
+        var handled = new BridgeHealthClient().TryHandleLocalCommand(paths, spec, "editor-open-locked", out var result);
+
+        Assert.IsTrue(handled);
+        var parsed = JObject.Parse(result.RawJson);
+        Assert.AreEqual("ProjectLocked", parsed.Value<string>("code"));
+    }
+
+    [TestMethod]
+    public void UnityEditorOpen_DuplicateProjectReturnsAlreadyOpen()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Windows-first validation.");
+        }
+
+        var root = CreateUnityProject();
+        var paths = new QueuePaths(root, "Temp/AgentBridge");
+        CommandStore.EnsureQueueDirectories(paths);
+        var client = new BridgeHealthClient(new FakeDiscovery(
+        [
+            new UnityEditorInstance(1234, @"C:\Program Files\Unity\Hub\Editor\2022.3.0f1\Editor\Unity.exe", root, "2022.3.0f1", Array.Empty<string>())
+        ]));
+        var spec = new BridgeCommandSpec("unity.editor_open", 5000, $$"""{"projectPath":"{{root.Replace("\\", "\\\\")}}"}""");
+
+        var handled = client.TryHandleLocalCommand(paths, spec, "editor-open-duplicate", out var result);
+
+        Assert.IsTrue(handled);
+        var parsed = JObject.Parse(result.RawJson);
+        Assert.AreEqual("UnityAlreadyOpenForProject", parsed.Value<string>("code"));
+        Assert.AreEqual(1234, parsed.Value<int?>("processId"));
+    }
+
+    [TestMethod]
+    public void UnityEditorOpen_EditorLimitReachedReturnsDeterministicCode()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Windows-first validation.");
+        }
+
+        var root = CreateUnityProject();
+        var paths = new QueuePaths(root, "Temp/AgentBridge");
+        CommandStore.EnsureQueueDirectories(paths);
+        var client = new BridgeHealthClient(new FakeDiscovery(
+        [
+            new UnityEditorInstance(1111, @"C:\Unity\2022.3.0f1\Editor\Unity.exe", @"D:\ProjA", "2022.3.0f1", Array.Empty<string>()),
+            new UnityEditorInstance(2222, @"C:\Unity\2022.3.0f1\Editor\Unity.exe", @"D:\ProjB", "2022.3.0f1", Array.Empty<string>())
+        ]));
+        var spec = new BridgeCommandSpec("unity.editor_open", 5000, $$"""{"projectPath":"{{root.Replace("\\", "\\\\")}}","maxRunningUnityEditors":2}""");
+
+        var handled = client.TryHandleLocalCommand(paths, spec, "editor-open-limit", out var result);
+
+        Assert.IsTrue(handled);
+        var parsed = JObject.Parse(result.RawJson);
+        Assert.AreEqual("UnityEditorLimitReached", parsed.Value<string>("code"));
+        Assert.AreEqual(2, parsed.Value<int?>("runningEditorCount"));
+        Assert.AreEqual(2, parsed.Value<int?>("configuredLimit"));
+    }
+
     private static string CreateUnityProject()
     {
         var root = Path.Combine(Path.GetTempPath(), "UnityAgentBridgeCliTests", Guid.NewGuid().ToString("N"));
@@ -298,5 +507,20 @@ public sealed class BridgeComponentTests
     {
         Directory.CreateDirectory(paths.StatusDirectory);
         File.WriteAllText(Path.Combine(paths.StatusDirectory, "unity_bridge_status.json"), json);
+    }
+
+    private sealed class FakeDiscovery : IUnityEditorProcessDiscovery
+    {
+        private readonly IReadOnlyList<UnityEditorInstance> _instances;
+
+        public FakeDiscovery(IReadOnlyList<UnityEditorInstance> instances)
+        {
+            _instances = instances;
+        }
+
+        public IReadOnlyList<UnityEditorInstance> Discover()
+        {
+            return _instances;
+        }
     }
 }

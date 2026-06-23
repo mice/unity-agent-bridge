@@ -84,6 +84,16 @@ public sealed class PackageSchemaValidationTests
             {
                 return cursor;
             }
+
+            var parent = Directory.GetParent(cursor)?.FullName;
+            var workbenchRoot = string.IsNullOrWhiteSpace(parent) ? null : Path.Combine(parent, "unity-agent-bridge-workbench");
+            if (Directory.Exists(Path.Combine(cursor, "UnityAgentBridge.Cli")) &&
+                !string.IsNullOrWhiteSpace(workbenchRoot) &&
+                Directory.Exists(Path.Combine(cursor, "com.unitymcp.agent-bridge")) &&
+                Directory.Exists(Path.Combine(workbenchRoot, "openspec")))
+            {
+                return cursor;
+            }
         }
 
         throw new DirectoryNotFoundException("Repository root could not be resolved.");

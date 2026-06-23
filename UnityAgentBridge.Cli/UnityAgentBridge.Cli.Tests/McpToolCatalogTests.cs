@@ -22,6 +22,8 @@ public sealed class McpToolCatalogTests
             "mcp__unity__run_diagnostic",
             "mcp__unity__run_static_method",
             "mcp_echo",
+            "unity_editor_list",
+            "unity_editor_open",
             "unity_bridge_health",
             "unity_bridge_submit_only",
             "unity_bridge_wait_result"
@@ -34,7 +36,7 @@ public sealed class McpToolCatalogTests
             .ToArray();
 
         CollectionAssert.AreEqual(expectedNames.OrderBy(name => name, StringComparer.Ordinal).ToArray(), actualNames);
-        Assert.AreEqual(11, actualNames.Length);
+        Assert.AreEqual(13, actualNames.Length);
     }
 
     [TestMethod]
@@ -48,6 +50,24 @@ public sealed class McpToolCatalogTests
         Assert.IsTrue(schema.GetProperty("additionalProperties").ValueKind is JsonValueKind.False);
         var required = schema.GetProperty("required").EnumerateArray().Select(element => element.GetString()).ToArray();
         CollectionAssert.AreEqual(new[] { "commandId", "timeoutMs" }, required);
+    }
+
+    [TestMethod]
+    public void CatalogProvidesStrictSchemasForUnityEditorOpen()
+    {
+        var tool = McpToolCatalog.TryGet("unity_editor_open", CreateDiagnostics(CreateUnityProject()));
+        Assert.IsNotNull(tool);
+
+        var schema = tool.ProtocolTool.InputSchema;
+        Assert.AreEqual("object", schema.GetProperty("type").GetString());
+        Assert.IsTrue(schema.GetProperty("additionalProperties").ValueKind is JsonValueKind.False);
+        var required = schema.GetProperty("required").EnumerateArray().Select(element => element.GetString()).ToArray();
+        CollectionAssert.AreEqual(new[] { "projectPath" }, required);
+        Assert.IsTrue(schema.GetProperty("properties").TryGetProperty("allowVersionFallback", out _));
+        Assert.IsTrue(schema.GetProperty("properties").TryGetProperty("waitForBridge", out _));
+        Assert.IsTrue(schema.GetProperty("properties").TryGetProperty("bridgeReadyTimeoutMs", out _));
+        Assert.IsTrue(schema.GetProperty("properties").TryGetProperty("bridgePollIntervalMs", out _));
+        Assert.IsTrue(schema.GetProperty("properties").TryGetProperty("maxRunningUnityEditors", out _));
     }
 
     [TestMethod]
@@ -285,6 +305,39 @@ public sealed class McpToolCatalogTests
 
             Assert.AreEqual(true, result.IsError);
             Assert.AreEqual("cancelled", result.StructuredContent.GetValueOrDefault().GetProperty("status").GetString());
+        }
+        finally
+        {
+            McpToolRuntimeContext.QueuePaths = null;
+            Environment.SetEnvironmentVariable("UNITY_AGENT_BRIDGE_PROJECT_PATH", null);
+        }
+    }
+
+    [TestMethod]
+    public async Task McpServerService_UnityEditorList_ReturnsLocalStructuredResult()
+    {
+        var projectRoot = CreateUnityProject();
+        Environment.SetEnvironmentVariable("UNITY_AGENT_BRIDGE_PROJECT_PATH", projectRoot);
+        try
+        {
+            var diagnostics = CreateDiagnostics(projectRoot);
+            McpToolRuntimeContext.QueuePaths = new UnityAgentBridge.ExternalBridgeClientCore.QueuePaths(diagnostics.ProjectPath, diagnostics.QueueRoot);
+            var service = new McpServerService(
+                new UnityAgentBridge.ExternalBridgeClientCore.ExternalBridgeClient(),
+                diagnostics,
+                new McpStageLogger(diagnostics.ServerLogPath));
+
+            var result = await service.CallToolAsync(
+                new CallToolRequestParams
+                {
+                    Name = "unity_editor_list",
+                    Arguments = new Dictionary<string, JsonElement>()
+                },
+                CancellationToken.None);
+
+            var structured = JsonObject.Create(result.StructuredContent.GetValueOrDefault())!;
+            Assert.AreEqual("unity.editor_list", structured["tool"]!.GetValue<string>());
+            Assert.IsTrue(structured["editorCount"] is not null);
         }
         finally
         {

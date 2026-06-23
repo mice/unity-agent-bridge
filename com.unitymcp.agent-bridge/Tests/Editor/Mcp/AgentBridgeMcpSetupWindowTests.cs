@@ -398,6 +398,28 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Directory.Delete(root, true);
         }
 
+        [Test]
+        [Category("AGBM_UI")]
+        public void SyncConfiguredProjectFile_PreservesMaxRunningUnityEditors()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "AGBM_LIFECYCLE_CFG");
+            var configPath = Path.Combine(root, "Tools", "AgentBridge", "Start-Codex-With-UnityMcp.json");
+            var projectPath = Path.Combine(root, "SampleProject");
+
+            Directory.CreateDirectory(Path.GetDirectoryName(configPath));
+            Directory.CreateDirectory(projectPath);
+            File.WriteAllText(configPath, "{\n  \"unityProjectPath\": \"D:/OldProject\",\n  \"maxRunningUnityEditors\": 5\n}\n");
+
+            AgentBridgeMcpSetupWindow.SyncConfiguredProjectFile(configPath, projectPath);
+
+            var json = File.ReadAllText(configPath);
+            Assert.That(json, Does.Contain("\"unityProjectPath\""));
+            Assert.That(json, Does.Contain("\"maxRunningUnityEditors\": 5"));
+            Assert.That(json, Does.Contain(projectPath.Replace("\\", "\\\\")));
+
+            Directory.Delete(root, true);
+        }
+
         private static AgentBridgeMcpSetupWindow FindOpenWindow()
         {
             var windows = Resources.FindObjectsOfTypeAll<AgentBridgeMcpSetupWindow>();
