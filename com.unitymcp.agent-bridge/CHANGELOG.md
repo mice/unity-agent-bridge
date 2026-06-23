@@ -6,6 +6,16 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-06-23
+
+### Fixed
+
+- Restored the required package-contained Windows executable payloads to Git UPM release tags so external Unity projects can run Prepare Runtime without local `dotnet publish`, NuGet restore, or maintainer-specific SDK version handling.
+
+### Changed
+
+- Updated repository ignore and release documentation so the required `win-x64` single-file payloads are tracked for tagged package releases while broader generated output remains ignored.
+
 ## [1.2.2] - 2026-06-23
 
 ### Added

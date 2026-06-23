@@ -49,16 +49,16 @@ com.unitymcp.agent-bridge/
 
 ## Build Notes
 
-The repository tracks source code, Unity package files, tests, scripts, and documentation. Generated build outputs are ignored.
+The repository tracks source code, Unity package files, tests, scripts, documentation, and the Windows single-file executable payloads required for Git UPM releases.
 
-Package-contained executables under these paths are release artifacts and are not committed to source control:
+Published Git UPM tags must include these package-contained executables so Unity projects can run `Prepare Runtime` without building locally, installing a .NET SDK, restoring NuGet packages, or resolving maintainer-specific toolchain versions:
 
 ```text
-com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/
-com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/roslyn-execution/out/
+com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe
+com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe
 ```
 
-Use the publish scripts under the CLI and Roslyn compiler projects to regenerate release payloads when preparing a package distribution.
+Maintainers may use the publish scripts under the CLI and Roslyn compiler projects to refresh those payloads before preparing a package distribution. Consumer projects should use the tagged payloads instead of local publish.
 
 ## License
 
