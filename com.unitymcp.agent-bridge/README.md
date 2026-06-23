@@ -7,7 +7,7 @@
 - Unity validation lane: `2022.3.x`
 - Declared package compatibility: `2022.3+`
 - Runtime support: none; this package is Editor-only
-- External requirements for MCP workflows: a supported MCP client such as Codex or Claude Code. The product CLI binary is self-contained; `.NET` is needed only for development builds and source-level diagnostics.
+- External requirements for MCP workflows: a supported MCP client such as Codex or Claude Code. The product CLI binary is self-contained and shipped in release tags; `.NET` is needed only for maintainer development builds and source-level diagnostics.
 
 ## Install
 
@@ -45,14 +45,12 @@ Documented release-style Git UPM usage:
 ```json
 {
   "dependencies": {
-    "com.unitymcp.agent-bridge": "git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.2"
+    "com.unitymcp.agent-bridge": "git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.3"
   }
 }
 ```
 
-Release validation for `v1.2.2` requires the tag, `package.json` version, and `CHANGELOG.md` entry to align.
-
-Source Git tags do not track generated `.exe` binaries by default. To consume a binary-complete package, use the verified release distribution package produced by `Release-PackageDistribution.ps1`; it includes the generated `Tools~/UnityAgentBridge/**/out/` payload while keeping source Git history small.
+Release validation for `v1.2.3` requires the tag, `package.json` version, `CHANGELOG.md` entry, and package-contained Windows executable payloads to align. The release tag carries the required `win-x64` executables so external Unity projects do not need local publish, NuGet restore, or maintainer SDK version alignment.
 
 ## First Use
 
