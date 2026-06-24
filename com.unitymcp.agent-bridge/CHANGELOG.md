@@ -6,6 +6,19 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Added Setup window `Build Local Runtime` support that uses .NET 8 SDK and package-contained build inputs to generate the C# MCP CLI and Roslyn compiler proxy under the Unity project `.unitymcp/runtime` directory.
+
+### Changed
+
+- Package source and distribution builds now carry runtime build inputs and wrappers instead of generated `win-x64` executable payloads.
+- MCP health/probe diagnostics now report `cliMode=project-local-runtime` for the generated project-local executable.
+
+### Removed
+
+- Removed generated package executable payloads from source Git tracking and removed package-local publish scripts that wrote build outputs back into `Tools~`.
+
 ## [1.2.3] - 2026-06-23
 
 ### Fixed

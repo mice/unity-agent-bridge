@@ -33,15 +33,20 @@ namespace UnityMcp.AgentBridge.Mcp
         private McpReadinessAggregator _readinessAggregator;
         private McpReportFormatter _reportFormatter;
         private McpRuntimeInitializer _runtimeInitializer;
+        private McpRuntimeBuilder _runtimeBuilder;
         private System.Collections.Generic.IReadOnlyList<McpDiagnosticCheck> _diagnosticChecks;
         private McpReadiness _readiness;
         private string _diagnosticReport;
         private CancellationTokenSource _diagnosticsCts;
         private Task<DiagnosticsRunResult> _diagnosticsTask;
         private bool _diagnosticsRunning;
+        private CancellationTokenSource _runtimeBuildCts;
+        private Task<McpRuntimeBuildResult> _runtimeBuildTask;
+        private bool _runtimeBuildRunning;
         private CancellationTokenSource _runtimeInitCts;
         private Task<ManagedBlockApplyResult> _runtimeInitTask;
         private bool _runtimeInitRunning;
+        private string _runtimeBuildMessage;
         private string _runtimeInitMessage;
         private bool _initialDiagnosticsQueued;
         private bool _showAdvancedDetails;
@@ -68,6 +73,7 @@ namespace UnityMcp.AgentBridge.Mcp
             _readinessAggregator = new McpReadinessAggregator();
             _reportFormatter = new McpReportFormatter();
             _runtimeInitializer = new McpRuntimeInitializer();
+            _runtimeBuilder = new McpRuntimeBuilder();
             _settings = _settingsStore.Load();
             _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
             _codexWriter = new CodexProjectConfigWriter();
@@ -77,6 +83,7 @@ namespace UnityMcp.AgentBridge.Mcp
             _diagnosticChecks = new McpDiagnosticCheck[0];
             _readiness = McpReadiness.NotChecked;
             _diagnosticReport = string.Empty;
+            _runtimeBuildMessage = string.Empty;
             _runtimeInitMessage = string.Empty;
             _toolFacade = CreateToolFacade();
         }
@@ -289,9 +296,11 @@ namespace UnityMcp.AgentBridge.Mcp
         private void DrawConfiguredProjectControls()
         {
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
-            var resolvedToolsRoot = (_pathResolver ?? new McpPathResolver()).ResolveToolsRoot(_settings ?? McpEditorSettingsDefaults.Create());
-            var configuredProjectPath = ReadConfiguredUnityProjectPath(projectRoot, resolvedToolsRoot);
-            var configPath = ResolveLauncherConfigPath(projectRoot, resolvedToolsRoot);
+            var effectiveSettings = _settings ?? McpEditorSettingsDefaults.Create();
+            var effectiveResolver = _pathResolver ?? new McpPathResolver();
+            var resolvedWorkspaceRoot = effectiveResolver.GetWorkspaceRoot(effectiveSettings);
+            var configuredProjectPath = ReadConfiguredUnityProjectPath(projectRoot, resolvedWorkspaceRoot);
+            var configPath = ResolveLauncherConfigPath(resolvedWorkspaceRoot);
             var hasIssue = HasConfiguredProjectIssue(projectRoot, configuredProjectPath) ||
                            string.Equals(configuredProjectPath, "Invalid Config", StringComparison.Ordinal);
             var tooltip = hasIssue
@@ -317,18 +326,36 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             var effectiveSettings = _settings ?? McpEditorSettingsDefaults.Create();
             var runtimeRoot = (_pathResolver ?? new McpPathResolver()).ResolveWorkspaceRuntimeRoot(effectiveSettings);
-            var tooltip = "Prepare a project-local MCP runtime by copying the packaged launcher, MCP payload, and CLI executable into the Unity project .unitymcp/runtime directory.";
+            var buildTooltip = "Build the local MCP runtime executables from package-contained source with .NET 8 SDK into the Unity project .unitymcp/runtime directory.";
+            var tooltip = "Prepare a project-local MCP runtime by copying packaged launcher/configuration files and validating the locally built runtime executable in the Unity project .unitymcp/runtime directory.";
             EditorGUILayout.LabelField(new GUIContent("MCP Runtime", tooltip), EditorStyles.boldLabel);
             using (new EditorGUILayout.HorizontalScope())
             {
                 EditorGUILayout.SelectableLabel(string.IsNullOrWhiteSpace(runtimeRoot) ? "Not configured" : runtimeRoot, EditorStyles.textField, GUILayout.Height(EditorGUIUtility.singleLineHeight));
-                using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(runtimeRoot) || _runtimeInitRunning))
+                using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(runtimeRoot) || _runtimeBuildRunning || _runtimeInitRunning))
+                {
+                    if (GUILayout.Button(new GUIContent(_runtimeBuildRunning ? "Building..." : "Build Local Runtime", buildTooltip), GUILayout.Width(150f)))
+                    {
+                        BuildLocalRuntime();
+                    }
+                }
+
+                using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(runtimeRoot) || _runtimeBuildRunning || _runtimeInitRunning))
                 {
                     if (GUILayout.Button(new GUIContent(_runtimeInitRunning ? "Preparing..." : "Prepare", tooltip), GUILayout.Width(90f)))
                     {
                         InitializeMcpRuntime();
                     }
                 }
+            }
+
+            if (_runtimeBuildRunning)
+            {
+                EditorGUILayout.HelpBox("Building project-local MCP runtime executables with .NET 8 SDK. The window remains responsive while the background task completes.", MessageType.Info);
+            }
+            else if (!string.IsNullOrWhiteSpace(_runtimeBuildMessage))
+            {
+                EditorGUILayout.HelpBox(_runtimeBuildMessage, MessageType.None);
             }
 
             if (_runtimeInitRunning)
@@ -384,7 +411,7 @@ namespace UnityMcp.AgentBridge.Mcp
             var effectiveResolver = pathResolver ?? new McpPathResolver();
             var resolvedWorkspaceRoot = effectiveResolver.GetWorkspaceRoot(effectiveSettings);
             var resolvedToolsRoot = effectiveResolver.ResolveToolsRoot(effectiveSettings);
-            var configuredUnityProjectPath = ReadConfiguredUnityProjectPath(projectRoot, resolvedToolsRoot);
+            var configuredUnityProjectPath = ReadConfiguredUnityProjectPath(projectRoot, resolvedWorkspaceRoot);
             var configuredUnityProjectHasIssue = HasConfiguredProjectIssue(projectRoot, configuredUnityProjectPath);
             var effectiveReadiness = AdjustReadinessForConfiguredProject(readiness, configuredUnityProjectHasIssue);
 
@@ -392,7 +419,7 @@ namespace UnityMcp.AgentBridge.Mcp
             {
                 ConfiguredUnityProjectHasIssue = configuredUnityProjectHasIssue,
                 ConfiguredUnityProjectIssueTooltip = GetConfiguredProjectIssueTooltip(projectRoot, configuredUnityProjectPath),
-                ConfiguredUnityProjectConfigPath = ResolveLauncherConfigPath(projectRoot, resolvedToolsRoot),
+                ConfiguredUnityProjectConfigPath = ResolveLauncherConfigPath(resolvedWorkspaceRoot),
                 WorkspaceRoot = string.IsNullOrEmpty(resolvedWorkspaceRoot) ? "Not configured" : resolvedWorkspaceRoot,
                 ToolsRootHasIssue = HasToolsRootIssue(resolvedToolsRoot),
                 ToolsRootIssueTooltip = GetToolsRootIssueTooltip(resolvedToolsRoot),
@@ -452,14 +479,14 @@ namespace UnityMcp.AgentBridge.Mcp
             return string.IsNullOrEmpty(result.VersionText) ? "OK" : result.VersionText;
         }
 
-        internal static string ReadConfiguredUnityProjectPath(string projectRoot, string toolsRoot)
+        internal static string ReadConfiguredUnityProjectPath(string projectRoot, string workspaceRoot)
         {
-            if (string.IsNullOrEmpty(projectRoot) && string.IsNullOrEmpty(toolsRoot))
+            if (string.IsNullOrEmpty(projectRoot) && string.IsNullOrEmpty(workspaceRoot))
             {
                 return "Not Configured";
             }
 
-            var configPath = ResolveLauncherConfigPath(projectRoot, toolsRoot);
+            var configPath = ResolveLauncherConfigPath(workspaceRoot);
             if (string.IsNullOrEmpty(configPath))
             {
                 return "Not Configured";
@@ -507,23 +534,14 @@ namespace UnityMcp.AgentBridge.Mcp
             }
         }
 
-        private static string ResolveLauncherConfigPath(string projectRoot, string toolsRoot)
+        internal static string ResolveLauncherConfigPath(string workspaceRoot)
         {
-            if (!string.IsNullOrWhiteSpace(toolsRoot))
-            {
-                var toolsConfigPath = Path.Combine(toolsRoot, "AgentBridge", "Start-Codex-With-UnityMcp.json");
-                if (File.Exists(toolsConfigPath))
-                {
-                    return toolsConfigPath;
-                }
-            }
-
-            if (string.IsNullOrWhiteSpace(projectRoot))
+            if (string.IsNullOrWhiteSpace(workspaceRoot))
             {
                 return string.Empty;
             }
 
-            return Path.Combine(projectRoot, "Tools", "AgentBridge", "Start-Codex-With-UnityMcp.json");
+            return Path.Combine(workspaceRoot, "Tools", "AgentBridge", "Start-Codex-With-UnityMcp.json");
         }
 
         private static string GetDefaultToolsRoot()
@@ -912,8 +930,10 @@ namespace UnityMcp.AgentBridge.Mcp
         internal McpReadiness GetEffectiveReadiness(McpReadiness readiness)
         {
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
-            var resolvedToolsRoot = (_pathResolver ?? new McpPathResolver()).ResolveToolsRoot(_settings ?? McpEditorSettingsDefaults.Create());
-            var configuredProjectPath = ReadConfiguredUnityProjectPath(projectRoot, resolvedToolsRoot);
+            var effectiveSettings = _settings ?? McpEditorSettingsDefaults.Create();
+            var effectiveResolver = _pathResolver ?? new McpPathResolver();
+            var resolvedWorkspaceRoot = effectiveResolver.GetWorkspaceRoot(effectiveSettings);
+            var configuredProjectPath = ReadConfiguredUnityProjectPath(projectRoot, resolvedWorkspaceRoot);
             return GetEffectiveReadinessForConfiguredProject(readiness, projectRoot, configuredProjectPath);
         }
 
@@ -923,6 +943,69 @@ namespace UnityMcp.AgentBridge.Mcp
             string configuredProject)
         {
             return AdjustReadinessForConfiguredProject(readiness, HasConfiguredProjectIssue(currentProject, configuredProject));
+        }
+
+        private void BuildLocalRuntime()
+        {
+            if (_runtimeBuildRunning)
+            {
+                return;
+            }
+
+            _runtimeBuildCts?.Cancel();
+            _runtimeBuildCts?.Dispose();
+            _runtimeBuildCts = new CancellationTokenSource();
+            _runtimeBuildRunning = true;
+            _runtimeBuildMessage = string.Empty;
+            _runtimeBuildTask = _runtimeBuilder.BuildAsync(_settings, _runtimeBuildCts.Token);
+            EditorApplication.update -= PollRuntimeBuildTask;
+            EditorApplication.update += PollRuntimeBuildTask;
+            Repaint();
+        }
+
+        private void PollRuntimeBuildTask()
+        {
+            if (_runtimeBuildTask == null || !_runtimeBuildTask.IsCompleted)
+            {
+                return;
+            }
+
+            EditorApplication.update -= PollRuntimeBuildTask;
+            var completedTask = _runtimeBuildTask;
+            _runtimeBuildTask = null;
+            _runtimeBuildRunning = false;
+
+            if (completedTask.IsFaulted)
+            {
+                var exception = completedTask.Exception != null ? completedTask.Exception.GetBaseException() : null;
+                _runtimeBuildMessage = exception != null ? exception.Message : "Local MCP runtime build failed.";
+                EditorUtility.DisplayDialog("MCP Runtime Build Failed", _runtimeBuildMessage, "OK");
+                Repaint();
+                return;
+            }
+
+            var result = completedTask.Result;
+            if (!result.Succeeded)
+            {
+                _runtimeBuildMessage = string.IsNullOrWhiteSpace(result.Summary) ? result.Reason : result.Summary;
+                if (!string.IsNullOrWhiteSpace(result.LogPath))
+                {
+                    _runtimeBuildMessage += "\nLog: " + result.LogPath;
+                }
+
+                EditorUtility.DisplayDialog("MCP Runtime Build Failed", _runtimeBuildMessage, "OK");
+                Repaint();
+                return;
+            }
+
+            _runtimeBuildMessage = "Project-local MCP runtime built successfully.";
+            if (!string.IsNullOrWhiteSpace(result.DotnetSdkVersion))
+            {
+                _runtimeBuildMessage += " .NET SDK " + result.DotnetSdkVersion;
+            }
+
+            _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
+            Repaint();
         }
 
         private void InitializeMcpRuntime()
@@ -982,12 +1065,18 @@ namespace UnityMcp.AgentBridge.Mcp
         private void OnDisable()
         {
             EditorApplication.update -= PollDiagnosticsTask;
+            EditorApplication.update -= PollRuntimeBuildTask;
             EditorApplication.update -= PollRuntimeInitializationTask;
             _diagnosticsCts?.Cancel();
             _diagnosticsCts?.Dispose();
             _diagnosticsCts = null;
             _diagnosticsTask = null;
             _diagnosticsRunning = false;
+            _runtimeBuildCts?.Cancel();
+            _runtimeBuildCts?.Dispose();
+            _runtimeBuildCts = null;
+            _runtimeBuildTask = null;
+            _runtimeBuildRunning = false;
             _runtimeInitCts?.Cancel();
             _runtimeInitCts?.Dispose();
             _runtimeInitCts = null;

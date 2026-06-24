@@ -9,7 +9,7 @@
 - Unity `2021.3+` package compatibility; the current required validation lane is Unity `2022.3.53f1`
 - Editor-only package usage; no Player/runtime integration
 - Local filesystem access for `Temp/AgentBridge` and `Library/AgentBridge`
-- The packaged `unity-agent-bridge[.exe]` binary for MCP workflows. Release tags include the Windows executable payload; `.NET` is required only for maintainer development builds and source-level diagnostics.
+- .NET 8 SDK for MCP workflows that build the project-local runtime from the Setup window.
 - No cloud dependency and no Unity AI Assistant dependency
 
 ## Package Layout
@@ -17,8 +17,8 @@
 - `Editor/Core/`: queue, facade, poller, protocol, settings, compile/test operation managers
 - `Editor/Mcp/`: Editor MCP settings, discovery, process control, client config, diagnostics, and UI
 - `Editor/Tools/`: built-in Unity tools
-- `Tools~/`: package-contained MCP runtime payload for Windows launchers and `UnityAgentBridge/cli/out/<rid>/unity-agent-bridge[.exe]`
-- `../UnityAgentBridge.Cli/`: workspace-root .NET source, tests, and `UnityAgentBridge.Cli.sln` for the external CLI; this stays outside the UPM package payload to reduce release noise
+- `Tools~/`: package-contained MCP launchers, runtime build wrappers, and `UnityAgentBridge/src` build inputs
+- `../UnityAgentBridge.Cli/`: workspace-root .NET source, tests, and `UnityAgentBridge.Cli.sln` for product development
 - `Documentation~/schemas/`: root-level redirect only; not authoritative
 - `com.unitymcp.agent-bridge/Documentation~/schemas/`: authoritative package command/result and args schemas
 
@@ -38,7 +38,7 @@ Add the package to `Packages/manifest.json`:
 }
 ```
 
-Release validation for this change targets `v1.2.3`; the tag must include the package-contained Windows executable payloads so external projects do not need local publish, NuGet restore, or maintainer SDK version alignment.
+Release validation requires package-contained build inputs and runtime build wrappers. Source tags do not include generated Windows executable payloads by default; external projects build the local runtime with .NET 8 SDK from the MCP Setup window.
 
 ### Option B: local file dependency during development
 
@@ -177,7 +177,7 @@ The tool is exported only when all of the following are true:
 
 1. `AgentBridgeSettings.asset` sets `roslynExecutionEnabled: 1`
 2. the built-in plugin registration for `UnityMcp.BuiltInPlugins.RoslynExecution` remains enabled
-3. `Prepare Runtime` has materialized:
+3. `Build Local Runtime` has generated:
 
 ```text
 <UnityProject>/.unitymcp/runtime/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe
@@ -185,21 +185,21 @@ The tool is exported only when all of the following are true:
 
 If any of those checks fail, Unity plugin discovery does not register `unity.execute_csharp`, and MCP does not expose `mcp__unity__execute_csharp`.
 
-### Prepare Runtime behavior
+### Runtime build and preparation behavior
 
-`Prepare Runtime` copies the Roslyn compiler proxy from the package payload:
+`Build Local Runtime` publishes the Roslyn compiler proxy from package-contained source:
 
 ```text
-Packages/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe
+Packages/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/src/UnityAgentBridge.RoslynCompiler/UnityAgentBridge.RoslynCompiler.csproj
 ```
 
-into the project-local prepared runtime:
+into the project-local runtime:
 
 ```text
 <UnityProject>/.unitymcp/runtime/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe
 ```
 
-The current implementation also refreshes Agent Bridge discovery after successful runtime materialization so the plugin catalog can immediately reflect Roslyn tool availability without requiring a Unity restart.
+Prepare Runtime validates the generated project-local output and refreshes Agent Bridge discovery so the plugin catalog can immediately reflect Roslyn tool availability without requiring a Unity restart.
 
 ### Execution model
 
@@ -249,10 +249,11 @@ Ordinary exceptions thrown inside `__Run()` are expected to remain wrapper-conta
 The v1.1 Editor workflow is exposed by `Tools -> Unity Agent Bridge -> MCP Setup & Diagnostics`.
 The primary setup flow is:
 
-1. `Prepare Runtime`: copy package payload files from `Packages/com.unitymcp.agent-bridge/Tools~` into the current Unity project `.unitymcp/runtime` directory and prepare dependencies there.
-2. `Apply MCP Client Config`: write managed client config that points at the prepared project-local launcher.
-3. `Verify`: run diagnostics after preparation and config.
-4. `Command List`: use the button in Step 4 to open a dedicated window that lists the registered Unity MCP commands, their purpose, runtime mode policy, side-effect classification, and domain reload risk.
+1. `Build Local Runtime`: use .NET 8 SDK and package-contained source to generate runtime executables under the current Unity project `.unitymcp/runtime` directory.
+2. `Prepare Runtime`: prepare launchers and validate the generated project-local executable outputs.
+3. `Apply MCP Client Config`: write managed client config that points at the prepared project-local launcher.
+4. `Verify`: run diagnostics after build, preparation, and config.
+5. `Command List`: use the button in Step 4 to open a dedicated window that lists the registered Unity MCP commands, their purpose, runtime mode policy, side-effect classification, and domain reload risk.
 
 The main panel also shows `Workspace Config Target` so you can verify where `.codex/config.toml` and `.mcp.json` will be written. Use `Advanced Details` to adjust `Workspace Root` when the detected target is wrong.
 The Step 2 primary action row is intentionally limited to `Apply` and `Remove`.
@@ -272,7 +273,7 @@ Reference screenshots:
 Recommended operator flow:
 
 1. Open the window from `Tools -> Unity Agent Bridge -> MCP Setup & Diagnostics`.
-2. In `Status`, confirm bridge settings, executable runtime, runtime binding, `.NET`, CLI, and server files.
+2. In `Status`, confirm bridge settings, executable runtime, runtime binding, `.NET 8 SDK`, CLI, and server files.
 3. In `Client Config`, choose `Codex` or `Claude Code` and inspect the generated project-level preview before applying changes.
 4. Use `Apply` only for project-local config; do not edit user-global Codex or Claude files from this workflow.
 5. In `Diagnostics`, run Quick Diagnostics and review `MCP001` through `MCP011`.
@@ -343,28 +344,19 @@ Compile flow:
 
 ## CLI Integration
 
-The package-contained product CLI is the published single-file binary:
+The product CLI is a project-local generated single-file binary:
 
 ```powershell
-Push-Location Packages/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli
-.\out\win-x64\unity-agent-bridge.exe ping
-.\out\win-x64\unity-agent-bridge.exe project_info
-Pop-Location
+$cli = "<UnityProject>\.unitymcp\runtime\UnityAgentBridge\cli\out\win-x64\unity-agent-bridge.exe"
+& $cli ping
+& $cli project_info
 ```
 
-Maintainer-only payload refresh before release is generated by:
+The Setup window `Build Local Runtime` button runs the package-contained wrapper:
 
 ```powershell
-Push-Location Packages/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli
-./publish.ps1
-Pop-Location
+Packages/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/runtime-build/Build-LocalRuntime.ps1
 ```
-
-RID outputs:
-
-- `out/win-x64/unity-agent-bridge.exe`
-- `out/linux-x64/unity-agent-bridge`
-- `out/osx-arm64/unity-agent-bridge`
 
 Development source invocation is available for maintainers working from a repository or package source checkout:
 
@@ -377,11 +369,11 @@ Pop-Location
 
 ## MCP Integration
 
-The package-contained MCP payload source lives under `Packages/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/`.
+The package-contained MCP build source lives under `Packages/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/src/`.
 
-The package-contained external CLI lives in:
+The project-local external CLI is generated at:
 
-- `Packages/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/`
+- `<UnityProject>/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe`
 
 Local development flow:
 
@@ -404,14 +396,13 @@ Current repository layout notes:
 
 The MCP server:
 
-- uses the package-contained C# MCP host
+- uses the project-local generated C# MCP host
 - launches `unity-agent-bridge[.exe] mcp-server`
-- resolves the external CLI in this order: `UNITY_AGENT_BRIDGE_CLI_PATH`, config `cliPath`, package binary, repository Console App development path, direct queue fallback
-- uses `UnityAgentBridge/cli/out/<rid>/unity-agent-bridge[.exe]` as the normal package-contained path
+- uses `<UnityProject>/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe` as the normal path
 - reads `Library/AgentBridge/plugin-catalog.json` for dynamic plugin tool exposure
 - does not load Unity plugin assemblies directly
 
-`unity_bridge_health` and the MCP probe output should be used to confirm the active path. They report `resolvedCliPath`, `cliMode`, and `cliWarnings`; normal package-contained validation should report `cliMode=package-binary`. Any fallback mode must be recorded in the acceptance evidence.
+`unity_bridge_health` and the MCP probe output should be used to confirm the active path. They report `resolvedCliPath`, `cliMode`, and `cliWarnings`; normal validation should report `cliMode=project-local-runtime`. Any fallback mode must be recorded in the acceptance evidence.
 
 ### MCP Session Binding
 
@@ -451,8 +442,8 @@ Managed config rules:
 4. If `Configured Project*` is shown in the MCP Setup window, use `Sync` before assuming MCP requests will target the correct Unity project.
 5. Managed client config files are written under the configured or detected workspace root instead of blindly using the opened Unity project root. You can set `Workspace Root` explicitly in the MCP Setup window; otherwise the writer walks upward and uses the nearest ancestor that already looks like the MCP workspace root.
 6. `Workspace Root` must be the opened Unity project root or one of its first three ancestor directories.
-7. Use the MCP Setup window `Prepare Runtime` action to copy the package payload into `<UnityProject>/.unitymcp/runtime/`.
-8. The prepared runtime must not require `node_modules`, `npm install`, Node.js execution, local `dotnet publish`, or NuGet restore. Release tags are expected to carry the Windows executable payload used by project-local runtime preparation.
+7. Use the MCP Setup window `Build Local Runtime` action to generate runtime executables into `<UnityProject>/.unitymcp/runtime/`, then run `Prepare Runtime`.
+8. The prepared runtime must not require `node_modules`, `npm install`, or Node.js execution. Building it requires .NET 8 SDK.
 8. If `.codex/config.toml` already contains a standalone `[mcp_servers.unity_agent_bridge]` section, the Codex writer parses the file as TOML, updates only the `unity_agent_bridge` subtree, preserves sibling TOML sections and existing `unity_agent_bridge` child tables such as `tools.*`, and then runs a post-write validation step. If the resulting file still contains residual unmanaged `unity_agent_bridge` content, the write fails with `format_validation_failed`.
 
 This is a current architecture constraint, not a defect in Quick Diagnostics. The cost is session setup discipline when validating multiple Unity projects in the same repository.
@@ -537,14 +528,14 @@ Build/AgentBridge-PackageDistribution/
   - `Build/AgentBridge-PackageDistribution/package/com.unitymcp.agent-bridge/Tools~/`
   - includes:
     - `AgentBridge/Start-UnityAgentBridge-Mcp.cmd`
-    - `UnityAgentBridge/cli/`
-    - `UnityAgentBridge/cli/`
+    - `UnityAgentBridge/runtime-build/`
+    - `UnityAgentBridge/src/`
 - 交付文档位于：
   - `Build/AgentBridge-PackageDistribution/docs/`
 - Build 日志位于：
   - `Build/logs/build.log`
 
-从 `v1.2.3` 开始，Git UPM release tag 必须提交 Windows 单文件运行时 payload，外部项目可以直接引用 Git tag 并运行 Prepare Runtime，不需要本地 `dotnet publish` 或 NuGet restore。`Release-PackageDistribution.ps1` 仍会产出可验证的交付目录，用于发布前检查和文件型集成。
+当前发布边界要求 Git UPM release tag 携带构建输入和 runtime-build 脚本，而不是提交生成的 Windows 单文件运行时 payload。外部项目需要安装 .NET 8 SDK，并在 MCP Setup window 中运行 Build Local Runtime 后再运行 Prepare Runtime。`Release-PackageDistribution.ps1` 会产出可验证的交付目录，用于发布前检查和文件型集成。
 
 `Release-PackageDistribution.ps1` 会输出：
 

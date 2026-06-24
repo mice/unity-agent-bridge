@@ -270,6 +270,11 @@ namespace UnityMcp.AgentBridge
     {
         public static bool IsUnityTestRunnerContextActive()
         {
+            if (HasCommandLineSwitch("-agentBridgeEnableBatchmode"))
+            {
+                return false;
+            }
+
             return HasCommandLineSwitch("-runTests") || Application.isBatchMode;
         }
 

@@ -259,6 +259,20 @@ namespace UnityMcp.AgentBridge
                 },
                 new AllowedStaticMethodEntry
                 {
+                    id = "agentbridge.prepare_mcp_runtime_and_apply_codex_config",
+                    typeName = "UnityMcp.AgentBridge.Mcp.McpRuntimeSmokeMethods",
+                    methodName = "PrepareRuntimeAndApplyCodexConfig",
+                    argsSchemaPath = string.Empty,
+                    parameterDtoTypeName = "UnityMcp.AgentBridge.Mcp.PrepareMcpRuntimeArgs",
+                    requiresMainThread = true,
+                    maxDurationMs = 120000,
+                    sideEffects = "validate",
+                    allowAssetDatabaseRefresh = false,
+                    allowAssetDatabaseSaveAssets = false,
+                    doneLogPattern = "McpRuntimeSmokeMethods.PrepareRuntimeAndApplyCodexConfig().Done"
+                },
+                new AllowedStaticMethodEntry
+                {
                     id = "agentbridge.focused_editmode_tests",
                     typeName = "UnityMcp.AgentBridge.Mcp.McpFocusedEditModeTestMethods",
                     methodName = "RunFocusedTests",

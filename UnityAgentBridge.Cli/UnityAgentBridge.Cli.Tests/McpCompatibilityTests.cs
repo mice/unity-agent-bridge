@@ -24,8 +24,8 @@ public sealed class McpCompatibilityTests
             .ToArray();
 
         var diagnostics = new McpHostDiagnostics(
-            "D:/repo/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe",
-            "package-binary",
+            "D:/repo/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe",
+            "project-local-runtime",
             Array.Empty<string>(),
             Path.Combine(repoRoot, "UnityMCP"),
             Path.Combine(repoRoot, "UnityMCP", "Temp", "AgentBridge"),
@@ -98,7 +98,7 @@ public sealed class McpCompatibilityTests
         {
             var diagnostics = McpHostDiagnostics.Resolve(projectRoot) with
             {
-                ResolvedCliPath = "D:/repo/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe"
+                ResolvedCliPath = "D:/repo/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe"
             };
             McpToolRuntimeContext.QueuePaths = new ExternalBridgeClientCore.QueuePaths(diagnostics.ProjectPath, diagnostics.QueueRoot);
             var service = new McpServerService(new ExternalBridgeClient(), diagnostics, new McpStageLogger(diagnostics.ServerLogPath));

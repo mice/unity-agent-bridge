@@ -7,7 +7,7 @@
 - Unity validation lane: `2022.3.x`
 - Declared package compatibility: `2022.3+`
 - Runtime support: none; this package is Editor-only
-- External requirements for MCP workflows: a supported MCP client such as Codex or Claude Code. The product CLI binary is self-contained and shipped in release tags; `.NET` is needed only for maintainer development builds and source-level diagnostics.
+- External requirements for MCP workflows: a supported MCP client such as Codex or Claude Code, plus .NET 8 SDK for building the project-local MCP runtime from the Setup window.
 
 ## Install
 
@@ -50,18 +50,18 @@ Documented release-style Git UPM usage:
 }
 ```
 
-Release validation for `v1.2.3` requires the tag, `package.json` version, `CHANGELOG.md` entry, and package-contained Windows executable payloads to align. The release tag carries the required `win-x64` executables so external Unity projects do not need local publish, NuGet restore, or maintainer SDK version alignment.
+Release validation requires the tag, `package.json` version, `CHANGELOG.md` entry, package-contained build inputs, and runtime build wrappers to align. Source tags do not carry generated `win-x64` executable payloads by default; external Unity projects build the local runtime from the Setup window with .NET 8 SDK.
 
 ## First Use
 
 1. Open the Unity project and wait for package resolve and script compilation.
 2. Open `Edit -> Project Settings -> Agent Bridge` and create the settings asset if needed.
 3. Open `Tools -> Unity Agent Bridge -> MCP Setup & Diagnostics`.
-4. Confirm bridge, executable runtime, runtime binding, `.NET` SDK, CLI, and MCP status.
-5. Review project-level client config before applying changes.
+4. Click `Build Local Runtime` to generate `unity-agent-bridge.exe` and `unity-roslyn-compiler.exe` under `<UnityProject>/.unitymcp/runtime/`.
+5. Click `Prepare Runtime`, then review project-level client config before applying changes.
 6. Run Quick Diagnostics when validating the local environment.
 
-MCP setup resolves the external CLI in this order: `UNITY_AGENT_BRIDGE_CLI_PATH`, config `cliPath`, package `Tools~/UnityAgentBridge/cli/out/<rid>/unity-agent-bridge[.exe]`, Console App dev fallback, then direct queue migration fallback. `unity_bridge_health` reports `resolvedCliPath`, `cliMode`, and `cliWarnings`.
+MCP setup uses the project-local executable at `<UnityProject>/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe`. `unity_bridge_health` reports `resolvedCliPath`, `cliMode=project-local-runtime`, and `cliWarnings`.
 
 ## Plugin Discovery
 
@@ -77,7 +77,7 @@ Version `1.2.x` supports Unity-side plugin discovery for explicitly registered a
 
 Project metadata is plugin-owned. Keep `UnityMcp.BuiltInPlugins.ProjectInfo` enabled to expose `unity.project.get_info` and `mcp__unity__project_get_info`; the legacy/core `unity.project_info` and `mcp__unity__project_info` names are not shipped as aliases.
 
-Roslyn execution is available only on Unity `2022.3.x` for this release line. The package ships the external compiler proxy at `Tools~/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe`, and `mcp__unity__execute_csharp` stays hidden until the project explicitly enables Roslyn execution and Prepare Runtime materializes that payload into `.unitymcp/runtime/`.
+Roslyn execution is available only on Unity `2022.3.x` for this release line. The package ships compiler proxy source and runtime build wrappers, and `mcp__unity__execute_csharp` stays hidden until the project explicitly enables Roslyn execution and the local runtime build creates `.unitymcp/runtime/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe`.
 
 ## Documentation Index
 

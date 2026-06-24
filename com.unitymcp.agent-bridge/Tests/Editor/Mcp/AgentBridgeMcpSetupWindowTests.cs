@@ -248,6 +248,19 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(snapshotIndex, Is.GreaterThan(reconfigureIndex));
         }
 
+        [Test]
+        [Category("AGBM_UI")]
+        public void SetupWindow_Source_WiresBuildLocalRuntimePrimaryAction()
+        {
+            var content = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/UI/AgentBridgeMcpSetupWindow.cs"));
+
+            Assert.That(content, Does.Contain("new McpRuntimeBuilder()"));
+            Assert.That(content, Does.Contain("BuildLocalRuntime();"));
+            Assert.That(content, Does.Contain("\"Building...\""));
+            Assert.That(content, Does.Contain("Build Local Runtime"));
+            Assert.That(content, Does.Contain("PollRuntimeBuildTask"));
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_169.md
         [Test]
         [Category("AGBM_UI")]
@@ -369,7 +382,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var json = File.ReadAllText(configPath);
             Assert.That(json, Does.Contain("\"unityProjectPath\""));
             Assert.That(json, Does.Contain(projectPath.Replace("\\", "\\\\")));
-            var configuredProjectPath = AgentBridgeMcpSetupWindow.ReadConfiguredUnityProjectPath(projectPath, Path.Combine(root, "Tools"));
+            var configuredProjectPath = AgentBridgeMcpSetupWindow.ReadConfiguredUnityProjectPath(projectPath, root);
             var readiness = AgentBridgeMcpSetupWindow.GetEffectiveReadinessForConfiguredProject(
                 McpReadiness.Ready,
                 projectPath,
@@ -394,6 +407,23 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             AgentBridgeMcpSetupWindow.SyncConfiguredProjectFile(configPath, projectPath);
 
             Assert.That(File.Exists(configPath), Is.True);
+
+            Directory.Delete(root, true);
+        }
+
+        [Test]
+        [Category("AGBM_UI")]
+        public void ResolveLauncherConfigPath_UsesWorkspaceToolsNotPackageTools()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "AGBM_BINDING_PATH");
+            var workspaceRoot = Path.Combine(root, "Workspace");
+            var packageToolsRoot = Path.Combine(root, "Package", "Tools~");
+            Directory.CreateDirectory(Path.Combine(packageToolsRoot, "AgentBridge"));
+
+            var resolved = AgentBridgeMcpSetupWindow.ResolveLauncherConfigPath(workspaceRoot);
+
+            Assert.That(resolved, Is.EqualTo(Path.Combine(workspaceRoot, "Tools", "AgentBridge", "Start-Codex-With-UnityMcp.json")));
+            Assert.That(resolved, Does.Not.StartWith(packageToolsRoot));
 
             Directory.Delete(root, true);
         }

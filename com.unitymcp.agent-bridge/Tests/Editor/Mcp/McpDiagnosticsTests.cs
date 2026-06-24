@@ -274,7 +274,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
             Assert.That(Find(results, "MCP004").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
             Assert.That(Find(results, "MCP006").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
-            Assert.That(Find(results, "MCP011").Severity, Is.EqualTo(McpDiagnosticSeverity.Error));
+            Assert.That(Find(results, "MCP011").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
             Assert.That(Find(results, "MCP012").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
             Assert.That(Find(results, "MCP009").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
             Assert.That(Find(results, "MCP010").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
@@ -340,9 +340,9 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             File.WriteAllText(Path.Combine(launcherRoot, "Start-UnityAgentBridge-Mcp.cmd"), string.Empty);
 
             var toolsRoot = Path.Combine(_tempDirectory, "mcp-tools");
-            var toolsRoslynRoot = Path.Combine(toolsRoot, "UnityAgentBridge", "roslyn-execution", "out", "win-x64");
+            var toolsRoslynRoot = Path.Combine(toolsRoot, "UnityAgentBridge", "src", "UnityAgentBridge.RoslynCompiler");
             Directory.CreateDirectory(toolsRoslynRoot);
-            File.WriteAllText(Path.Combine(toolsRoslynRoot, "unity-roslyn-compiler.exe"), string.Empty);
+            File.WriteAllText(Path.Combine(toolsRoslynRoot, "UnityAgentBridge.RoslynCompiler.csproj"), "<Project />");
 
             var resolver = new McpPathResolver(() => Path.Combine(_tempDirectory, "UnityProject"));
             var settings = new McpEditorSettings
@@ -798,6 +798,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var settings = new McpEditorSettings
             {
                 McpServerRoot = root,
+                CliExecutablePath = GetCliExecutablePath(root),
             };
             var fakeRunner = new FakeRunner
             {

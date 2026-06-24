@@ -71,14 +71,8 @@ namespace UnityMcp.AgentBridge.Mcp
                 });
             }
 
-            var executableName = GetProductExecutableName();
-            var cliExecutablePath = Path.Combine(cliRoot, "out", GetCurrentRid(), executableName);
-            if (!File.Exists(cliExecutablePath))
-            {
-                cliExecutablePath = Path.Combine(cliRoot, executableName);
-            }
-
-            if (!File.Exists(cliExecutablePath))
+            var cliExecutablePath = ResolvePreparedCliExecutablePath(runtimeRoot);
+            if (string.IsNullOrWhiteSpace(cliExecutablePath))
             {
                 return Task.FromResult(new ManagedBlockApplyResult
                 {
@@ -96,23 +90,46 @@ namespace UnityMcp.AgentBridge.Mcp
             });
         }
 
-        private string ResolvePayloadToolsRoot(McpEditorSettings settings)
+        internal static string ResolvePreparedCliExecutablePath(string runtimeRoot)
         {
-            if (settings != null && !string.IsNullOrWhiteSpace(settings.ToolsRoot))
+            if (string.IsNullOrWhiteSpace(runtimeRoot))
             {
-                return settings.ToolsRoot.Trim();
+                return string.Empty;
             }
 
+            var executableName = GetProductExecutableName();
+            var cliRoot = Path.Combine(runtimeRoot, "UnityAgentBridge", "cli");
+            var candidates = new[]
+            {
+                Path.Combine(cliRoot, "out", GetCurrentRid(), executableName),
+                Path.Combine(cliRoot, executableName),
+            };
+
+            for (var index = 0; index < candidates.Length; index++)
+            {
+                if (File.Exists(candidates[index]))
+                {
+                    return candidates[index];
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private string ResolvePayloadToolsRoot(McpEditorSettings settings)
+        {
             return _pathResolver.ResolveToolsRoot(settings);
         }
 
         internal static void MaterializeRuntimePayload(string payloadToolsRoot, string runtimeRoot)
         {
             var canResetRuntimeRoot = true;
+            string stagedRuntimeRoot = null;
             if (Directory.Exists(runtimeRoot))
             {
                 try
                 {
+                    stagedRuntimeRoot = StageGeneratedRuntimeOutputs(runtimeRoot);
                     Directory.Delete(runtimeRoot, true);
                 }
                 catch (UnauthorizedAccessException)
@@ -131,6 +148,7 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             CopyDirectory(payloadToolsRoot, runtimeRoot, canResetRuntimeRoot);
+            RestoreGeneratedRuntimeOutputs(stagedRuntimeRoot, runtimeRoot);
         }
 
         internal static string GetCurrentRid()
@@ -201,6 +219,100 @@ namespace UnityMcp.AgentBridge.Mcp
             var fileName = Path.GetFileName(path);
             return string.Equals(fileName, "unity-agent-bridge.exe", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(fileName, "unity-agent-bridge", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string StageGeneratedRuntimeOutputs(string runtimeRoot)
+        {
+            var tempRoot = Path.Combine(Path.GetTempPath(), "UnityMcp.AgentBridge.RuntimeStage", Guid.NewGuid().ToString("N"));
+            var stagedAny = false;
+            foreach (var relativePath in GetGeneratedRuntimeRelativePaths())
+            {
+                var sourcePath = Path.Combine(runtimeRoot, relativePath);
+                if (!File.Exists(sourcePath))
+                {
+                    continue;
+                }
+
+                var targetPath = Path.Combine(tempRoot, relativePath);
+                var targetDirectory = Path.GetDirectoryName(targetPath);
+                if (!string.IsNullOrEmpty(targetDirectory))
+                {
+                    Directory.CreateDirectory(targetDirectory);
+                }
+
+                File.Copy(sourcePath, targetPath, true);
+                stagedAny = true;
+            }
+
+            if (stagedAny)
+            {
+                return tempRoot;
+            }
+
+            if (Directory.Exists(tempRoot))
+            {
+                Directory.Delete(tempRoot, true);
+            }
+
+            return null;
+        }
+
+        private static void RestoreGeneratedRuntimeOutputs(string stagedRuntimeRoot, string runtimeRoot)
+        {
+            if (string.IsNullOrWhiteSpace(stagedRuntimeRoot) || !Directory.Exists(stagedRuntimeRoot))
+            {
+                return;
+            }
+
+            try
+            {
+                foreach (var filePath in Directory.GetFiles(stagedRuntimeRoot, "*", SearchOption.AllDirectories))
+                {
+                    var relativePath = filePath.Substring(stagedRuntimeRoot.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                    var targetPath = Path.Combine(runtimeRoot, relativePath);
+                    var targetDirectory = Path.GetDirectoryName(targetPath);
+                    if (!string.IsNullOrEmpty(targetDirectory))
+                    {
+                        Directory.CreateDirectory(targetDirectory);
+                    }
+
+                    try
+                    {
+                        File.Copy(filePath, targetPath, true);
+                    }
+                    catch (UnauthorizedAccessException) when (IsGeneratedRuntimePath(targetPath))
+                    {
+                    }
+                    catch (IOException) when (IsGeneratedRuntimePath(targetPath))
+                    {
+                    }
+                }
+            }
+            finally
+            {
+                Directory.Delete(stagedRuntimeRoot, true);
+            }
+        }
+
+        private static string[] GetGeneratedRuntimeRelativePaths()
+        {
+            return new[]
+            {
+                Path.Combine("UnityAgentBridge", "cli", "out", GetCurrentRid(), GetProductExecutableName()),
+                Path.Combine("UnityAgentBridge", "roslyn-execution", "out", "win-x64", "unity-roslyn-compiler.exe"),
+            };
+        }
+
+        private static bool IsGeneratedRuntimePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            var fileName = Path.GetFileName(path);
+            return string.Equals(fileName, GetProductExecutableName(), StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(fileName, "unity-roslyn-compiler.exe", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsExcludedRuntimePayloadPath(string path)

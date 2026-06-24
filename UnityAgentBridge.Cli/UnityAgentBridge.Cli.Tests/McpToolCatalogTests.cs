@@ -224,10 +224,10 @@ public sealed class McpToolCatalogTests
         Assert.AreEqual(true, adapted.IsError);
         Assert.AreEqual(1, adapted.Content.Count);
         var text = ((TextContentBlock)adapted.Content[0]).Text;
-        StringAssert.Contains(text, "\"resolvedCliPath\":\"D:/repo/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe\"");
-        StringAssert.Contains(text, "\"cliMode\":\"package-binary\"");
+        StringAssert.Contains(text, "\"resolvedCliPath\":\"D:/repo/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe\"");
+        StringAssert.Contains(text, "\"cliMode\":\"project-local-runtime\"");
         Assert.AreEqual("timeout", adapted.StructuredContent.GetValueOrDefault().GetProperty("status").GetString());
-        Assert.AreEqual("package-binary", adapted.StructuredContent.GetValueOrDefault().GetProperty("cliMode").GetString());
+        Assert.AreEqual("project-local-runtime", adapted.StructuredContent.GetValueOrDefault().GetProperty("cliMode").GetString());
     }
 
     [TestMethod]
@@ -239,7 +239,7 @@ public sealed class McpToolCatalogTests
         {
             var diagnostics = McpHostDiagnostics.Resolve(projectRoot) with
             {
-                ResolvedCliPath = "D:/repo/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe"
+                ResolvedCliPath = "D:/repo/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe"
             };
             McpToolRuntimeContext.QueuePaths = new UnityAgentBridge.ExternalBridgeClientCore.QueuePaths(diagnostics.ProjectPath, diagnostics.QueueRoot);
             var service = new McpServerService(
@@ -261,7 +261,7 @@ public sealed class McpToolCatalogTests
 
             Assert.AreEqual(false, result.IsError);
             var structured = JsonObject.Create(result.StructuredContent.GetValueOrDefault())!;
-            Assert.AreEqual("package-binary", structured["cliMode"]!.GetValue<string>());
+            Assert.AreEqual("project-local-runtime", structured["cliMode"]!.GetValue<string>());
             Assert.AreEqual("mcp.echo", structured["tool"]!.GetValue<string>());
             Assert.AreEqual(projectRoot, McpToolRuntimeContext.QueuePaths!.ProjectPath);
             StringAssert.StartsWith(McpToolRuntimeContext.QueuePaths.QueueRoot, Path.Combine(projectRoot, "Temp", "AgentBridge"));
@@ -368,8 +368,8 @@ public sealed class McpToolCatalogTests
     private static McpHostDiagnostics CreateDiagnostics(string projectRoot)
     {
         return new McpHostDiagnostics(
-            "D:/repo/com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe",
-            "package-binary",
+            "D:/repo/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe",
+            "project-local-runtime",
             Array.Empty<string>(),
             projectRoot,
             Path.Combine(projectRoot, "Temp", "AgentBridge"),

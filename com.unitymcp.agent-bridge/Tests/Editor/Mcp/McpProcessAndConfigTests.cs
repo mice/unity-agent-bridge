@@ -564,17 +564,19 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
         public void McpRuntimeInitializer_InitializeRuntimeAsync_MissingMcpRoot_ReturnsMcpRootMissing()
         {
             var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
+            var toolsRoot = Path.Combine(_tempDirectory, "empty-tools-root");
+            Directory.CreateDirectory(toolsRoot);
             var resolver = new McpPathResolver(() => projectRoot);
             var initializer = new McpRuntimeInitializer(new FakeProcessRunner(), resolver);
 
             var result = initializer.InitializeRuntimeAsync(new McpEditorSettings
             {
                 WorkspaceRoot = Path.Combine(_tempDirectory, "workspace"),
-                ToolsRoot = Path.Combine(_tempDirectory, "missing-tools-root"),
+                ToolsRoot = toolsRoot,
             }, CancellationToken.None).GetAwaiter().GetResult();
 
             Assert.That(result.Applied, Is.False);
-            Assert.That(result.Reason, Is.EqualTo("payload_root_missing"));
+            Assert.That(result.Reason, Is.EqualTo("mcp_root_missing"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_175.md
@@ -712,6 +714,79 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
             Assert.That(File.ReadAllText(runtimeExecutablePath), Is.EqualTo("old-cli"));
             Assert.That(File.ReadAllText(Path.Combine(runtimeRoslynRoot, "unity-roslyn-compiler.exe")), Is.EqualTo("new-roslyn"));
+        }
+
+        [Test]
+        [Category("AGBM_P3")]
+        public void McpRuntimeInitializer_MaterializeRuntimePayload_PreservesLocallyBuiltExecutablesWhenPackageContainsNoExe()
+        {
+            var toolsRoot = Path.Combine(_tempDirectory, "mcp-tools");
+            Directory.CreateDirectory(Path.Combine(toolsRoot, "UnityAgentBridge", "cli"));
+            Directory.CreateDirectory(Path.Combine(toolsRoot, "UnityAgentBridge", "runtime-build"));
+            File.WriteAllText(Path.Combine(toolsRoot, "UnityAgentBridge", "runtime-build", "Build-LocalRuntime.ps1"), "param()");
+
+            var runtimeRoot = Path.Combine(_tempDirectory, "runtime");
+            var runtimeCliPath = Path.Combine(runtimeRoot, "UnityAgentBridge", "cli", "out", McpRuntimeInitializer.GetCurrentRid(), McpRuntimeInitializer.GetProductExecutableName());
+            var runtimeRoslynPath = Path.Combine(runtimeRoot, "UnityAgentBridge", "roslyn-execution", "out", "win-x64", "unity-roslyn-compiler.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(runtimeCliPath));
+            Directory.CreateDirectory(Path.GetDirectoryName(runtimeRoslynPath));
+            File.WriteAllText(runtimeCliPath, "built-cli");
+            File.WriteAllText(runtimeRoslynPath, "built-roslyn");
+
+            McpRuntimeInitializer.MaterializeRuntimePayload(toolsRoot, runtimeRoot);
+
+            Assert.That(File.Exists(runtimeCliPath), Is.True);
+            Assert.That(File.Exists(runtimeRoslynPath), Is.True);
+            Assert.That(File.ReadAllText(runtimeCliPath), Is.EqualTo("built-cli"));
+            Assert.That(File.ReadAllText(runtimeRoslynPath), Is.EqualTo("built-roslyn"));
+            Assert.That(File.Exists(Path.Combine(runtimeRoot, "UnityAgentBridge", "runtime-build", "Build-LocalRuntime.ps1")), Is.True);
+        }
+
+        [Test]
+        [Category("AGBM_P3")]
+        public void McpRuntimeInitializer_MaterializeRuntimePayload_CanRepeatWhenGeneratedExecutablesAlreadyExist()
+        {
+            var toolsRoot = Path.Combine(_tempDirectory, "mcp-tools");
+            Directory.CreateDirectory(Path.Combine(toolsRoot, "UnityAgentBridge", "cli"));
+            File.WriteAllText(Path.Combine(toolsRoot, "UnityAgentBridge", "README.md"), "payload");
+
+            var runtimeRoot = Path.Combine(_tempDirectory, "runtime");
+            var runtimeCliPath = Path.Combine(runtimeRoot, "UnityAgentBridge", "cli", "out", McpRuntimeInitializer.GetCurrentRid(), McpRuntimeInitializer.GetProductExecutableName());
+            var runtimeRoslynPath = Path.Combine(runtimeRoot, "UnityAgentBridge", "roslyn-execution", "out", "win-x64", "unity-roslyn-compiler.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(runtimeCliPath));
+            Directory.CreateDirectory(Path.GetDirectoryName(runtimeRoslynPath));
+            File.WriteAllText(runtimeCliPath, "built-cli");
+            File.WriteAllText(runtimeRoslynPath, "built-roslyn");
+
+            McpRuntimeInitializer.MaterializeRuntimePayload(toolsRoot, runtimeRoot);
+            McpRuntimeInitializer.MaterializeRuntimePayload(toolsRoot, runtimeRoot);
+
+            Assert.That(File.ReadAllText(runtimeCliPath), Is.EqualTo("built-cli"));
+            Assert.That(File.ReadAllText(runtimeRoslynPath), Is.EqualTo("built-roslyn"));
+            Assert.That(File.Exists(Path.Combine(runtimeRoot, "UnityAgentBridge", "README.md")), Is.True);
+        }
+
+        [Test]
+        [Category("AGBM_P3")]
+        public void McpRuntimeInitializer_MaterializeRuntimePayload_CanRepeatWhenGeneratedExecutableIsLocked()
+        {
+            var toolsRoot = Path.Combine(_tempDirectory, "mcp-tools");
+            Directory.CreateDirectory(Path.Combine(toolsRoot, "UnityAgentBridge", "cli"));
+            File.WriteAllText(Path.Combine(toolsRoot, "UnityAgentBridge", "README.md"), "payload");
+
+            var runtimeRoot = Path.Combine(_tempDirectory, "runtime");
+            var runtimeCliPath = Path.Combine(runtimeRoot, "UnityAgentBridge", "cli", "out", McpRuntimeInitializer.GetCurrentRid(), McpRuntimeInitializer.GetProductExecutableName());
+            Directory.CreateDirectory(Path.GetDirectoryName(runtimeCliPath));
+            File.WriteAllText(runtimeCliPath, "built-cli");
+
+            using (new FileStream(runtimeCliPath, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                McpRuntimeInitializer.MaterializeRuntimePayload(toolsRoot, runtimeRoot);
+                McpRuntimeInitializer.MaterializeRuntimePayload(toolsRoot, runtimeRoot);
+            }
+
+            Assert.That(File.ReadAllText(runtimeCliPath), Is.EqualTo("built-cli"));
+            Assert.That(File.Exists(Path.Combine(runtimeRoot, "UnityAgentBridge", "README.md")), Is.True);
         }
 
         private static string CreatePreparedLauncher(string projectRoot)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEditor.PackageManager;
 using UnityEngine;
 
@@ -9,6 +10,7 @@ namespace UnityMcp.AgentBridge.Mcp
 {
     public sealed class McpPathResolver
     {
+        private const string AgentBridgePackageName = "com.unitymcp.agent-bridge";
         private readonly Func<string> _projectRootProvider;
 
         public McpPathResolver()
@@ -64,6 +66,10 @@ namespace UnityMcp.AgentBridge.Mcp
         public string ResolveToolsRoot(McpEditorSettings settings)
         {
             var packageToolsRoot = TryResolvePackageToolsRoot();
+            if (string.IsNullOrEmpty(packageToolsRoot))
+            {
+                packageToolsRoot = TryResolveManifestPackageToolsRoot(GetProjectRoot());
+            }
 
             if (settings != null && !string.IsNullOrWhiteSpace(settings.ToolsRoot))
             {
@@ -348,31 +354,131 @@ namespace UnityMcp.AgentBridge.Mcp
 
         internal static string TryResolvePackageToolsRoot()
         {
+            var packageToolsRoot = TryResolvePackageManagerToolsRoot();
+            if (!string.IsNullOrEmpty(packageToolsRoot))
+            {
+                return packageToolsRoot;
+            }
+
+            return TryResolveAssemblyPackageToolsRoot();
+        }
+
+        private static string TryResolvePackageManagerToolsRoot()
+        {
             try
             {
                 var packageInfo = PackageInfo.FindForAssembly(typeof(McpPathResolver).Assembly);
                 var packageRoot = packageInfo != null ? packageInfo.resolvedPath : string.Empty;
-                if (string.IsNullOrWhiteSpace(packageRoot) || !Directory.Exists(packageRoot))
-                {
-                    return string.Empty;
-                }
-
-                var toolsRoot = Path.Combine(packageRoot, "Tools~");
-                if (!Directory.Exists(toolsRoot))
-                {
-                    return string.Empty;
-                }
-
-                var launcherPath = Path.Combine(toolsRoot, "AgentBridge", "Start-UnityAgentBridge-Mcp.cmd");
-                var cliRoot = Path.Combine(toolsRoot, "UnityAgentBridge", "cli");
-                return File.Exists(launcherPath) && Directory.Exists(cliRoot)
-                    ? Path.GetFullPath(toolsRoot)
-                    : string.Empty;
+                return TryResolvePackageToolsRoot(packageRoot);
             }
             catch
             {
                 return string.Empty;
             }
+        }
+
+        private static string TryResolveAssemblyPackageToolsRoot()
+        {
+            try
+            {
+                var assemblyPath = new Uri(typeof(McpPathResolver).Assembly.CodeBase).LocalPath;
+                var current = Directory.GetParent(assemblyPath);
+                while (current != null)
+                {
+                    var resolved = TryResolvePackageToolsRoot(current.FullName);
+                    if (!string.IsNullOrEmpty(resolved))
+                    {
+                        return resolved;
+                    }
+
+                    current = current.Parent;
+                }
+            }
+            catch
+            {
+                return string.Empty;
+            }
+
+            return string.Empty;
+        }
+
+        internal static string TryResolveManifestPackageToolsRoot(string projectRoot)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(projectRoot))
+                {
+                    return string.Empty;
+                }
+
+                var manifestPath = Path.Combine(projectRoot, "Packages", "manifest.json");
+                if (!File.Exists(manifestPath))
+                {
+                    return string.Empty;
+                }
+
+                var manifestJson = File.ReadAllText(manifestPath);
+                var pattern = "\"" + Regex.Escape(AgentBridgePackageName) + "\"\\s*:\\s*\"(?<value>[^\"]+)\"";
+                var match = Regex.Match(manifestJson, pattern);
+                if (!match.Success)
+                {
+                    return string.Empty;
+                }
+
+                var dependencyValue = match.Groups["value"].Value;
+                if (!dependencyValue.StartsWith("file:", StringComparison.OrdinalIgnoreCase))
+                {
+                    return string.Empty;
+                }
+
+                var packagePath = dependencyValue.Substring("file:".Length);
+                string packageRoot;
+                if (dependencyValue.StartsWith("file:///", StringComparison.OrdinalIgnoreCase))
+                {
+                    packageRoot = new Uri(dependencyValue).LocalPath;
+                }
+                else if (Path.IsPathRooted(packagePath))
+                {
+                    packageRoot = packagePath;
+                }
+                else
+                {
+                    var manifestDirectory = Path.GetDirectoryName(manifestPath) ?? projectRoot;
+                    packageRoot = Path.GetFullPath(Path.Combine(manifestDirectory, packagePath.Replace('/', Path.DirectorySeparatorChar)));
+                }
+
+                return TryResolvePackageToolsRoot(packageRoot);
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static string TryResolvePackageToolsRoot(string packageRoot)
+        {
+            if (string.IsNullOrWhiteSpace(packageRoot) || !Directory.Exists(packageRoot))
+            {
+                return string.Empty;
+            }
+
+            if (!File.Exists(Path.Combine(packageRoot, "package.json")))
+            {
+                return string.Empty;
+            }
+
+            var toolsRoot = Path.Combine(packageRoot, "Tools~");
+            if (!Directory.Exists(toolsRoot))
+            {
+                return string.Empty;
+            }
+
+            var buildScriptPath = Path.Combine(toolsRoot, "UnityAgentBridge", "runtime-build", "Build-LocalRuntime.ps1");
+            var cliProjectPath = Path.Combine(toolsRoot, "UnityAgentBridge", "src", "UnityAgentBridge.Cli", "UnityAgentBridge.Cli.csproj");
+            var roslynProjectPath = Path.Combine(toolsRoot, "UnityAgentBridge", "src", "UnityAgentBridge.RoslynCompiler", "UnityAgentBridge.RoslynCompiler.csproj");
+            return File.Exists(buildScriptPath) && File.Exists(cliProjectPath) && File.Exists(roslynProjectPath)
+                ? Path.GetFullPath(toolsRoot)
+                : string.Empty;
         }
 
         internal static string ResolveWorkspaceRoot(string projectRoot)

@@ -67,22 +67,34 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var results = new List<McpDiagnosticCheck>();
-            McpEnvironmentSnapshot environment = null;
+            DotnetSdkProbeResult dotnetSdkProbe = null;
             try
             {
-                environment = await _environmentProbe.SnapshotAsync(settings, cancellationToken);
+                await _environmentProbe.SnapshotAsync(settings, cancellationToken);
             }
             catch (Exception exception)
             {
-                environment = new McpEnvironmentSnapshot();
-                results.Add(CreateExceptionCheck("MCP005", ".NET SDK", "Install or configure .NET only for source-level diagnostics; the published MCP executable is self-contained.", exception));
+                results.Add(CreateExceptionCheck("MCP005", ".NET 8 SDK", "Install .NET 8 SDK, then run Build Local Runtime.", exception));
+            }
+
+            if (!ContainsCode(results, "MCP005"))
+            {
+                try
+                {
+                    var runtimeBuilder = new McpRuntimeBuilder(_processRunner ?? new AsyncProcessRunner(), _pathResolver, TimeSpan.FromSeconds(30));
+                    dotnetSdkProbe = await runtimeBuilder.ProbeDotnetSdkAsync(settings.DotnetPath, cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    results.Add(CreateExceptionCheck("MCP005", ".NET 8 SDK", "Install .NET 8 SDK, then run Build Local Runtime.", exception));
+                }
             }
 
             results.Add(TryCreateCheck("MCP001", "Bridge Settings", "Open Project Settings to enable Unity Agent Bridge.", IsBridgeEnabled));
             results.Add(TryCreateCheck("MCP002", "Queue Writable", "Check Temp/AgentBridge permissions and path settings.", QueueWritable));
             if (!ContainsCode(results, "MCP003"))
             {
-                results.Add(TryCreateCheck("MCP003", "Executable Runtime", "Prepare the project-local MCP runtime or repair the packaged executable payload.", () => CliPresent(settings)));
+                results.Add(TryCreateCheck("MCP003", "Executable Runtime", "Run Build Local Runtime, then Prepare Runtime.", () => CliPresent(settings)));
             }
 
             if (!ContainsCode(results, "MCP004"))
@@ -92,12 +104,12 @@ namespace UnityMcp.AgentBridge.Mcp
 
             if (!ContainsCode(results, "MCP005"))
             {
-                results.Add(CreateToolCheck("MCP005", environment.Dotnet, ".NET SDK", "Install or configure .NET only for source-level diagnostics; the published MCP executable is self-contained."));
+                results.Add(CreateDotnetSdkCheck(dotnetSdkProbe));
             }
 
             results.Add(TryCreateCheck("MCP006", "Server Files", "Repair the prepared MCP runtime payload.", () => ServerFilesPresent(settings)));
-            results.Add(TryCreateCheck("MCP007", "Dependencies", "Repair the prepared runtime payload or packaged executable.", () => DependenciesPresent(settings)));
-            results.Add(TryCreateCheck("MCP008", "CLI", "Repair the CLI path or prepared executable payload.", () => CliPresent(settings)));
+            results.Add(TryCreateCheck("MCP007", "Dependencies", "Run Build Local Runtime, then Prepare Runtime.", () => DependenciesPresent(settings)));
+            results.Add(TryCreateCheck("MCP008", "CLI", "Run Build Local Runtime, then Prepare Runtime.", () => CliPresent(settings)));
             results.Add(CreateRoslynPayloadSourceCheck(settings));
             results.Add(CreateRoslynPreparedRuntimeCheck(settings));
 
@@ -164,6 +176,24 @@ namespace UnityMcp.AgentBridge.Mcp
                 Summary = summary,
                 Details = ok ? probe.VersionText : "Missing",
                 Remediation = remediation,
+                Duration = TimeSpan.Zero,
+            };
+        }
+
+        private static McpDiagnosticCheck CreateDotnetSdkCheck(DotnetSdkProbeResult probe)
+        {
+            var versionText = probe != null ? probe.Net8SdkVersion : string.Empty;
+            var details = probe != null && !string.IsNullOrWhiteSpace(probe.Stdout)
+                ? probe.Stdout.Replace('\r', ' ').Replace('\n', ' ').Trim()
+                : string.Empty;
+            var ok = probe != null && probe.HasNet8Sdk;
+            return new McpDiagnosticCheck
+            {
+                Code = "MCP005",
+                Severity = ok ? McpDiagnosticSeverity.Info : McpDiagnosticSeverity.Error,
+                Summary = ".NET 8 SDK",
+                Details = ok ? versionText : "Missing .NET 8 SDK" + (string.IsNullOrWhiteSpace(details) ? string.Empty : " (installed SDKs: " + details + ")"),
+                Remediation = "Install .NET 8 SDK, then run Build Local Runtime.",
                 Duration = TimeSpan.Zero,
             };
         }
@@ -279,17 +309,17 @@ namespace UnityMcp.AgentBridge.Mcp
                 {
                     Code = "MCP011",
                     Severity = exists ? McpDiagnosticSeverity.Info : McpDiagnosticSeverity.Error,
-                    Summary = "Roslyn Payload Source",
+                    Summary = "Roslyn Build Input",
                     Details = exists
                         ? payloadSourcePath
-                        : "Missing package payload: " + (string.IsNullOrWhiteSpace(payloadSourcePath) ? "<unresolved>" : payloadSourcePath),
-                    Remediation = "Republish or restore Tools~/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe in the package payload.",
+                        : "Missing package build input: " + (string.IsNullOrWhiteSpace(payloadSourcePath) ? "<unresolved>" : payloadSourcePath),
+                    Remediation = "Restore package-contained Roslyn compiler source, then run Build Local Runtime.",
                     Duration = TimeSpan.Zero,
                 };
             }
             catch (Exception exception)
             {
-                return CreateExceptionCheck("MCP011", "Roslyn Payload Source", "Republish or restore the package Roslyn compiler proxy payload.", exception);
+                return CreateExceptionCheck("MCP011", "Roslyn Build Input", "Restore package-contained Roslyn compiler source.", exception);
             }
         }
 
@@ -307,13 +337,13 @@ namespace UnityMcp.AgentBridge.Mcp
                     Details = exists
                         ? runtimePayloadPath
                         : "Missing prepared runtime payload: " + (string.IsNullOrWhiteSpace(runtimePayloadPath) ? "<unresolved>" : runtimePayloadPath),
-                    Remediation = "Run Prepare Runtime after the package Roslyn payload exists, then confirm the project-local runtime target was copied.",
+                    Remediation = "Run Build Local Runtime, then Prepare Runtime.",
                     Duration = TimeSpan.Zero,
                 };
             }
             catch (Exception exception)
             {
-                return CreateExceptionCheck("MCP012", "Roslyn Prepared Runtime", "Run Prepare Runtime after restoring the Roslyn compiler proxy payload.", exception);
+                return CreateExceptionCheck("MCP012", "Roslyn Prepared Runtime", "Run Build Local Runtime, then Prepare Runtime.", exception);
             }
         }
 
@@ -385,16 +415,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 return true;
             }
 
-            var packageToolsRoot = McpPathResolver.TryResolvePackageToolsRoot();
-            if (string.IsNullOrWhiteSpace(packageToolsRoot))
-            {
-                return false;
-            }
-
-            var packageCliRoot = Path.Combine(packageToolsRoot, "UnityAgentBridge", "cli");
-            var packageRidExecutablePath = Path.Combine(packageCliRoot, "out", McpRuntimeInitializer.GetCurrentRid(), executableName);
-            var packageRootExecutablePath = Path.Combine(packageCliRoot, executableName);
-            return File.Exists(packageRidExecutablePath) || File.Exists(packageRootExecutablePath);
+            return false;
         }
 
         private bool DependenciesPresent(McpEditorSettings settings)
@@ -499,9 +520,7 @@ namespace UnityMcp.AgentBridge.Mcp
 
         private string ResolveRoslynPayloadSourcePath(McpEditorSettings settings)
         {
-            var toolsRoot = !string.IsNullOrWhiteSpace(settings != null ? settings.ToolsRoot : null)
-                ? settings.ToolsRoot.Trim()
-                : _pathResolver.ResolveToolsRoot(settings);
+            var toolsRoot = _pathResolver.ResolveToolsRoot(settings);
             if (string.IsNullOrWhiteSpace(toolsRoot))
             {
                 return string.Empty;
@@ -510,10 +529,9 @@ namespace UnityMcp.AgentBridge.Mcp
             return Path.Combine(
                 toolsRoot,
                 "UnityAgentBridge",
-                "roslyn-execution",
-                "out",
-                "win-x64",
-                "unity-roslyn-compiler.exe");
+                "src",
+                "UnityAgentBridge.RoslynCompiler",
+                "UnityAgentBridge.RoslynCompiler.csproj");
         }
 
         private string ResolveRoslynPreparedRuntimePath(McpEditorSettings settings)

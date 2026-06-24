@@ -227,6 +227,27 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
         [Test]
         [Category("AGBM_Discovery")]
+        public void ResolveToolsRoot_ManifestFileDependency_ResolvesRelativeToPackagesDirectory()
+        {
+            var workspaceRoot = Path.Combine(_tempDirectory, "workspace");
+            var projectRoot = Path.Combine(workspaceRoot, "UnityMCP");
+            var packageRoot = Path.Combine(workspaceRoot, "..", "unity-agent-bridge", "com.unitymcp.agent-bridge");
+            var projectToolsRoot = Path.Combine(projectRoot, "Tools");
+            Directory.CreateDirectory(Path.Combine(projectRoot, "Packages"));
+            Directory.CreateDirectory(projectToolsRoot);
+            CreatePackageToolsRoot(packageRoot);
+            File.WriteAllText(
+                Path.Combine(projectRoot, "Packages", "manifest.json"),
+                "{\"dependencies\":{\"com.unitymcp.agent-bridge\":\"file:../../../unity-agent-bridge/com.unitymcp.agent-bridge\"}}");
+
+            var resolved = McpPathResolver.TryResolveManifestPackageToolsRoot(projectRoot);
+
+            Assert.That(resolved, Is.EqualTo(Path.GetFullPath(Path.Combine(packageRoot, "Tools~"))));
+            Assert.That(resolved, Is.Not.EqualTo(Path.GetFullPath(projectToolsRoot)));
+        }
+
+        [Test]
+        [Category("AGBM_Discovery")]
         public void ResolveWorkspaceRoot_PrefersNearestAncestorWithCodexDirectory()
         {
             var workspaceRoot = Path.Combine(_tempDirectory, "workspace");
@@ -322,6 +343,18 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var filePath = Path.Combine(_tempDirectory, fileName);
             File.WriteAllText(filePath, "stub");
             return filePath;
+        }
+
+        private static void CreatePackageToolsRoot(string packageRoot)
+        {
+            var toolsRoot = Path.Combine(packageRoot, "Tools~", "UnityAgentBridge");
+            Directory.CreateDirectory(Path.Combine(toolsRoot, "runtime-build"));
+            Directory.CreateDirectory(Path.Combine(toolsRoot, "src", "UnityAgentBridge.Cli"));
+            Directory.CreateDirectory(Path.Combine(toolsRoot, "src", "UnityAgentBridge.RoslynCompiler"));
+            File.WriteAllText(Path.Combine(packageRoot, "package.json"), "{}");
+            File.WriteAllText(Path.Combine(toolsRoot, "runtime-build", "Build-LocalRuntime.ps1"), "param()");
+            File.WriteAllText(Path.Combine(toolsRoot, "src", "UnityAgentBridge.Cli", "UnityAgentBridge.Cli.csproj"), "<Project />");
+            File.WriteAllText(Path.Combine(toolsRoot, "src", "UnityAgentBridge.RoslynCompiler", "UnityAgentBridge.RoslynCompiler.csproj"), "<Project />");
         }
 
         private static bool IsWindows()

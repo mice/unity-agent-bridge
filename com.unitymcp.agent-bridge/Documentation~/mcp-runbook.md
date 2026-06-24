@@ -127,7 +127,7 @@ For External CLI validation, `unity_bridge_health` and MCP probe output must inc
 - `cliMode`
 - `cliWarnings`
 
-Expected package-contained runtime mode is `package-binary`. `env-override` and `config-override` are valid when intentionally configured. `console-app-dev` and `direct-queue-fallback` must be recorded as fallback evidence and must not be treated as final external Git UPM release evidence unless the acceptance report explicitly calls out the reason.
+Expected runtime mode is `project-local-runtime`. `env-override` and `config-override` are valid when intentionally configured. `console-app-dev` and `direct-queue-fallback` must be recorded as fallback evidence and must not be treated as final external Git UPM release evidence unless the acceptance report explicitly calls out the reason.
 
 Recommended sequence:
 
@@ -146,8 +146,8 @@ Codex-specific startup failure triage:
 Prepared runtime drift triage:
 
 1. If `.unitymcp/runtime/UnityAgentBridge/cli/` still contains unexpected legacy files after `Prepare Runtime`, inspect `ToolsRoot` and any project-local `Tools/UnityAgentBridge` or `Tools/AgentBridge` directories.
-2. Package-contained runtime preparation is expected to copy from `Packages/com.unitymcp.agent-bridge/Tools~`.
-3. Stale project-local tools content can override the package payload and invalidate external release verification.
+2. Build Local Runtime is expected to generate executables under `<UnityProject>/.unitymcp/runtime` from package-contained source and runtime-build scripts.
+3. Stale project-local tools content can override package launchers and invalidate external release verification.
 
 Diagnosis guide:
 

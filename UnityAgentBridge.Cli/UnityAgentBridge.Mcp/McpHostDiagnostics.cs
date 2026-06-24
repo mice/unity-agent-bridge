@@ -16,14 +16,8 @@ public sealed record McpHostDiagnostics(
         var projectPath = ResolveProjectPath(explicitProjectPath);
         var queueRoot = Path.Combine(projectPath, "Temp", "AgentBridge");
         var logsDirectory = Path.Combine(queueRoot, "logs");
-        var assemblyDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? Directory.GetCurrentDirectory();
-        var repoRoot = FindRepoRoot(assemblyDirectory);
-        var packageBinary = repoRoot is null
-            ? string.Empty
-            : Path.Combine(repoRoot, "com.unitymcp.agent-bridge", "Tools~", "UnityAgentBridge", "cli", "out", CurrentRid(), CurrentExecutableName());
-
-        var resolvedCliPath = packageBinary;
-        var cliMode = "package-binary";
+        var resolvedCliPath = ResolveCurrentExecutablePath();
+        var cliMode = "project-local-runtime";
         var cliWarnings = Array.Empty<string>();
 
         return new McpHostDiagnostics(
@@ -87,17 +81,18 @@ public sealed record McpHostDiagnostics(
         }
     }
 
-    private static string? FindRepoRoot(string startPath)
+    private static string ResolveCurrentExecutablePath()
     {
-        for (var cursor = startPath; !string.IsNullOrWhiteSpace(cursor); cursor = Directory.GetParent(cursor)?.FullName)
+        var processPath = Environment.ProcessPath;
+        if (!string.IsNullOrWhiteSpace(processPath))
         {
-            if (Directory.Exists(Path.Combine(cursor, ".git")) || Directory.Exists(Path.Combine(cursor, "openspec")))
-            {
-                return cursor;
-            }
+            return Path.GetFullPath(processPath);
         }
 
-        return null;
+        var assemblyPath = Assembly.GetExecutingAssembly().Location;
+        return string.IsNullOrWhiteSpace(assemblyPath)
+            ? string.Empty
+            : Path.GetFullPath(assemblyPath);
     }
 
     private static bool IsUnityProject(string path)
@@ -111,23 +106,4 @@ public sealed record McpHostDiagnostics(
                Directory.Exists(Path.Combine(path, "Assets"));
     }
 
-    private static string CurrentRid()
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            return "win-x64";
-        }
-
-        if (OperatingSystem.IsMacOS())
-        {
-            return "osx-arm64";
-        }
-
-        return "linux-x64";
-    }
-
-    private static string CurrentExecutableName()
-    {
-        return OperatingSystem.IsWindows() ? "unity-agent-bridge.exe" : "unity-agent-bridge";
-    }
 }

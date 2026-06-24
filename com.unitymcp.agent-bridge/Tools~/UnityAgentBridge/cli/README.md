@@ -1,33 +1,32 @@
 # Unity Agent Bridge CLI
 
-This directory contains the package-contained Unity Agent Bridge external CLI.
+This directory is the package marker for the Unity Agent Bridge external CLI.
+The package carries build inputs under `Tools~/UnityAgentBridge/src` and build
+wrappers under `Tools~/UnityAgentBridge/runtime-build`.
 
-The product path is the published `unity-agent-bridge[.exe]` binary under `out/<rid>/`.
+Generated executables are project-local runtime artifacts. Build them from the
+Unity MCP Setup window with **Build Local Runtime**; the normal product path is:
+
+```text
+<UnityProject>/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe
+```
 
 ## Prerequisites
 
-- Normal binary usage: no .NET SDK/runtime install is required.
-- Development publish/build: .NET SDK with `net8.0` support.
+- Unity Editor 2022.3.
+- .NET 8 SDK for Build Local Runtime.
 - A running Unity Editor bridge session for the target project
 
 ## Run
 
 ```powershell
-.\out\win-x64\unity-agent-bridge.exe ping
-.\out\win-x64\unity-agent-bridge.exe project_info
-.\out\win-x64\unity-agent-bridge.exe compile
-.\out\win-x64\unity-agent-bridge.exe console --type error --type warning --count 20
-.\out\win-x64\unity-agent-bridge.exe run-static UnityMcp.AgentBridge.AgentBridgeStaticMethodSelfTests.SelfTestOk
-.\out\win-x64\unity-agent-bridge.exe diagnostic scene Assets/Scenes/AppMain.unity
-.\out\win-x64\unity-agent-bridge.exe test-edit
-.\out\win-x64\unity-agent-bridge.exe test-edit UnityMcp.AgentBridge.Tests.AgentBridgeEditModeProbeTests.DemoEditModeProbe_Passes
-.\out\win-x64\unity-agent-bridge.exe test-edit --test-name UnityMcp.AgentBridge.Tests.AgentBridgeEditModeProbeTests.DemoEditModeProbe_Passes
-.\out\win-x64\unity-agent-bridge.exe test-edit --group UnityMcp.AgentBridge.Tests
-.\out\win-x64\unity-agent-bridge.exe test-play UnityMcp.AgentBridge.Tests.AgentBridgePlayModeProbeTests.DemoPlayModeProbe_PassesAfterOneFrame
-.\out\win-x64\unity-agent-bridge.exe self-test --timeout-ms 120000
-.\out\win-x64\unity-agent-bridge.exe bridge-health
-.\out\win-x64\unity-agent-bridge.exe bridge-submit-only unity.ping --timeout-ms 15000
-.\out\win-x64\unity-agent-bridge.exe bridge-wait-result <commandId> --timeout-ms 15000
+$cli = "<UnityProject>\.unitymcp\runtime\UnityAgentBridge\cli\out\win-x64\unity-agent-bridge.exe"
+& $cli ping
+& $cli project_info
+& $cli compile
+& $cli console --type error --type warning --count 20
+& $cli self-test --timeout-ms 120000
+& $cli bridge-health
 ```
 
 Use `--project-path` to point at a specific Unity project if auto-detection is not appropriate.
@@ -68,12 +67,12 @@ Observability notes:
 - `bridge-wait-result` waits for a terminal result with a bounded timeout.
 - use `debug_mcp_hang.md` when a command appears stuck after submission.
 
-## Publish
+## Build
 
 ```powershell
-./publish.ps1
+..\runtime-build\Build-LocalRuntime.ps1 -UnityProjectPath <UnityProject>
 ```
 
-`publish.ps1` emits self-contained single-file outputs from `UnityAgentBridge.Cli` with `PublishAot=false`.
-
-Outputs are written to `./out/<rid>/unity-agent-bridge[.exe]`.
+The build wrapper emits self-contained single-file outputs into
+`<UnityProject>/.unitymcp/runtime` and never writes generated executables into
+the package directory.

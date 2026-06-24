@@ -52,14 +52,9 @@ Desktop.ini
 # Agent Bridge local runtime state
 .unitymcp/
 
-# Package-contained published executables are release payloads.
-# Keep generated output ignored except for the Windows single-file payloads required by Git UPM releases.
+# Package-contained local runtime build outputs are generated artifacts.
+# Source packages carry build inputs under Tools~/UnityAgentBridge/src and
+# generated executables stay ignored by default.
 com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/**
-!com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/
-!com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/win-x64/
-!com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe
 
 com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/roslyn-execution/out/**
-!com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/roslyn-execution/out/
-!com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/roslyn-execution/out/win-x64/
-!com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe
