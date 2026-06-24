@@ -71,13 +71,23 @@ namespace UnityMcp.AgentBridge.Mcp
                 packageToolsRoot = TryResolveManifestPackageToolsRoot(GetProjectRoot());
             }
 
+            if (string.IsNullOrEmpty(packageToolsRoot))
+            {
+                packageToolsRoot = TryResolvePackageCacheToolsRoot(GetProjectRoot());
+            }
+
+            if (string.IsNullOrEmpty(packageToolsRoot))
+            {
+                packageToolsRoot = TryResolveInstalledPackageDeliveryToolsRoot();
+            }
+
             if (settings != null && !string.IsNullOrWhiteSpace(settings.ToolsRoot))
             {
                 var configured = settings.ToolsRoot.Trim();
                 if (Directory.Exists(configured))
                 {
                     var configuredFullPath = Path.GetFullPath(configured);
-                    if (!string.IsNullOrEmpty(packageToolsRoot) && IsLegacyRepositoryToolsRoot(configuredFullPath))
+                    if (!string.IsNullOrEmpty(packageToolsRoot) && IsProjectOrLegacyRepositoryToolsRoot(configuredFullPath))
                     {
                         return packageToolsRoot;
                     }
@@ -101,12 +111,6 @@ namespace UnityMcp.AgentBridge.Mcp
             if (Directory.Exists(projectToolsRoot))
             {
                 return projectToolsRoot;
-            }
-
-            var deliveryToolsRoot = TryResolveInstalledPackageDeliveryToolsRoot();
-            if (!string.IsNullOrEmpty(deliveryToolsRoot))
-            {
-                return deliveryToolsRoot;
             }
 
             var repoRoot = GetRepositoryRoot();
@@ -455,6 +459,38 @@ namespace UnityMcp.AgentBridge.Mcp
             }
         }
 
+        internal static string TryResolvePackageCacheToolsRoot(string projectRoot)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(projectRoot))
+                {
+                    return string.Empty;
+                }
+
+                var packageCacheRoot = Path.Combine(projectRoot, "Library", "PackageCache");
+                if (!Directory.Exists(packageCacheRoot))
+                {
+                    return string.Empty;
+                }
+
+                foreach (var packageRoot in Directory.GetDirectories(packageCacheRoot, AgentBridgePackageName + "*"))
+                {
+                    var resolved = TryResolvePackageToolsRoot(packageRoot);
+                    if (!string.IsNullOrEmpty(resolved))
+                    {
+                        return resolved;
+                    }
+                }
+            }
+            catch
+            {
+                return string.Empty;
+            }
+
+            return string.Empty;
+        }
+
         private static string TryResolvePackageToolsRoot(string packageRoot)
         {
             if (string.IsNullOrWhiteSpace(packageRoot) || !Directory.Exists(packageRoot))
@@ -563,8 +599,22 @@ namespace UnityMcp.AgentBridge.Mcp
             return Directory.Exists(codexDirectory);
         }
 
-        private bool IsLegacyRepositoryToolsRoot(string toolsRoot)
+        private bool IsProjectOrLegacyRepositoryToolsRoot(string toolsRoot)
         {
+            var normalizedToolsRoot = toolsRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var projectRoot = GetProjectRoot();
+            if (!string.IsNullOrWhiteSpace(projectRoot))
+            {
+                var projectToolsRoot = Path.GetFullPath(Path.Combine(projectRoot, "Tools"));
+                if (string.Equals(
+                    normalizedToolsRoot,
+                    projectToolsRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
             var repoRoot = GetRepositoryRoot();
             if (string.IsNullOrWhiteSpace(repoRoot))
             {
@@ -573,7 +623,7 @@ namespace UnityMcp.AgentBridge.Mcp
 
             var legacyToolsRoot = Path.GetFullPath(Path.Combine(repoRoot, "Tools"));
             return string.Equals(
-                toolsRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                normalizedToolsRoot,
                 legacyToolsRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
                 StringComparison.OrdinalIgnoreCase);
         }

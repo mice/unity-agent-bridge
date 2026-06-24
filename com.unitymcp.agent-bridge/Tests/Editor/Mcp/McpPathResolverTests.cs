@@ -248,6 +248,30 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
         [Test]
         [Category("AGBM_Discovery")]
+        public void ResolveToolsRoot_PackageCachePackage_BeatsProjectToolsRoot()
+        {
+            var projectRoot = Path.Combine(_tempDirectory, "MVVMBind");
+            var projectToolsRoot = Path.Combine(projectRoot, "Tools");
+            var packageRoot = Path.Combine(projectRoot, "Library", "PackageCache", "com.unitymcp.agent-bridge@1.2.5");
+            Directory.CreateDirectory(Path.Combine(projectRoot, "Packages"));
+            Directory.CreateDirectory(projectToolsRoot);
+            CreatePackageToolsRoot(packageRoot);
+            File.WriteAllText(
+                Path.Combine(projectRoot, "Packages", "manifest.json"),
+                "{\"dependencies\":{\"com.unitymcp.agent-bridge\":\"git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.5\"}}");
+            var resolver = new McpPathResolver(() => projectRoot);
+
+            var resolved = resolver.ResolveToolsRoot(new McpEditorSettings
+            {
+                ToolsRoot = projectToolsRoot,
+            });
+
+            Assert.That(resolved, Is.EqualTo(Path.GetFullPath(Path.Combine(packageRoot, "Tools~"))));
+            Assert.That(resolved, Is.Not.EqualTo(Path.GetFullPath(projectToolsRoot)));
+        }
+
+        [Test]
+        [Category("AGBM_Discovery")]
         public void ResolveWorkspaceRoot_PrefersNearestAncestorWithCodexDirectory()
         {
             var workspaceRoot = Path.Combine(_tempDirectory, "workspace");

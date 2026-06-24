@@ -6,6 +6,12 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.5] - 2026-06-24
+
+### Fixed
+
+- Fixed Build Local Runtime package payload resolution for external Git UPM projects where the Unity project has its own `Tools/` directory and the installed Agent Bridge package lives under `Library/PackageCache`.
+
 ## [1.2.4] - 2026-06-24
 
 ### Added

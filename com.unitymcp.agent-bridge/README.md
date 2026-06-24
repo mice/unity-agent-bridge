@@ -45,7 +45,7 @@ Documented release-style Git UPM usage:
 ```json
 {
   "dependencies": {
-    "com.unitymcp.agent-bridge": "git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.4"
+    "com.unitymcp.agent-bridge": "git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.5"
   }
 }
 ```
