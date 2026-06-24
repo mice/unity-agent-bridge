@@ -49,16 +49,16 @@ com.unitymcp.agent-bridge/
 
 ## Build Notes
 
-The repository tracks source code, Unity package files, tests, scripts, documentation, and the Windows single-file executable payloads required for Git UPM releases.
+The repository tracks source code, Unity package files, tests, scripts, documentation, and the package-contained build inputs required for Git UPM releases.
 
-Published Git UPM tags must include these package-contained executables so Unity projects can run `Prepare Runtime` without building locally, installing a .NET SDK, restoring NuGet packages, or resolving maintainer-specific toolchain versions:
+Published Git UPM tags carry the `Tools~/UnityAgentBridge/runtime-build` wrappers and `Tools~/UnityAgentBridge/src` projects. Unity projects use the MCP Setup window `Build Local Runtime` action with .NET 8 SDK to generate project-local executables under:
 
 ```text
-com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe
-com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe
+<UnityProject>/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe
+<UnityProject>/.unitymcp/runtime/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe
 ```
 
-Maintainers may use the publish scripts under the CLI and Roslyn compiler projects to refresh those payloads before preparing a package distribution. Consumer projects should use the tagged payloads instead of local publish.
+Generated executable payloads are intentionally not tracked in source Git tags by default.
 
 ## License
 

@@ -6,6 +6,8 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.4] - 2026-06-24
+
 ### Added
 
 - Added Setup window `Build Local Runtime` support that uses .NET 8 SDK and package-contained build inputs to generate the C# MCP CLI and Roslyn compiler proxy under the Unity project `.unitymcp/runtime` directory.
