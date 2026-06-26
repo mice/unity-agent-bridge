@@ -161,5 +161,34 @@ namespace UnityMcp.AgentBridge.Tests
                 Assert.That(content, Does.Not.Contain("[AgentTool("), sourceFile);
             }
         }
+
+        [Test]
+        [Category("AGB_Core")]
+        [Category("AGB_170")]
+        public void MonoBehaviourSemanticsPlugin_SourceFilesRemainGroupedAndIndependent()
+        {
+            var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
+            var packageRoot = Path.Combine(projectRoot, "Packages", "com.unitymcp.agent-bridge");
+            var sourceRoot = Path.Combine(packageRoot, "BuiltInPlugins", "MonoBehaviourSemantics", "Editor");
+            var asmdefPath = Path.Combine(sourceRoot, "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics.asmdef");
+
+            Assert.That(File.Exists(asmdefPath), Is.True, "MonoBehaviourSemantics plugin asmdef must exist.");
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "MonoBehaviourSemanticsProvider.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "FindScriptGuidUsagesTool.cs")), Is.True);
+            Assert.That(File.Exists(Path.Combine(sourceRoot, "MonoBehaviourReferenceProviders.cs")), Is.True);
+
+            var asmdefText = File.ReadAllText(asmdefPath);
+            Assert.That(asmdefText, Does.Not.Contain("UnityMcp.AgentBridge.Editor"));
+            Assert.That(asmdefText, Does.Not.Contain("UnityMcp.AgentBridge.SharedProtocolCore"));
+
+            foreach (var sourceFile in Directory.GetFiles(sourceRoot, "*.cs", SearchOption.AllDirectories))
+            {
+                var content = File.ReadAllText(sourceFile);
+                Assert.That(content, Does.Not.Contain("[AgentTool("), sourceFile);
+                Assert.That(content, Does.Not.Contain("AssetDatabase.Refresh("), sourceFile);
+                Assert.That(content, Does.Not.Contain("AssetDatabase.SaveAssets("), sourceFile);
+                Assert.That(content, Does.Not.Contain("EditorSceneManager.OpenScene("), sourceFile);
+            }
+        }
     }
 }

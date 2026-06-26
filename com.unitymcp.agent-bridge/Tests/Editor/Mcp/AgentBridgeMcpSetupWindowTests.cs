@@ -345,6 +345,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
         [Category("AGBM_UI")]
         public void SetupWindow_CreateToolFacade_IncludesRegisteredPluginCommands()
         {
+            AgentBridgeBootstrap.Reconfigure();
             var facade = AgentBridgeMcpSetupWindow.CreateToolFacade();
             var descriptors = facade.ListTools();
 
@@ -352,6 +353,9 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(descriptors, Has.Some.Matches<ToolDescriptor>(descriptor => descriptor.Name == "unity.project.get_info"));
             Assert.That(descriptors, Has.Some.Matches<ToolDescriptor>(descriptor => descriptor.Name == "unity.get_editor_state"));
             Assert.That(descriptors, Has.Some.Matches<ToolDescriptor>(descriptor => descriptor.Name == "unity.ping"));
+            Assert.That(descriptors, Has.Some.Matches<ToolDescriptor>(descriptor =>
+                descriptor.Name == "unity.mono.find_script_guid_usages" &&
+                descriptor.Description.Contains("MonoBehaviour script GUID")));
             Assert.That(descriptors.Count, Is.GreaterThan(3));
         }
 
