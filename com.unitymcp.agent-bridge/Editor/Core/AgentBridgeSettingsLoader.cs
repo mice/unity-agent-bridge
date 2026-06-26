@@ -35,6 +35,7 @@ namespace UnityMcp.AgentBridge
                 return SettingsLoadResult.Stop("AGENTBRIDGE_SETTINGS_INVALID_FIELD", validationMessage);
             }
 
+            EnsureDefaultPluginRegistrations(settingsAsset);
             return SettingsLoadResult.Start(settingsAsset, assetPath);
         }
 
@@ -77,6 +78,7 @@ namespace UnityMcp.AgentBridge
                 return SettingsLoadResult.Stop("AGENTBRIDGE_SETTINGS_INVALID_FIELD", validationMessage);
             }
 
+            EnsureDefaultPluginRegistrations(settingsAsset);
             return SettingsLoadResult.Start(settingsAsset, DefaultAssetPath);
         }
 
@@ -290,44 +292,70 @@ namespace UnityMcp.AgentBridge
 
         private static System.Collections.Generic.List<UnityMcpPluginRegistration> CreateDefaultPluginRegistrations()
         {
-            return new System.Collections.Generic.List<UnityMcpPluginRegistration>
+            var registrations = new System.Collections.Generic.List<UnityMcpPluginRegistration>();
+            AddDefaultPluginRegistration(
+                registrations,
+                "UnityMcp.BuiltInPlugins.ProjectInfo",
+                "UnityMcp.BuiltInPlugins.ProjectInfo.ProjectInfoProvider");
+            AddDefaultPluginRegistration(
+                registrations,
+                "UnityMcp.BuiltInPlugins.EditorBasics",
+                "UnityMcp.BuiltInPlugins.EditorBasics.EditorBasicsProvider");
+            AddDefaultPluginRegistration(
+                registrations,
+                "UnityMcp.BuiltInPlugins.UnityQueries",
+                "UnityMcp.BuiltInPlugins.UnityQueries.UnityQueriesProvider");
+            AddDefaultPluginRegistration(
+                registrations,
+                "UnityMcp.BuiltInPlugins.TestRunner",
+                "UnityMcp.BuiltInPlugins.TestRunner.TestRunnerProvider");
+            AddDefaultPluginRegistration(
+                registrations,
+                "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics",
+                "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics.MonoBehaviourSemanticsProvider");
+            AddDefaultPluginRegistration(
+                registrations,
+                "UnityMcp.BuiltInPlugins.RoslynExecution",
+                "UnityMcp.BuiltInPlugins.RoslynExecution.RoslynExecutionProvider");
+            return registrations;
+        }
+
+        private static void EnsureDefaultPluginRegistrations(AgentBridgeSettings settings)
+        {
+            if (settings.pluginRegistrations == null)
             {
-                new UnityMcpPluginRegistration
-                {
-                    enabled = true,
-                    kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
-                    assemblyName = "UnityMcp.BuiltInPlugins.ProjectInfo",
-                    providerTypeName = "UnityMcp.BuiltInPlugins.ProjectInfo.ProjectInfoProvider"
-                },
-                new UnityMcpPluginRegistration
-                {
-                    enabled = true,
-                    kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
-                    assemblyName = "UnityMcp.BuiltInPlugins.EditorBasics",
-                    providerTypeName = "UnityMcp.BuiltInPlugins.EditorBasics.EditorBasicsProvider"
-                },
-                new UnityMcpPluginRegistration
-                {
-                    enabled = true,
-                    kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
-                    assemblyName = "UnityMcp.BuiltInPlugins.UnityQueries",
-                    providerTypeName = "UnityMcp.BuiltInPlugins.UnityQueries.UnityQueriesProvider"
-                },
-                new UnityMcpPluginRegistration
-                {
-                    enabled = true,
-                    kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
-                    assemblyName = "UnityMcp.BuiltInPlugins.TestRunner",
-                    providerTypeName = "UnityMcp.BuiltInPlugins.TestRunner.TestRunnerProvider"
-                },
-                new UnityMcpPluginRegistration
-                {
-                    enabled = true,
-                    kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
-                    assemblyName = "UnityMcp.BuiltInPlugins.RoslynExecution",
-                    providerTypeName = "UnityMcp.BuiltInPlugins.RoslynExecution.RoslynExecutionProvider"
-                }
-            };
+                settings.pluginRegistrations = new System.Collections.Generic.List<UnityMcpPluginRegistration>();
+            }
+
+            EnsureDefaultPluginRegistration(
+                settings.pluginRegistrations,
+                "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics",
+                "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics.MonoBehaviourSemanticsProvider");
+        }
+
+        private static void EnsureDefaultPluginRegistration(System.Collections.Generic.List<UnityMcpPluginRegistration> registrations, string assemblyName, string providerTypeName)
+        {
+            if (registrations.Any(registration =>
+                registration != null &&
+                registration.kind == UnityMcpPluginRegistrationKind.AsmdefAssembly &&
+                string.Equals(registration.assemblyName, assemblyName, StringComparison.Ordinal) &&
+                string.Equals(registration.providerTypeName, providerTypeName, StringComparison.Ordinal)))
+            {
+                return;
+            }
+
+            AddDefaultPluginRegistration(registrations, assemblyName, providerTypeName);
+        }
+
+        private static void AddDefaultPluginRegistration(System.Collections.Generic.List<UnityMcpPluginRegistration> registrations, string assemblyName, string providerTypeName)
+        {
+            registrations.Add(new UnityMcpPluginRegistration
+            {
+                enabled = true,
+                kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
+                assemblyName = assemblyName,
+                providerTypeName = providerTypeName
+            });
         }
     }
 

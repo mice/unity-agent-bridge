@@ -1,0 +1,19 @@
+{
+  "name": "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics",
+  "rootNamespace": "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics",
+  "references": [
+    "Unity.Newtonsoft.Json",
+    "UnityMcp.Plugin.Abstractions"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

@@ -282,6 +282,37 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.agent_bridge_self_test" && item.mcpName == "mcp__unity__agent_bridge_self_test"), Is.True);
         }
 
+        [Test]
+        [Category("AGB_Core")]
+        [Category("AGB_169")]
+        public void Discovery_MonoBehaviourSemanticsPlugin_RegistersGuidUsageToolAndWritesCatalog()
+        {
+            var settings = CreatePluginOnlySettings();
+            settings.pluginRegistrations.Add(new UnityMcpPluginRegistration
+            {
+                enabled = true,
+                kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
+                assemblyName = "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics",
+                providerTypeName = "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics.MonoBehaviourSemanticsProvider"
+            });
+
+            var paths = new AgentBridgePaths(_projectRoot, settings);
+            paths.EnsureDirectories();
+            var registry = new AgentToolRegistry();
+            registry.Discover();
+            var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
+
+            var result = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, logger);
+
+            AssertPluginTool(registry, "unity.mono.find_script_guid_usages");
+            Assert.That(result.Catalog.tools.Any(item =>
+                item.bridgeTool == "unity.mono.find_script_guid_usages" &&
+                item.mcpName == "mcp__unity__mono_find_script_guid_usages"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item =>
+                item.bridgeTool == "unity.mono.find_script_guid_usages" &&
+                item.description.Contains("MonoBehaviour script GUID")), Is.True);
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_159.md
         [Test]
         [Category("AGB_Core")]

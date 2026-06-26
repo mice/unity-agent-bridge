@@ -6,6 +6,18 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.6] - 2026-06-26
+
+### Added
+
+- Added `UnityMcp.BuiltInPlugins.MonoBehaviourSemantics` with the dynamic tool `unity.mono.find_script_guid_usages` / `mcp__unity__mono_find_script_guid_usages` for read-only MonoBehaviour script GUID usage discovery.
+- Added provider metadata and a `guid_text_scan` MVP provider that scans prefab and scene YAML assets for candidate MonoScript GUID references.
+- Added AI Quick Connect actions in the MCP Setup window.
+
+### Changed
+
+- Existing `AgentBridgeSettings` assets now receive the new MonoBehaviour semantics built-in plugin registration when missing, so command list/catalog discovery includes the new tool without recreating settings.
+
 ## [1.2.5] - 2026-06-24
 
 ### Fixed
