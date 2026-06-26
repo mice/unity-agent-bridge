@@ -15,6 +15,7 @@ namespace UnityMcp.AgentBridge.Mcp
         internal const string DisabledActionTooltip = "Not wired in this build yet";
         internal const string BridgeToggleLabel = "Enable Unity Agent Bridge";
         internal const string BridgeConfirmTitle = "Confirm Unity Agent Bridge Setting";
+        internal const string AiQuickConnectPrompt = "Use the unity_agent_bridge MCP server for this Unity project. First call unity_bridge_health. If the bridge is available, call mcp__unity__get_editor_state or mcp__unity__project_get_info before running Unity-mutating tools. Do not launch another AI client from Unity.";
 
         private Vector2 _scrollPosition;
         private McpStatusSection _statusSection;
@@ -48,6 +49,8 @@ namespace UnityMcp.AgentBridge.Mcp
         private bool _runtimeInitRunning;
         private string _runtimeBuildMessage;
         private string _runtimeInitMessage;
+        private string _aiQuickConnectMessage;
+        private MessageType _aiQuickConnectMessageType;
         private bool _initialDiagnosticsQueued;
         private bool _showAdvancedDetails;
         private IUnityToolFacade _toolFacade;
@@ -85,6 +88,8 @@ namespace UnityMcp.AgentBridge.Mcp
             _diagnosticReport = string.Empty;
             _runtimeBuildMessage = string.Empty;
             _runtimeInitMessage = string.Empty;
+            _aiQuickConnectMessage = string.Empty;
+            _aiQuickConnectMessageType = MessageType.None;
             _toolFacade = CreateToolFacade();
         }
 
@@ -103,6 +108,9 @@ namespace UnityMcp.AgentBridge.Mcp
             EditorGUILayout.Space(12f);
 
             _clientConfigSection.Draw(_codexWriter, _claudeWriter, _cursorWriter, _copilotWriter, _settings);
+            EditorGUILayout.Space(12f);
+
+            DrawAiQuickConnect();
             EditorGUILayout.Space(12f);
 
             _diagnosticsSection.Draw(
@@ -236,6 +244,112 @@ namespace UnityMcp.AgentBridge.Mcp
                     }
                 }
             }
+        }
+
+        private void DrawAiQuickConnect()
+        {
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField("AI Quick Connect", EditorStyles.boldLabel);
+                EditorGUILayout.HelpBox(
+                    "Refresh project-local MCP config for Codex, Claude Code, Cursor, and GitHub Copilot, then give the AI a low-risk first-use prompt for unity_agent_bridge.",
+                    MessageType.Info);
+
+                var effectiveSettings = _settings ?? McpEditorSettingsDefaults.Create();
+                var resolver = _pathResolver ?? new McpPathResolver();
+                var runtimeLauncher = Path.Combine(
+                    resolver.ResolveWorkspaceRuntimeRoot(effectiveSettings),
+                    "AgentBridge",
+                    "Start-UnityAgentBridge-Mcp.cmd");
+
+                var runtimeReady = File.Exists(runtimeLauncher);
+                EditorGUILayout.LabelField("MCP Server", "unity_agent_bridge");
+                EditorGUILayout.LabelField("Supported Clients", "Codex, Claude Code, Cursor, GitHub Copilot");
+                EditorGUILayout.LabelField("Prepared Launcher", runtimeReady ? runtimeLauncher : "Prepare runtime first");
+
+                if (!runtimeReady)
+                {
+                    EditorGUILayout.HelpBox("Prepare the project runtime before asking AI clients to connect.", MessageType.Warning);
+                }
+
+                EditorGUILayout.Space(6f);
+                EditorGUILayout.LabelField("AI Prompt", EditorStyles.boldLabel);
+                EditorGUILayout.TextArea(AiQuickConnectPrompt, GUILayout.MinHeight(54f));
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("Refresh All Client Configs", GUILayout.Width(180f)))
+                    {
+                        RefreshAllClientConfigs();
+                    }
+
+                    if (GUILayout.Button("Copy AI Prompt", GUILayout.Width(120f)))
+                    {
+                        EditorGUIUtility.systemCopyBuffer = AiQuickConnectPrompt;
+                        _aiQuickConnectMessage = "AI Quick Connect prompt copied.";
+                        _aiQuickConnectMessageType = MessageType.Info;
+                    }
+                }
+
+                if (_aiQuickConnectMessageType != MessageType.None && !string.IsNullOrWhiteSpace(_aiQuickConnectMessage))
+                {
+                    EditorGUILayout.Space(4f);
+                    EditorGUILayout.HelpBox(_aiQuickConnectMessage, _aiQuickConnectMessageType);
+                }
+            }
+        }
+
+        private void RefreshAllClientConfigs()
+        {
+            var writers = new[]
+            {
+                _codexWriter,
+                _claudeWriter,
+                _cursorWriter,
+                _copilotWriter,
+            };
+
+            var appliedTargets = new System.Collections.Generic.List<string>();
+            foreach (var writer in writers)
+            {
+                if (writer == null)
+                {
+                    _aiQuickConnectMessage = DisabledActionTooltip;
+                    _aiQuickConnectMessageType = MessageType.Warning;
+                    return;
+                }
+
+                var result = writer.Apply(_settings);
+                if (result == null || !result.Applied)
+                {
+                    var reason = result != null && !string.IsNullOrWhiteSpace(result.Reason)
+                        ? result.Reason
+                        : "Unknown configuration failure.";
+                    _aiQuickConnectMessage = "AI Quick Connect config refresh failed: " + reason;
+                    if (result != null && !string.IsNullOrWhiteSpace(result.TargetPath))
+                    {
+                        _aiQuickConnectMessage += Environment.NewLine + result.TargetPath;
+                    }
+
+                    _aiQuickConnectMessageType = MessageType.Warning;
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(result.TargetPath))
+                {
+                    appliedTargets.Add(result.TargetPath);
+                }
+            }
+
+            _aiQuickConnectMessage = "AI Quick Connect refreshed project-local MCP configs.";
+            if (appliedTargets.Count > 0)
+            {
+                _aiQuickConnectMessage += Environment.NewLine + string.Join(Environment.NewLine, appliedTargets.ToArray());
+            }
+
+            _aiQuickConnectMessageType = MessageType.Info;
+            _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
+            Repaint();
         }
 
         private void DrawSetupFlowControls()

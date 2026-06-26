@@ -222,6 +222,29 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Contain(".vscode/mcp.json"));
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_183.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_183")]
+        public void SetupWindow_Source_ExposesAiQuickConnectPromptAndBatchRefresh()
+        {
+            var content = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/UI/AgentBridgeMcpSetupWindow.cs"));
+
+            Assert.That(content, Does.Contain("AI Quick Connect"));
+            Assert.That(content, Does.Contain("unity_agent_bridge"));
+            Assert.That(content, Does.Contain("unity_bridge_health"));
+            Assert.That(content, Does.Contain("mcp__unity__get_editor_state"));
+            Assert.That(content, Does.Contain("mcp__unity__project_get_info"));
+            Assert.That(content, Does.Contain("Do not launch another AI client from Unity."));
+            Assert.That(content, Does.Contain("Refresh All Client Configs"));
+            Assert.That(content, Does.Contain("Copy AI Prompt"));
+            Assert.That(content, Does.Contain("RefreshAllClientConfigs();"));
+            Assert.That(content, Does.Contain("_codexWriter"));
+            Assert.That(content, Does.Contain("_claudeWriter"));
+            Assert.That(content, Does.Contain("_cursorWriter"));
+            Assert.That(content, Does.Contain("_copilotWriter"));
+        }
+
         [Test]
         [Category("AGBM_UI")]
         public void SetupWindow_Source_UsesDedicatedCommandListWindowAndRemovesDeprecatedUi()
