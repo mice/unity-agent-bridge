@@ -179,6 +179,8 @@ namespace UnityMcp.AgentBridge.Mcp
                 }
 
                 EditorGUILayout.Space(8f);
+                DrawMonoBehaviourSemanticsControls();
+                EditorGUILayout.Space(8f);
                 DrawConfiguredProjectControls();
                 EditorGUILayout.Space(8f);
                 var currentWorkspaceRoot = _settings != null ? _settings.WorkspaceRoot : string.Empty;
@@ -244,6 +246,90 @@ namespace UnityMcp.AgentBridge.Mcp
                     }
                 }
             }
+        }
+
+        private static void DrawMonoBehaviourSemanticsControls()
+        {
+            var loadResult = AgentBridgeSettingsLoader.Load();
+            var settings = loadResult.Settings;
+            EditorGUILayout.LabelField("MonoBehaviour Semantics", EditorStyles.boldLabel);
+            if (settings == null)
+            {
+                EditorGUILayout.HelpBox(loadResult.WarningMessage ?? "Agent Bridge settings could not be loaded.", MessageType.Warning);
+                return;
+            }
+
+            EditorGUI.BeginChangeCheck();
+            var enabled = EditorGUILayout.ToggleLeft(
+                "Enable FindReference2 provider",
+                settings.monoBehaviourFindReference2ProviderEnabled);
+            if (EditorGUI.EndChangeCheck())
+            {
+                settings.monoBehaviourFindReference2ProviderEnabled = enabled;
+                EditorUtility.SetDirty(settings);
+                AssetDatabase.SaveAssets();
+                AgentBridgeBootstrap.Reconfigure();
+            }
+
+            var readiness = GetFindReference2ReadinessLabel(settings.monoBehaviourFindReference2ProviderEnabled);
+            EditorGUILayout.LabelField("FindReference2 Provider", readiness);
+        }
+
+        internal static string GetFindReference2ReadinessLabel(bool enabled)
+        {
+            if (!enabled)
+            {
+                return IsFindReference2InstalledByPackageEvidence() ? "installed but disabled" : "not installed";
+            }
+
+            return IsFindReference2EntryTypeAvailable() ? "enabled" : "enabled but incompatible";
+        }
+
+        internal static bool IsFindReference2InstalledByPackageEvidence()
+        {
+            if (AssetDatabase.IsValidFolder("Packages/FindReference2") ||
+                AssetDatabase.IsValidFolder("Assets/FindReference2"))
+            {
+                return true;
+            }
+
+            var guids = AssetDatabase.FindAssets("FindReference2 FR2");
+            if (guids == null)
+            {
+                return false;
+            }
+
+            foreach (var guid in guids)
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    continue;
+                }
+
+                if (path.IndexOf("FindReference2", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    path.IndexOf("/FR2", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsFindReference2EntryTypeAvailable()
+        {
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!string.Equals(assembly.GetName().Name, "FR2", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                return assembly.GetType("vietlabs.fr2.FR2", false) != null;
+            }
+
+            return false;
         }
 
         private void DrawAiQuickConnect()

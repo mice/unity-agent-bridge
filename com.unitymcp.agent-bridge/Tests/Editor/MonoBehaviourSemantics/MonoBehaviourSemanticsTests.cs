@@ -132,12 +132,90 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(result.success, Is.False);
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.InvalidArgs));
             Assert.That(result.errors.Any(error => error.code == "AGENTBRIDGE_MONO_PROVIDER_UNAVAILABLE"), Is.True);
+            Assert.That(result.metricsObjectJson, Does.Contain("\"id\":\"findreference2\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"readinessState\":\"disabled\""));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_176.md
+        [Test]
+        [Category("AGB_MonoBehaviourSemantics")]
+        [Category("AGB_176")]
+        public void FindScriptGuidUsages_AutoFallsBackToGuidTextScanWhenFindReference2Disabled()
+        {
+            var provider = new FindReference2ReflectionProvider(
+                () => false,
+                typeof(FakeFindReference2Api).Assembly.GetName().Name,
+                typeof(FakeFindReference2Api).FullName,
+                nameof(FakeFindReference2Api.GetUsedBy));
+            var result = Execute(
+                "{\"scriptGuid\":\"" + ScriptGuid + "\",\"provider\":\"auto\",\"assetTypes\":[\"prefab\"],\"searchFolders\":[\"Assets\"],\"limit\":10}",
+                new MonoBehaviourReferenceService(provider, new GuidTextScanReferenceProvider()));
+
+            Assert.That(result.success, Is.True);
+            Assert.That(result.status, Is.EqualTo(ToolResultStatus.Success));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"id\":\"guid_text_scan\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"assetPath\":\"" + PrefabPath + "\""));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_176.md
+        [Test]
+        [Category("AGB_MonoBehaviourSemantics")]
+        [Category("AGB_176")]
+        public void FindScriptGuidUsages_FindReference2FakeReflectionSuccess_MapsOwnedDto()
+        {
+            var provider = new FindReference2ReflectionProvider(
+                () => true,
+                typeof(FakeFindReference2Api).Assembly.GetName().Name,
+                typeof(FakeFindReference2Api).FullName,
+                nameof(FakeFindReference2Api.GetUsedBy));
+            var result = Execute(
+                "{\"scriptGuid\":\"" + ScriptGuid + "\",\"provider\":\"findreference2\",\"limit\":10}",
+                new MonoBehaviourReferenceService(provider, new GuidTextScanReferenceProvider()));
+
+            Assert.That(result.success, Is.True);
+            Assert.That(result.status, Is.EqualTo(ToolResultStatus.Success));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"id\":\"findreference2\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"readinessState\":\"enabled\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"dependencyCache\":true"));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"assetPath\":\"Assets/FakeFindReference2.prefab\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"gameObjectPath\":\"FakeRoot\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"componentIndex\":2"));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_176.md
+        [Test]
+        [Category("AGB_MonoBehaviourSemantics")]
+        [Category("AGB_176")]
+        public void FindScriptGuidUsages_FindReference2FakeReflectionException_ReturnsControlledFailure()
+        {
+            var provider = new FindReference2ReflectionProvider(
+                () => true,
+                typeof(FakeThrowingFindReference2Api).Assembly.GetName().Name,
+                typeof(FakeThrowingFindReference2Api).FullName,
+                nameof(FakeThrowingFindReference2Api.GetUsedBy));
+            var result = Execute(
+                "{\"scriptGuid\":\"" + ScriptGuid + "\",\"provider\":\"findreference2\",\"limit\":10}",
+                new MonoBehaviourReferenceService(provider, new GuidTextScanReferenceProvider()));
+
+            Assert.That(result.success, Is.True);
+            Assert.That(result.status, Is.EqualTo(ToolResultStatus.Success));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"id\":\"findreference2\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"diagnosticCode\":\"FINDREFERENCE2_INVOCATION_FAILED\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"usageCount\":0"));
         }
 
         private static ToolResult Execute(string rawArgsJson)
         {
+            return Execute(rawArgsJson, null);
+        }
+
+        private static ToolResult Execute(string rawArgsJson, MonoBehaviourReferenceService service)
+        {
             var registry = new AgentToolRegistry();
-            registry.Register(new UnityMcpPluginToolAdapter(new FindScriptGuidUsagesTool(), Directory.GetParent(Application.dataPath)?.FullName, "Temp/AgentBridge"));
+            registry.Register(new UnityMcpPluginToolAdapter(
+                service == null ? new FindScriptGuidUsagesTool() : new FindScriptGuidUsagesTool(service),
+                Directory.GetParent(Application.dataPath)?.FullName,
+                "Temp/AgentBridge"));
             Assert.That(registry.TryGetTool("unity.mono.find_script_guid_usages", out var tool), Is.True);
 
             return tool.Execute(new AgentToolContext
@@ -157,6 +235,56 @@ namespace UnityMcp.AgentBridge.Tests
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
             Assert.That(projectRoot, Is.Not.Null);
             return Path.Combine(projectRoot, assetPath.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        public sealed class FakeFindReference2Api
+        {
+            public static FakeFindReference2Match[] GetUsedBy(string[] guids, FakeDependency dep, int depth, FakeDepthFilter filter, FakeSorting sort)
+            {
+                return new[]
+                {
+                    new FakeFindReference2Match
+                    {
+                        assetPath = "Assets/FakeFindReference2.prefab",
+                        assetType = "prefab",
+                        gameObjectPath = "FakeRoot",
+                        componentIndex = 2,
+                        componentType = "FakeComponent"
+                    }
+                };
+            }
+        }
+
+        public sealed class FakeThrowingFindReference2Api
+        {
+            public static FakeFindReference2Match[] GetUsedBy(string[] guids, FakeDependency dep, int depth, FakeDepthFilter filter, FakeSorting sort)
+            {
+                throw new System.InvalidOperationException("fake reflection failure");
+            }
+        }
+
+        public enum FakeDependency
+        {
+            Default
+        }
+
+        public enum FakeDepthFilter
+        {
+            Default
+        }
+
+        public enum FakeSorting
+        {
+            Default
+        }
+
+        public sealed class FakeFindReference2Match
+        {
+            public string assetPath;
+            public string assetType;
+            public string gameObjectPath;
+            public int componentIndex;
+            public string componentType;
         }
     }
 }

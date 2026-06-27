@@ -16,6 +16,7 @@ namespace UnityMcp.AgentBridge.Tests
 
             Assert.That(settings.enabled, Is.True);
             Assert.That(settings.roslynExecutionEnabled, Is.False);
+            Assert.That(settings.monoBehaviourFindReference2ProviderEnabled, Is.False);
             Assert.That(settings.pollIntervalMs, Is.EqualTo(200));
             Assert.That(settings.maxPollIntervalMs, Is.EqualTo(2000));
             Assert.That(settings.compileBackoffMs, Is.EqualTo(1000));

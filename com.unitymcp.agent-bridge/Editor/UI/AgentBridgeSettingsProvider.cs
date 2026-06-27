@@ -30,6 +30,9 @@ namespace UnityMcp.AgentBridge
                     EditorGUI.BeginChangeCheck();
                     settings.enabled = EditorGUILayout.Toggle("Enabled", settings.enabled);
                     settings.roslynExecutionEnabled = EditorGUILayout.Toggle("Enable Roslyn Execution", settings.roslynExecutionEnabled);
+                    settings.monoBehaviourFindReference2ProviderEnabled = EditorGUILayout.Toggle(
+                        "Enable FindReference2 Provider",
+                        settings.monoBehaviourFindReference2ProviderEnabled);
                     if (EditorGUI.EndChangeCheck())
                     {
                         EditorUtility.SetDirty(settings);
@@ -40,6 +43,10 @@ namespace UnityMcp.AgentBridge
                     EditorGUILayout.HelpBox(
                         "Roslyn execution is trusted local automation. Submitted code runs inside the Unity Editor process, can mutate project state, and MVP does not guarantee interruption of dead loops or blocking calls.",
                         MessageType.Warning);
+
+                    EditorGUILayout.HelpBox(
+                        "FindReference2 provider integration is optional local automation for MonoBehaviour Semantics. It is disabled by default and only probes FindReference2 through reflection after explicit enablement.",
+                        MessageType.Info);
 
                     if (GUILayout.Button("Ping Reconfigure"))
                     {

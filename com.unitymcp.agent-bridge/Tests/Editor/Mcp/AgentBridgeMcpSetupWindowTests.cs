@@ -257,6 +257,52 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Not.Contain("AutoLaunchToggleLabel"));
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_184.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_184")]
+        public void SetupWindow_Source_ExposesFindReference2ProviderToggleAndReadiness()
+        {
+            var content = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/UI/AgentBridgeMcpSetupWindow.cs"));
+            var settingsContent = File.ReadAllText(GetPackageRelativePath("Editor/Core/AgentBridgeSettings.cs"));
+            var projectSettingsContent = File.ReadAllText(GetPackageRelativePath("Editor/UI/AgentBridgeSettingsProvider.cs"));
+
+            Assert.That(settingsContent, Does.Contain("monoBehaviourFindReference2ProviderEnabled"));
+            Assert.That(projectSettingsContent, Does.Contain("Enable FindReference2 Provider"));
+            Assert.That(content, Does.Contain("MonoBehaviour Semantics"));
+            Assert.That(content, Does.Contain("Enable FindReference2 provider"));
+            Assert.That(content, Does.Contain("GetFindReference2ReadinessLabel"));
+            Assert.That(content, Does.Contain("\"not installed\""));
+            Assert.That(content, Does.Contain("\"installed but disabled\""));
+            Assert.That(content, Does.Contain("\"enabled\""));
+            Assert.That(content, Does.Contain("\"enabled but incompatible\""));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_184.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_184")]
+        public void SetupWindow_Source_UsesDllEntryForEnabledFindReference2Readiness()
+        {
+            var content = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/UI/AgentBridgeMcpSetupWindow.cs"));
+            var enabledBranch = content.IndexOf("return IsFindReference2EntryTypeAvailable() ? \"enabled\" : \"enabled but incompatible\";");
+            var entryType = content.IndexOf("assembly.GetType(\"vietlabs.fr2.FR2\", false)");
+
+            Assert.That(enabledBranch, Is.GreaterThanOrEqualTo(0));
+            Assert.That(entryType, Is.GreaterThanOrEqualTo(0));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_184.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_184")]
+        public void SetupWindow_FindReference2Readiness_DisabledDoesNotRequireReflection()
+        {
+            var readiness = AgentBridgeMcpSetupWindow.GetFindReference2ReadinessLabel(false);
+
+            Assert.That(readiness, Is.EqualTo("not installed").Or.EqualTo("installed but disabled"));
+        }
+
         [Test]
         [Category("AGBM_UI")]
         public void SetupWindow_Source_ReconfiguresBridgeAfterRuntimePreparation()

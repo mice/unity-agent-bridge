@@ -59,9 +59,9 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
                 return failure;
             }
 
-            if (!_referenceService.TryFindProvider(providerSelection, out var provider, out var providerFailure))
+            if (!_referenceService.TryFindProvider(providerSelection, out var provider, out var unavailableProvider, out var providerFailure))
             {
-                return MonoBehaviourSemanticsResult.InvalidArgs("AGENTBRIDGE_MONO_PROVIDER_UNAVAILABLE", providerFailure);
+                return MonoBehaviourSemanticsResult.InvalidArgs("AGENTBRIDGE_MONO_PROVIDER_UNAVAILABLE", providerFailure, unavailableProvider);
             }
 
             var query = new MonoBehaviourReferenceQuery
@@ -69,7 +69,8 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
                 Script = script,
                 SearchFolders = searchFolders,
                 AssetTypes = assetTypes,
-                Limit = limit
+                Limit = limit,
+                ProviderSelection = providerSelection
             };
 
             var searchResult = provider.FindUsages(query);
@@ -94,7 +95,7 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
             {
                 Success = true,
                 Status = UnityMcpToolStatus.Success,
-                Summary = $"Found {metrics.usageCount} candidate text matches for MonoBehaviour script GUID {script.guid}; returned {metrics.returnedCount}.",
+                Summary = $"Found {metrics.usageCount} {metrics.provider.id} matches for MonoBehaviour script GUID {script.guid}; returned {metrics.returnedCount}.",
                 MetricsObjectJson = MonoBehaviourSemanticsJson.Serialize(metrics)
             };
             result.ReportPath = MonoBehaviourSemanticsReportWriter.WriteReport(context, context.CommandId, "mono_find_script_guid_usages", report);

@@ -62,11 +62,17 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
     {
         public static UnityMcpToolResult InvalidArgs(string code, string message)
         {
+            return InvalidArgs(code, message, null);
+        }
+
+        public static UnityMcpToolResult InvalidArgs(string code, string message, ReferenceProviderMetadata provider)
+        {
             return new UnityMcpToolResult
             {
                 Success = false,
                 Status = UnityMcpToolStatus.InvalidArgs,
                 Summary = message,
+                MetricsObjectJson = provider == null ? null : MonoBehaviourSemanticsJson.Serialize(new { provider }),
                 Errors =
                 {
                     new UnityMcpToolError

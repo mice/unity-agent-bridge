@@ -41,6 +41,9 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
         public string selection;
         public string confidence;
         public ReferenceProviderCapabilities capabilities;
+        public string readinessState;
+        public string diagnosticCode;
+        public string diagnosticMessage;
     }
 
     [Serializable]
@@ -51,6 +54,10 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
         public int line;
         public int column;
         public string text;
+        public string gameObjectPath;
+        public int? componentIndex;
+        public string componentType;
+        public string serializedFieldPath;
     }
 
     [Serializable]
@@ -99,6 +106,7 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
         public string[] SearchFolders = Array.Empty<string>();
         public string[] AssetTypes = Array.Empty<string>();
         public int Limit;
+        public string ProviderSelection;
     }
 
     internal sealed class MonoBehaviourReferenceResult
