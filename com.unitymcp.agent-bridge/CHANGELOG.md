@@ -18,6 +18,10 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 - Existing `AgentBridgeSettings` assets now receive the new MonoBehaviour semantics built-in plugin registration when missing, so command list/catalog discovery includes the new tool without recreating settings.
 
+### Fixed
+
+- Fixed managed Codex MCP configuration generation so `unity_agent_bridge` launches with `UNITY_AGENT_BRIDGE_PROJECT_PATH` bound to the current Unity project.
+
 ## [1.2.5] - 2026-06-24
 
 ### Fixed
