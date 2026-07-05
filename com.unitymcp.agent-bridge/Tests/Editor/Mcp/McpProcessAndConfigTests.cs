@@ -117,6 +117,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(preview, Does.Contain(executablePath.Replace("\\", "\\\\")));
             Assert.That(preview, Does.Contain("args = [\"mcp-server\"]"));
             Assert.That(preview, Does.Contain("[mcp_servers.unity_agent_bridge]"));
+            AssertHasCodexProjectPathEnv(preview, projectRoot);
         }
 
         [Test]
@@ -265,6 +266,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Not.Contain("command = \"custom\""));
             Assert.That(content, Does.Contain("command = \"" + executablePath.Replace("\\", "\\\\") + "\""));
             AssertHasMcpServerArgs(content);
+            AssertHasCodexProjectPathEnv(content, projectRoot);
             Assert.That(content, Does.Contain("[other]"));
             Assert.That(content, Does.Contain("value = 1"));
         }
@@ -300,6 +302,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Contain("approval_mode = \"approve\""));
             Assert.That(content, Does.Not.Contain("args = [\"old\"]"));
             AssertHasMcpServerArgs(content);
+            AssertHasCodexProjectPathEnv(content, projectRoot);
         }
 
         [Test]
@@ -817,6 +820,12 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
         private static void AssertHasMcpServerArgs(string content)
         {
             Assert.That(content, Does.Match(@"(?m)^args\s*=\s*\[\s*""mcp-server""\s*\]"));
+        }
+
+        private static void AssertHasCodexProjectPathEnv(string content, string projectRoot)
+        {
+            Assert.That(content, Does.Contain("[mcp_servers.unity_agent_bridge.env]"));
+            Assert.That(content, Does.Contain("UNITY_AGENT_BRIDGE_PROJECT_PATH = \"" + projectRoot.Replace("\\", "\\\\") + "\""));
         }
 
         private sealed class FakeProcessRunner : IAsyncProcessRunner

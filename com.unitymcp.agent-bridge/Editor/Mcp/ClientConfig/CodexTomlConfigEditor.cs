@@ -21,6 +21,11 @@ namespace UnityMcp.AgentBridge.Mcp
 
         public ManagedBlockApplyResult Apply(string targetPath, string executableCommand)
         {
+            return Apply(targetPath, executableCommand, string.Empty);
+        }
+
+        public ManagedBlockApplyResult Apply(string targetPath, string executableCommand, string projectRoot)
+        {
             if (string.IsNullOrWhiteSpace(targetPath))
             {
                 throw new ArgumentException("targetPath must not be empty.", nameof(targetPath));
@@ -33,7 +38,7 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var original = File.Exists(targetPath) ? File.ReadAllText(targetPath) : string.Empty;
-            var updated = ApplyTomlManagedContent(original, executableCommand);
+            var updated = ApplyTomlManagedContent(original, executableCommand, projectRoot);
             if (!CodexProjectConfigWriter.ValidateManagedTomlResult(updated))
             {
                 return new ManagedBlockApplyResult
@@ -73,25 +78,25 @@ namespace UnityMcp.AgentBridge.Mcp
             };
         }
 
-        private string ApplyTomlManagedContent(string originalText, string executableCommand)
+        private string ApplyTomlManagedContent(string originalText, string executableCommand, string projectRoot)
         {
             var normalized = NormalizeLineEndings(originalText ?? string.Empty);
             if (string.IsNullOrWhiteSpace(normalized))
             {
-                return _textEditor.Apply(string.Empty, CodexProjectConfigWriter.BuildManagedBlockBody(executableCommand));
+                return _textEditor.Apply(string.Empty, CodexProjectConfigWriter.BuildManagedBlockBody(executableCommand, projectRoot, string.Empty));
             }
 
-            if (TryApplyWithToml(normalized, executableCommand, out var updated))
+            if (TryApplyWithToml(normalized, executableCommand, projectRoot, out var updated))
             {
                 return updated;
             }
 
             var preservedChildSections = CodexProjectConfigWriter.ExtractUnityAgentBridgeChildSections(normalized);
-            var mergedBlock = CodexProjectConfigWriter.BuildManagedBlockBody(executableCommand, preservedChildSections);
+            var mergedBlock = CodexProjectConfigWriter.BuildManagedBlockBody(executableCommand, projectRoot, preservedChildSections);
             return CodexProjectConfigWriter.ApplyManagedContent(normalized, mergedBlock, _textEditor);
         }
 
-        private bool TryApplyWithToml(string originalText, string executableCommand, out string updatedText)
+        private bool TryApplyWithToml(string originalText, string executableCommand, string projectRoot, out string updatedText)
         {
             updatedText = null;
 
@@ -124,6 +129,12 @@ namespace UnityMcp.AgentBridge.Mcp
             bridgeTable["startup_timeout_sec"] = 20L;
             bridgeTable["tool_timeout_sec"] = 300L;
             bridgeTable["required"] = false;
+            if (!string.IsNullOrWhiteSpace(projectRoot))
+            {
+                var envTable = new TomlTable();
+                envTable["UNITY_AGENT_BRIDGE_PROJECT_PATH"] = Path.GetFullPath(projectRoot.Trim());
+                bridgeTable["env"] = envTable;
+            }
 
             if (childRoot != null
                 && childRoot.TryGetNode("mcp_servers", out var childMcpServersNode)
