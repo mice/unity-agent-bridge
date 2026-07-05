@@ -330,6 +330,26 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Contain("PollRuntimeBuildTask"));
         }
 
+        [Test]
+        [Category("AGBM_UI")]
+        public void SetupWindow_Source_ExposesMcpServerProcessStateAndStopAction()
+        {
+            var windowContent = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/UI/AgentBridgeMcpSetupWindow.cs"));
+            var statusContent = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/UI/McpStatusSection.cs"));
+
+            Assert.That(windowContent, Does.Contain("new McpServerProcessProbe()"));
+            Assert.That(windowContent, Does.Contain("RefreshServerProcessSnapshot();"));
+            Assert.That(windowContent, Does.Contain("RefreshServerProcessSnapshot(force: true);"));
+            Assert.That(windowContent, Does.Contain("ServerProcessRefreshIntervalSeconds"));
+            Assert.That(windowContent, Does.Contain("Stop MCP Server"));
+            Assert.That(windowContent, Does.Contain("\"Refresh\""));
+            Assert.That(windowContent, Does.Contain("StopMcpServer();"));
+            Assert.That(windowContent, Does.Contain("Stop the active MCP server before preparing the runtime."));
+            Assert.That(statusContent, Does.Contain("Long-running MCP Server"));
+            Assert.That(windowContent, Does.Contain("Server Process Detail"));
+            Assert.That(statusContent, Does.Contain("DrawServerProcessDetails"));
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_169.md
         [Test]
         [Category("AGBM_UI")]

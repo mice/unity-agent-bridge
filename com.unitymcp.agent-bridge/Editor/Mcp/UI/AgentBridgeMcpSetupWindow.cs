@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
@@ -16,6 +17,7 @@ namespace UnityMcp.AgentBridge.Mcp
         internal const string BridgeToggleLabel = "Enable Unity Agent Bridge";
         internal const string BridgeConfirmTitle = "Confirm Unity Agent Bridge Setting";
         internal const string AiQuickConnectPrompt = "Use the unity_agent_bridge MCP server for this Unity project. First call unity_bridge_health. If the bridge is available, call mcp__unity__get_editor_state or mcp__unity__project_get_info before running Unity-mutating tools. Do not launch another AI client from Unity.";
+        internal const double ServerProcessRefreshIntervalSeconds = 5.0d;
 
         private Vector2 _scrollPosition;
         private McpStatusSection _statusSection;
@@ -35,6 +37,9 @@ namespace UnityMcp.AgentBridge.Mcp
         private McpReportFormatter _reportFormatter;
         private McpRuntimeInitializer _runtimeInitializer;
         private McpRuntimeBuilder _runtimeBuilder;
+        private McpServerProcessProbe _serverProcessProbe;
+        private McpServerProcessSnapshot _serverProcessSnapshot;
+        private double _serverProcessLastRefreshTime;
         private System.Collections.Generic.IReadOnlyList<McpDiagnosticCheck> _diagnosticChecks;
         private McpReadiness _readiness;
         private string _diagnosticReport;
@@ -49,6 +54,8 @@ namespace UnityMcp.AgentBridge.Mcp
         private bool _runtimeInitRunning;
         private string _runtimeBuildMessage;
         private string _runtimeInitMessage;
+        private string _serverProcessMessage;
+        private MessageType _serverProcessMessageType;
         private string _aiQuickConnectMessage;
         private MessageType _aiQuickConnectMessageType;
         private bool _initialDiagnosticsQueued;
@@ -77,8 +84,10 @@ namespace UnityMcp.AgentBridge.Mcp
             _reportFormatter = new McpReportFormatter();
             _runtimeInitializer = new McpRuntimeInitializer();
             _runtimeBuilder = new McpRuntimeBuilder();
+            _serverProcessProbe = new McpServerProcessProbe();
             _settings = _settingsStore.Load();
             _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
+            RefreshServerProcessSnapshot(force: true);
             _codexWriter = new CodexProjectConfigWriter();
             _claudeWriter = new ClaudeCodeProjectConfigWriter();
             _cursorWriter = new CursorProjectConfigWriter();
@@ -88,6 +97,8 @@ namespace UnityMcp.AgentBridge.Mcp
             _diagnosticReport = string.Empty;
             _runtimeBuildMessage = string.Empty;
             _runtimeInitMessage = string.Empty;
+            _serverProcessMessage = string.Empty;
+            _serverProcessMessageType = MessageType.None;
             _aiQuickConnectMessage = string.Empty;
             _aiQuickConnectMessageType = MessageType.None;
             _toolFacade = CreateToolFacade();
@@ -447,7 +458,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 EditorGUILayout.Space(8f);
                 DrawWorkspaceConfigTargetSummary();
                 EditorGUILayout.Space(12f);
-                _statusSection.Draw(CreateStatusViewModel(_snapshot, _settings, _pathResolver, _readiness));
+                _statusSection.Draw(CreateStatusViewModel(_snapshot, _settings, _pathResolver, _readiness, _serverProcessSnapshot));
             }
         }
 
@@ -526,8 +537,10 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             var effectiveSettings = _settings ?? McpEditorSettingsDefaults.Create();
             var runtimeRoot = (_pathResolver ?? new McpPathResolver()).ResolveWorkspaceRuntimeRoot(effectiveSettings);
+            RefreshServerProcessSnapshot();
             var buildTooltip = "Build the local MCP runtime executables from package-contained source with .NET 8 SDK into the Unity project .unitymcp/runtime directory.";
             var tooltip = "Prepare a project-local MCP runtime by copying packaged launcher/configuration files and validating the locally built runtime executable in the Unity project .unitymcp/runtime directory.";
+            var stopTooltip = "Stop Unity Agent Bridge MCP server processes matched to this Unity project or prepared runtime.";
             EditorGUILayout.LabelField(new GUIContent("MCP Runtime", tooltip), EditorStyles.boldLabel);
             using (new EditorGUILayout.HorizontalScope())
             {
@@ -547,6 +560,37 @@ namespace UnityMcp.AgentBridge.Mcp
                         InitializeMcpRuntime();
                     }
                 }
+
+                var canStopServer = _serverProcessSnapshot != null && _serverProcessSnapshot.SafeStopTargets.Any();
+                using (new EditorGUI.DisabledScope(!canStopServer || _runtimeBuildRunning || _runtimeInitRunning))
+                {
+                    if (GUILayout.Button(new GUIContent("Stop MCP Server", stopTooltip), GUILayout.Width(130f)))
+                    {
+                        StopMcpServer();
+                    }
+                }
+
+                if (GUILayout.Button(new GUIContent("Refresh", "Refresh MCP server process state now."), GUILayout.Width(80f)))
+                {
+                    RefreshServerProcessSnapshot(force: true);
+                    Repaint();
+                }
+            }
+
+            if (_serverProcessSnapshot != null)
+            {
+                EditorGUILayout.LabelField("Long-running MCP Server", _serverProcessSnapshot.Summary);
+                if (!string.IsNullOrWhiteSpace(_serverProcessSnapshot.Detail))
+                {
+                    EditorGUILayout.LabelField("Server Process Detail", _serverProcessSnapshot.Detail);
+                }
+
+                EditorGUILayout.LabelField("MCP Server Checked", FormatServerProcessLastChecked());
+            }
+
+            if (_serverProcessMessageType != MessageType.None && !string.IsNullOrWhiteSpace(_serverProcessMessage))
+            {
+                EditorGUILayout.HelpBox(_serverProcessMessage, _serverProcessMessageType);
             }
 
             if (_runtimeBuildRunning)
@@ -604,7 +648,8 @@ namespace UnityMcp.AgentBridge.Mcp
             McpEnvironmentSnapshot snapshot,
             McpEditorSettings settings,
             McpPathResolver pathResolver,
-            McpReadiness readiness)
+            McpReadiness readiness,
+            McpServerProcessSnapshot serverProcessSnapshot)
         {
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
             var effectiveSettings = settings ?? McpEditorSettingsDefaults.Create();
@@ -637,7 +682,107 @@ namespace UnityMcp.AgentBridge.Mcp
                 McpReadiness = FormatReadiness(effectiveReadiness),
                 PriorityMessage = BuildPriorityMessage(projectRoot, configuredUnityProjectPath, resolvedToolsRoot, effectiveReadiness),
                 PriorityMessageType = BuildPriorityMessageType(projectRoot, configuredUnityProjectPath, resolvedToolsRoot, effectiveReadiness),
+                McpServerProcessState = serverProcessSnapshot != null ? serverProcessSnapshot.Summary : "MCP server process state not checked yet.",
+                McpServerProcessHasIssue = HasServerProcessIssue(serverProcessSnapshot),
+                McpServerProcessIssueTooltip = GetServerProcessIssueTooltip(serverProcessSnapshot),
+                McpServerProcesses = serverProcessSnapshot != null ? serverProcessSnapshot.Processes : System.Array.Empty<McpServerProcessInfo>(),
             };
+        }
+
+        private void RefreshServerProcessSnapshot(bool force = false)
+        {
+            if (_serverProcessProbe == null)
+            {
+                _serverProcessProbe = new McpServerProcessProbe();
+            }
+
+            var now = EditorApplication.timeSinceStartup;
+            if (!force &&
+                _serverProcessSnapshot != null &&
+                now - _serverProcessLastRefreshTime < ServerProcessRefreshIntervalSeconds)
+            {
+                return;
+            }
+
+            _serverProcessSnapshot = _serverProcessProbe.Inspect(_settings);
+            _serverProcessLastRefreshTime = now;
+        }
+
+        private string FormatServerProcessLastChecked()
+        {
+            if (_serverProcessLastRefreshTime <= 0d)
+            {
+                return "Not checked yet";
+            }
+
+            var ageSeconds = Math.Max(0d, EditorApplication.timeSinceStartup - _serverProcessLastRefreshTime);
+            return ageSeconds < 1d
+                ? "just now"
+                : ((int)ageSeconds).ToString() + "s ago";
+        }
+
+        private void StopMcpServer()
+        {
+            EnsureInitialized();
+            if (_serverProcessProbe == null)
+            {
+                _serverProcessProbe = new McpServerProcessProbe();
+            }
+
+            var result = _serverProcessProbe.StopCurrentProjectServers(_settings);
+            _serverProcessMessage = result != null ? result.Summary : "MCP server stop did not return a result.";
+            _serverProcessMessageType = result != null && result.Attempted && result.Results.All(item => item.Succeeded)
+                ? MessageType.Info
+                : MessageType.Warning;
+            RefreshServerProcessSnapshot(force: true);
+            _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
+            _diagnosticReport = _reportFormatter.Format(_diagnosticChecks, GetEffectiveReadiness(_readiness), _settings);
+            Repaint();
+        }
+
+        private static bool HasServerProcessIssue(McpServerProcessSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                return false;
+            }
+
+            return snapshot.State == McpServerProcessState.MismatchedProject ||
+                   snapshot.State == McpServerProcessState.Ambiguous ||
+                   snapshot.State == McpServerProcessState.MultipleCurrentProject ||
+                   snapshot.State == McpServerProcessState.Unavailable;
+        }
+
+        private static string GetServerProcessIssueTooltip(McpServerProcessSnapshot snapshot)
+        {
+            if (snapshot == null)
+            {
+                return string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(snapshot.InspectionFailure))
+            {
+                return snapshot.InspectionFailure;
+            }
+
+            if (!string.IsNullOrWhiteSpace(snapshot.Detail))
+            {
+                return snapshot.Detail;
+            }
+
+            switch (snapshot.State)
+            {
+                case McpServerProcessState.MismatchedProject:
+                    return "A Unity Agent Bridge MCP server is running for another project. Current-project Stop will not terminate it.";
+                case McpServerProcessState.Ambiguous:
+                    return "A Unity Agent Bridge MCP server candidate is running, but it cannot be tied to this project.";
+                case McpServerProcessState.MultipleCurrentProject:
+                    return "Multiple MCP server processes are tied to this project.";
+                case McpServerProcessState.Unavailable:
+                    return "Process metadata could not be inspected.";
+                default:
+                    return string.Empty;
+            }
         }
 
         private static string FormatCliStatus(McpEditorSettings settings, McpPathResolver pathResolver)
@@ -1220,6 +1365,17 @@ namespace UnityMcp.AgentBridge.Mcp
             _runtimeInitCts = new CancellationTokenSource();
             _runtimeInitRunning = true;
             _runtimeInitMessage = string.Empty;
+            RefreshServerProcessSnapshot(force: true);
+            if (_serverProcessSnapshot != null && _serverProcessSnapshot.SafeStopTargets.Any())
+            {
+                _runtimeInitRunning = false;
+                _runtimeInitMessage = "Stop the active MCP server before preparing the runtime.";
+                _serverProcessMessage = _runtimeInitMessage;
+                _serverProcessMessageType = MessageType.Warning;
+                Repaint();
+                return;
+            }
+
             _runtimeInitTask = _runtimeInitializer.InitializeRuntimeAsync(_settings, _runtimeInitCts.Token);
             EditorApplication.update -= PollRuntimeInitializationTask;
             EditorApplication.update += PollRuntimeInitializationTask;

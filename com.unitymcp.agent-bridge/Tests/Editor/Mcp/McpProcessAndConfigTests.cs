@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -834,5 +835,205 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             }
         }
 
+    }
+
+    public sealed class McpServerProcessProbeTests
+    {
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        public void Classify_CurrentProjectCommandLine_ReturnsCurrentProject()
+        {
+            var projectRoot = Normalize(Path.Combine(Path.GetTempPath(), "CurrentProject"));
+            var descriptor = new McpProcessDescriptor
+            {
+                ProcessId = 101,
+                ProcessName = "unity-agent-bridge",
+                ExecutablePath = Path.Combine(projectRoot, ".unitymcp", "runtime", "UnityAgentBridge", "cli", "out", "win-x64", "unity-agent-bridge.exe"),
+                CommandLine = "UNITY_PROJECT_PATH=" + projectRoot + " unity-agent-bridge.exe mcp-server",
+            };
+
+            var info = McpServerProcessProbe.Classify(descriptor, projectRoot, Path.Combine(projectRoot, ".unitymcp", "runtime"));
+
+            Assert.That(info, Is.Not.Null);
+            Assert.That(info.MatchKind, Is.EqualTo(McpServerProcessMatchKind.CurrentProject));
+        }
+
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        public void Classify_RuntimePathEvidence_ReturnsPreparedRuntime()
+        {
+            var projectRoot = Normalize(Path.Combine(Path.GetTempPath(), "RuntimeProject"));
+            var runtimeRoot = Path.Combine(projectRoot, ".unitymcp", "runtime");
+            var descriptor = new McpProcessDescriptor
+            {
+                ProcessId = 102,
+                ProcessName = "unity-agent-bridge",
+                ExecutablePath = Path.Combine(runtimeRoot, "UnityAgentBridge", "cli", "out", "win-x64", "unity-agent-bridge.exe"),
+                CommandLine = "unity-agent-bridge.exe mcp-server",
+            };
+
+            var info = McpServerProcessProbe.Classify(descriptor, projectRoot, runtimeRoot);
+
+            Assert.That(info, Is.Not.Null);
+            Assert.That(info.MatchKind, Is.EqualTo(McpServerProcessMatchKind.PreparedRuntime));
+        }
+
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        public void Classify_DifferentProjectBinding_ReturnsMismatchedProject()
+        {
+            var projectRoot = Normalize(Path.Combine(Path.GetTempPath(), "CurrentProject"));
+            var otherRoot = Normalize(Path.Combine(Path.GetTempPath(), "OtherProject"));
+            var descriptor = new McpProcessDescriptor
+            {
+                ProcessId = 103,
+                ProcessName = "unity-agent-bridge",
+                ExecutablePath = Path.Combine(otherRoot, ".unitymcp", "runtime", "UnityAgentBridge", "cli", "out", "win-x64", "unity-agent-bridge.exe"),
+                CommandLine = "UNITY_PROJECT_PATH=" + otherRoot + " unity-agent-bridge.exe mcp-server",
+            };
+
+            var info = McpServerProcessProbe.Classify(descriptor, projectRoot, Path.Combine(projectRoot, ".unitymcp", "runtime"));
+
+            Assert.That(info, Is.Not.Null);
+            Assert.That(info.MatchKind, Is.EqualTo(McpServerProcessMatchKind.MismatchedProject));
+        }
+
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        public void StopCurrentProjectServers_DoesNotTerminateAmbiguousCandidate()
+        {
+            var provider = new FakeProcessProvider(new[]
+            {
+                new McpProcessDescriptor
+                {
+                    ProcessId = 104,
+                    ProcessName = "unity-agent-bridge",
+                    ExecutablePath = "C:/Tools/unity-agent-bridge.exe",
+                    CommandLine = "unity-agent-bridge.exe mcp-server",
+                }
+            });
+            var probe = CreateProbe(provider, "C:/Project", "C:/Project/.unitymcp/runtime");
+
+            var result = probe.StopCurrentProjectServers(new McpEditorSettings());
+
+            Assert.That(result.Attempted, Is.False);
+            Assert.That(provider.TerminatedProcessIds, Is.Empty);
+        }
+
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        public void StopCurrentProjectServers_TerminatesPreparedRuntimeMatch()
+        {
+            var provider = new FakeProcessProvider(new[]
+            {
+                new McpProcessDescriptor
+                {
+                    ProcessId = 105,
+                    ProcessName = "unity-agent-bridge",
+                    ExecutablePath = "C:/Project/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe",
+                    CommandLine = "unity-agent-bridge.exe mcp-server",
+                }
+            });
+            var probe = CreateProbe(provider, "C:/Project", "C:/Project/.unitymcp/runtime");
+
+            var result = probe.StopCurrentProjectServers(new McpEditorSettings());
+
+            Assert.That(result.Attempted, Is.True);
+            Assert.That(provider.TerminatedProcessIds, Is.EquivalentTo(new[] { 105 }));
+        }
+
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        public void Inspect_NoLongRunningServerProcess_ReportsProcessStateWithoutImplyingBridgeFailure()
+        {
+            var provider = new FakeProcessProvider(Array.Empty<McpProcessDescriptor>());
+            var probe = CreateProbe(provider, "C:/Project", "C:/Project/.unitymcp/runtime");
+
+            var snapshot = probe.Inspect(new McpEditorSettings());
+
+            Assert.That(snapshot.State, Is.EqualTo(McpServerProcessState.Stopped));
+            Assert.That(snapshot.Summary, Is.EqualTo("Idle (0/0)"));
+            Assert.That(snapshot.Detail, Does.Contain("MCP may still be available through on-demand CLI calls."));
+            Assert.That(snapshot.Summary, Does.Not.Contain("not running for this project"));
+        }
+
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        public void Inspect_MismatchedProjectServerProcess_ReportsZeroOfDetectedProcesses()
+        {
+            var provider = new FakeProcessProvider(new[]
+            {
+                new McpProcessDescriptor
+                {
+                    ProcessId = 106,
+                    ProcessName = "unity-agent-bridge",
+                    ExecutablePath = "C:/Other/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe",
+                    CommandLine = "UNITY_PROJECT_PATH=C:/Other unity-agent-bridge.exe mcp-server",
+                }
+            });
+            var probe = CreateProbe(provider, "C:/Project", "C:/Project/.unitymcp/runtime");
+
+            var snapshot = probe.Inspect(new McpEditorSettings());
+
+            Assert.That(snapshot.State, Is.EqualTo(McpServerProcessState.MismatchedProject));
+            Assert.That(snapshot.Summary, Is.EqualTo("Foreign (0/1)"));
+            Assert.That(snapshot.Detail, Is.EqualTo("1 long-running MCP server process is tied to another Unity project."));
+        }
+
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        public void SystemProcessProvider_Source_FiltersByProcessNameBeforeMainModuleInspection()
+        {
+            var content = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/Process/McpRuntimeInitializer.cs"));
+            var filterIndex = content.IndexOf("LooksLikeUnityAgentBridgeProcessName(processName)");
+            var mainModuleIndex = content.IndexOf("process.MainModule");
+
+            Assert.That(filterIndex, Is.GreaterThanOrEqualTo(0));
+            Assert.That(mainModuleIndex, Is.GreaterThan(filterIndex));
+        }
+
+        private static string Normalize(string path)
+        {
+            return path.Replace('\\', '/');
+        }
+
+        private static McpServerProcessProbe CreateProbe(FakeProcessProvider provider, string projectRoot, string runtimeRoot)
+        {
+            return new McpServerProcessProbe(
+                provider,
+                new McpPathResolver(),
+                _ => projectRoot,
+                _ => runtimeRoot);
+        }
+
+        private static string GetPackageRelativePath(string relativePath)
+        {
+            var projectRoot = Directory.GetParent(UnityEngine.Application.dataPath)?.FullName ?? string.Empty;
+            return Path.Combine(projectRoot, "Packages", "com.unitymcp.agent-bridge", relativePath.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        private sealed class FakeProcessProvider : IMcpServerProcessProvider
+        {
+            private readonly IReadOnlyList<McpProcessDescriptor> _processes;
+
+            public FakeProcessProvider(IReadOnlyList<McpProcessDescriptor> processes)
+            {
+                _processes = processes;
+            }
+
+            public List<int> TerminatedProcessIds { get; } = new List<int>();
+
+            public IReadOnlyList<McpProcessDescriptor> GetProcesses()
+            {
+                return _processes;
+            }
+
+            public bool TryTerminate(int processId, out string error)
+            {
+                error = string.Empty;
+                TerminatedProcessIds.Add(processId);
+                return true;
+            }
+        }
     }
 }
