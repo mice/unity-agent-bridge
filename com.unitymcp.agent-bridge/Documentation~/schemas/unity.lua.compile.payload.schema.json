@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.lua.compile payload",
+  "allOf": [
+    {
+      "$ref": "unity.lua.lint.payload.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "metrics": {
+          "$ref": "unity.lua.compile.metrics.schema.json"
+        },
+        "operation": {
+          "type": "string",
+          "const": "compile"
+        },
+        "failOn": {
+          "type": "string",
+          "const": "error"
+        },
+        "effectiveChecks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "syntax"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

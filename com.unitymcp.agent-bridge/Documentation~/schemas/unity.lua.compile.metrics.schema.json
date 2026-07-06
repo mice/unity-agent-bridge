@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.lua.compile metrics",
+  "allOf": [
+    {
+      "$ref": "unity.lua.lint.metrics.schema.json"
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "const": "compile"
+        },
+        "failOn": {
+          "type": "string",
+          "const": "error"
+        },
+        "effectiveChecks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "syntax"
+            ]
+          }
+        },
+        "effectiveRoots": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "parserDialect": {
+          "type": "string",
+          "const": "lua-gc-lint parser"
+        }
+      }
+    }
+  ]
+}

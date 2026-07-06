@@ -26,6 +26,7 @@ namespace UnityMcp.AgentBridge
         public int metricsRetentionDays = 7;
         public int logRetentionDays = 7;
         public string pluginCatalogPath = "Library/AgentBridge/plugin-catalog.json";
+        public List<string> luaSourceRoots = new List<string>();
         public List<AllowedStaticMethodEntry> allowedStaticMethods = new List<AllowedStaticMethodEntry>();
         public List<UnityMcpPluginRegistration> pluginRegistrations = new List<UnityMcpPluginRegistration>();
 

@@ -8,6 +8,7 @@
 - Declared package compatibility: `2022.3+`
 - Runtime support: none; this package is Editor-only
 - External requirements for MCP workflows: a supported MCP client such as Codex or Claude Code, plus .NET 8 SDK for building the project-local MCP runtime from the Setup window.
+- Lua tooling MVP scope: Windows x64 `lua-gc-lint.exe` payload only.
 
 ## Install
 
@@ -45,7 +46,7 @@ Documented release-style Git UPM usage:
 ```json
 {
   "dependencies": {
-    "com.unitymcp.agent-bridge": "git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.6"
+    "com.unitymcp.agent-bridge": "git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.7"
   }
 }
 ```
@@ -78,6 +79,8 @@ Version `1.2.x` supports Unity-side plugin discovery for explicitly registered a
 Project metadata is plugin-owned. Keep `UnityMcp.BuiltInPlugins.ProjectInfo` enabled to expose `unity.project.get_info` and `mcp__unity__project_get_info`; the legacy/core `unity.project_info` and `mcp__unity__project_info` names are not shipped as aliases.
 
 Roslyn execution is available only on Unity `2022.3.x` for this release line. The package ships compiler proxy source and runtime build wrappers, and `mcp__unity__execute_csharp` stays hidden until the project explicitly enables Roslyn execution and the local runtime build creates `.unitymcp/runtime/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe`.
+
+Lua tools are provided by `UnityMcp.BuiltInPlugins.LuaTools` and expose `unity.lua.lint` / `mcp__unity__lua_lint` and `unity.lua.compile` / `mcp__unity__lua_compile` when the prepared runtime contains `.unitymcp/runtime/UnityAgentBridge/lua-gc-lint/out/win-x64/lua-gc-lint.exe`. The MVP package payload is Windows x64 only and is copied from `Tools~/UnityAgentBridge/lua-gc-lint/out/win-x64/lua-gc-lint.exe` during runtime preparation. Scans are limited to project-relative `Assets/` and `Packages/` paths, plus optional `AgentBridgeSettings.luaSourceRoots` entries for no-argument compile.
 
 ## Documentation Index
 

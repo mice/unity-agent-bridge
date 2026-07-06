@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.lua.lint payload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "metrics",
+    "operation",
+    "projectRoot",
+    "executablePath",
+    "scanPath",
+    "failOn",
+    "effectiveChecks",
+    "stdout",
+    "stderr",
+    "exitCode",
+    "timeout",
+    "protocolError",
+    "diagnostics"
+  ],
+  "properties": {
+    "metrics": {
+      "$ref": "unity.lua.lint.metrics.schema.json"
+    },
+    "operation": {
+      "type": "string",
+      "const": "lint"
+    },
+    "projectRoot": {
+      "type": "string"
+    },
+    "executablePath": {
+      "type": "string"
+    },
+    "scanPath": {
+      "type": "string"
+    },
+    "failOn": {
+      "type": "string",
+      "enum": [
+        "error",
+        "warning"
+      ]
+    },
+    "effectiveChecks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "gc"
+        ]
+      }
+    },
+    "stdout": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "stderr": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "exitCode": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "timeout": {
+      "type": "boolean"
+    },
+    "protocolError": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    }
+  },
+  "$defs": {
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "line",
+        "column",
+        "rule",
+        "severity",
+        "message",
+        "suggestion"
+      ],
+      "properties": {
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "rule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "severity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suggestion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

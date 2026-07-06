@@ -38,7 +38,7 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var targetPath = GetTargetPath(settings, _pathResolver);
-            return _configEditor.Apply(targetPath, executableCommand);
+            return _configEditor.Apply(targetPath, executableCommand, GetProjectRoot(_pathResolver));
         }
 
         public ManagedBlockApplyResult Remove()
@@ -56,7 +56,7 @@ namespace UnityMcp.AgentBridge.Mcp
                        "# Prepare the project-local MCP runtime before applying managed MCP config.";
             }
 
-            return new ManagedBlockTextEditor().Apply(string.Empty, BuildManagedBlockBody(executableCommand));
+            return new ManagedBlockTextEditor().Apply(string.Empty, BuildManagedBlockBody(executableCommand, GetProjectRoot(_pathResolver), string.Empty));
         }
 
         internal static string GetTargetPath()
@@ -90,15 +90,20 @@ namespace UnityMcp.AgentBridge.Mcp
 
         internal static string BuildManagedBlockBody(string executableCommand)
         {
-            return BuildManagedBlockBody(executableCommand, string.Empty, false);
+            return BuildManagedBlockBody(executableCommand, string.Empty, string.Empty, false);
         }
 
         internal static string BuildManagedBlockBody(string executableCommand, string preservedChildSections)
         {
-            return BuildManagedBlockBody(executableCommand, preservedChildSections, false);
+            return BuildManagedBlockBody(executableCommand, string.Empty, preservedChildSections, false);
         }
 
-        internal static string BuildManagedBlockBody(string executableCommand, string preservedChildSections, bool executableCommandIsBody)
+        internal static string BuildManagedBlockBody(string executableCommand, string projectRoot, string preservedChildSections)
+        {
+            return BuildManagedBlockBody(executableCommand, projectRoot, preservedChildSections, false);
+        }
+
+        internal static string BuildManagedBlockBody(string executableCommand, string projectRoot, string preservedChildSections, bool executableCommandIsBody)
         {
             var executable = executableCommandIsBody ? executableCommand : EscapeTomlString(executableCommand);
             var body = "[mcp_servers.unity_agent_bridge]" + Environment.NewLine +
@@ -109,6 +114,14 @@ namespace UnityMcp.AgentBridge.Mcp
                        "tool_timeout_sec = 300" + Environment.NewLine +
                        "required = false";
 
+            var unityProjectPath = NormalizeProjectRoot(projectRoot);
+            if (!string.IsNullOrEmpty(unityProjectPath))
+            {
+                body += Environment.NewLine + Environment.NewLine +
+                        "[mcp_servers.unity_agent_bridge.env]" + Environment.NewLine +
+                        "UNITY_AGENT_BRIDGE_PROJECT_PATH = \"" + EscapeTomlString(unityProjectPath) + "\"";
+            }
+
             var preserved = NormalizeLineEndings(preservedChildSections).Trim();
             if (string.IsNullOrEmpty(preserved))
             {
@@ -116,6 +129,12 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             return body + Environment.NewLine + Environment.NewLine + preserved;
+        }
+
+        internal static string GetProjectRoot(McpPathResolver pathResolver)
+        {
+            var resolver = pathResolver ?? new McpPathResolver();
+            return NormalizeProjectRoot(resolver.GetProjectRoot());
         }
 
         internal static string BuildExecutableCommand(McpEditorSettings settings, McpPathResolver pathResolver)
@@ -170,6 +189,16 @@ namespace UnityMcp.AgentBridge.Mcp
         private static string EscapeTomlString(string value)
         {
             return (value ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
+        }
+
+        private static string NormalizeProjectRoot(string projectRoot)
+        {
+            if (string.IsNullOrWhiteSpace(projectRoot))
+            {
+                return string.Empty;
+            }
+
+            return Path.GetFullPath(projectRoot.Trim());
         }
 
         internal static bool IsPathUnderRoot(string candidatePath, string rootPath)

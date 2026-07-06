@@ -6,6 +6,18 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.7] - 2026-07-06
+
+### Added
+
+- Added `UnityMcp.BuiltInPlugins.LuaTools` with dynamic `unity.lua.lint` and `unity.lua.compile` tools backed by the approved Windows x64 `lua-gc-lint.exe` payload.
+- Added package and distribution boundaries for `Tools~/UnityAgentBridge/lua-gc-lint/out/win-x64/lua-gc-lint.exe`, including runtime materialization to `.unitymcp/runtime/UnityAgentBridge/lua-gc-lint/out/win-x64/lua-gc-lint.exe`.
+- Added documented input, metrics, and report payload schemas for `unity.lua.lint` and `unity.lua.compile`.
+
+### Changed
+
+- Added `AgentBridgeSettings.luaSourceRoots` for no-argument Lua compile roots and validation that Lua paths stay under project `Assets/` or `Packages/`.
+
 ## [1.2.6] - 2026-06-26
 
 ### Added
@@ -17,6 +29,10 @@ The format follows Keep a Changelog and Semantic Versioning.
 ### Changed
 
 - Existing `AgentBridgeSettings` assets now receive the new MonoBehaviour semantics built-in plugin registration when missing, so command list/catalog discovery includes the new tool without recreating settings.
+
+### Fixed
+
+- Fixed managed Codex MCP configuration generation so `unity_agent_bridge` launches with `UNITY_AGENT_BRIDGE_PROJECT_PATH` bound to the current Unity project.
 
 ## [1.2.5] - 2026-06-24
 

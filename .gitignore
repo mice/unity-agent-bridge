@@ -58,3 +58,8 @@ Desktop.ini
 com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/cli/out/**
 
 com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/roslyn-execution/out/**
+
+com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/lua-gc-lint/out/**
+!com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/lua-gc-lint/out/
+!com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/lua-gc-lint/out/win-x64/
+!com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/lua-gc-lint/out/win-x64/lua-gc-lint.exe

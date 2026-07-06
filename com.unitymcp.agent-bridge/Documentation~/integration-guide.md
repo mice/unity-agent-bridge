@@ -33,7 +33,7 @@ Add the package to `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.unitymcp.agent-bridge": "git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.6"
+    "com.unitymcp.agent-bridge": "git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.7"
   }
 }
 ```

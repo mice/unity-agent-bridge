@@ -1,0 +1,20 @@
+{
+  "name": "UnityMcp.BuiltInPlugins.LuaTools",
+  "rootNamespace": "UnityMcp.BuiltInPlugins.LuaTools",
+  "references": [
+    "Unity.Newtonsoft.Json",
+    "UnityMcp.Plugin.Abstractions"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "optionalUnityReferences": [],
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

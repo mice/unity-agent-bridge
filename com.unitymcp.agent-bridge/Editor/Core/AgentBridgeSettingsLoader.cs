@@ -132,6 +132,11 @@ namespace UnityMcp.AgentBridge
                 return false;
             }
 
+            if (!TryValidateLuaSourceRoots(settings.luaSourceRoots, out validationMessage))
+            {
+                return false;
+            }
+
             if (settings.pluginRegistrations != null)
             {
                 for (var index = 0; index < settings.pluginRegistrations.Count; index++)
@@ -175,6 +180,67 @@ namespace UnityMcp.AgentBridge
 
             validationMessage = null;
             return true;
+        }
+
+        private static bool TryValidateLuaSourceRoots(System.Collections.Generic.List<string> roots, out string validationMessage)
+        {
+            validationMessage = null;
+            if (roots == null || roots.Count == 0)
+            {
+                return true;
+            }
+
+            var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? Directory.GetCurrentDirectory();
+            var assetsRoot = Path.GetFullPath(Path.Combine(projectRoot, "Assets"));
+            var packagesRoot = Path.GetFullPath(Path.Combine(projectRoot, "Packages"));
+
+            for (var index = 0; index < roots.Count; index++)
+            {
+                var root = roots[index];
+                if (string.IsNullOrWhiteSpace(root))
+                {
+                    validationMessage = $"luaSourceRoots[{index}] must not be empty.";
+                    return false;
+                }
+
+                var normalized = root.Trim().Replace('\\', '/');
+                if (Path.IsPathRooted(normalized))
+                {
+                    validationMessage = $"luaSourceRoots[{index}] must be project-relative.";
+                    return false;
+                }
+
+                var segments = normalized.Split('/');
+                if (segments.Any(segment => string.Equals(segment, "..", StringComparison.Ordinal)))
+                {
+                    validationMessage = $"luaSourceRoots[{index}] must not contain traversal segments.";
+                    return false;
+                }
+
+                if (!string.Equals(segments[0], "Assets", StringComparison.Ordinal) &&
+                    !string.Equals(segments[0], "Packages", StringComparison.Ordinal))
+                {
+                    validationMessage = $"luaSourceRoots[{index}] must start with Assets/ or Packages/.";
+                    return false;
+                }
+
+                var resolved = Path.GetFullPath(Path.Combine(projectRoot, normalized));
+                if (!IsAtOrUnder(resolved, assetsRoot) && !IsAtOrUnder(resolved, packagesRoot))
+                {
+                    validationMessage = $"luaSourceRoots[{index}] must resolve under Assets/ or Packages/.";
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool IsAtOrUnder(string path, string root)
+        {
+            var relativePath = Path.GetRelativePath(root, path);
+            return relativePath == "." ||
+                   (!relativePath.StartsWith("..", StringComparison.Ordinal) &&
+                    !Path.IsPathRooted(relativePath));
         }
 
         private static System.Collections.Generic.List<AllowedStaticMethodEntry> CreateDefaultAllowedStaticMethods()
@@ -317,6 +383,10 @@ namespace UnityMcp.AgentBridge
                 registrations,
                 "UnityMcp.BuiltInPlugins.RoslynExecution",
                 "UnityMcp.BuiltInPlugins.RoslynExecution.RoslynExecutionProvider");
+            AddDefaultPluginRegistration(
+                registrations,
+                "UnityMcp.BuiltInPlugins.LuaTools",
+                "UnityMcp.BuiltInPlugins.LuaTools.LuaToolsProvider");
             return registrations;
         }
 
@@ -331,6 +401,10 @@ namespace UnityMcp.AgentBridge
                 settings.pluginRegistrations,
                 "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics",
                 "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics.MonoBehaviourSemanticsProvider");
+            EnsureDefaultPluginRegistration(
+                settings.pluginRegistrations,
+                "UnityMcp.BuiltInPlugins.LuaTools",
+                "UnityMcp.BuiltInPlugins.LuaTools.LuaToolsProvider");
         }
 
         private static void EnsureDefaultPluginRegistration(System.Collections.Generic.List<UnityMcpPluginRegistration> registrations, string assemblyName, string providerTypeName)

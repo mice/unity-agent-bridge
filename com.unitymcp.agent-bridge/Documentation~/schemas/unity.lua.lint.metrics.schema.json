@@ -1,0 +1,201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.lua.lint metrics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "operation",
+    "status",
+    "success",
+    "invocationId",
+    "scanPath",
+    "failOn",
+    "effectiveChecks",
+    "effectiveRoots",
+    "exitCode",
+    "durationMs",
+    "timeout",
+    "diagnosticCount",
+    "warningCount",
+    "errorCount",
+    "offset",
+    "limit",
+    "truncated",
+    "nextOffset",
+    "parserDialect",
+    "diagnostics",
+    "reportPath"
+  ],
+  "properties": {
+    "contractVersion": {
+      "type": "string",
+      "const": "lua_tools.v1"
+    },
+    "operation": {
+      "type": "string",
+      "const": "lint"
+    },
+    "status": {
+      "type": "string"
+    },
+    "success": {
+      "type": "boolean"
+    },
+    "invocationId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scanPath": {
+      "type": "string"
+    },
+    "failOn": {
+      "type": "string",
+      "enum": [
+        "error",
+        "warning"
+      ]
+    },
+    "effectiveChecks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "gc"
+        ]
+      }
+    },
+    "effectiveRoots": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "exitCode": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "durationMs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "timeout": {
+      "type": "boolean"
+    },
+    "diagnosticCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "warningCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "errorCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "offset": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "limit": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 500
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "nextOffset": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "parserDialect": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pagedDiagnostic"
+      }
+    },
+    "reportPath": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "$defs": {
+    "pagedDiagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "file",
+        "line",
+        "column",
+        "rule",
+        "severity",
+        "message",
+        "suggestion"
+      ],
+      "properties": {
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "line": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "column": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "rule": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "severity": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "message": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suggestion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

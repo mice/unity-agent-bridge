@@ -10,6 +10,7 @@
     "UnityMcp.BuiltInPlugins.TestRunner",
     "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics",
     "UnityMcp.BuiltInPlugins.RoslynExecution",
+    "UnityMcp.BuiltInPlugins.LuaTools",
     "UnityMcp.Plugin.Abstractions",
     "Unity.Newtonsoft.Json"
   ],
