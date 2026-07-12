@@ -195,6 +195,47 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(timeout.metricsObjectJson, Does.Contain("\"timeout\":true"));
         }
 
+        [Test]
+        [Category("AGB_Core")]
+        [Category("AGB_183")]
+        public void LuaTools_Lint_PreservesV1EvidenceFieldsAndKeepsInputSchemaStable()
+        {
+            File.WriteAllText(Path.Combine(_projectRoot, "Assets", "Lua", "v1.lua"), "local value = 1");
+            var tool = GetLuaTool("unity.lua.lint");
+
+            Assert.That(LuaToolsSchemas.Lint, Does.Contain("\"path\""));
+            Assert.That(LuaToolsSchemas.Lint, Does.Contain("\"checks\""));
+            Assert.That(LuaToolsSchemas.Lint, Does.Contain("\"failOn\""));
+            Assert.That(LuaToolsSchemas.Lint, Does.Contain("\"timeoutMs\""));
+            Assert.That(LuaToolsSchemas.Lint, Does.Contain("\"limit\""));
+            Assert.That(LuaToolsSchemas.Lint, Does.Contain("\"offset\""));
+            Assert.That(LuaToolsSchemas.Lint, Does.Not.Contain("\"command\""));
+            Assert.That(LuaToolsSchemas.Lint, Does.Not.Contain("\"format\""));
+
+            LuaToolsProcess.TestRunnerOverride = (_, _, _, _) => new LuaToolsProcessResult
+            {
+                ExitCode = 0,
+                DurationMs = 7,
+                Stdout = "[{\"file\":\"Assets/Lua/v1.lua\",\"line\":1,\"column\":1,\"rule\":\"LUA_GC_002\",\"ruleId\":\"LUA_GC_002\",\"legacyRule\":\"R002\",\"severity\":\"warning\",\"function\":\"update\",\"message\":\"closure allocation\",\"evidence\":\"function() end\",\"suggestion\":\"cache callback\",\"confidence\":\"High\"}]",
+                Stderr = string.Empty
+            };
+
+            var result = Execute(tool, "unity.lua.lint", "cmd-lua-lint-v1-evidence", "{\"path\":\"Assets/Lua/v1.lua\"}");
+            var reportJson = File.ReadAllText(GetAbsolutePath(result.reportPath));
+
+            Assert.That(result.success, Is.True);
+            Assert.That(result.metricsObjectJson, Does.Contain("\"ruleId\":\"LUA_GC_002\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"legacyRule\":\"R002\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"function\":\"update\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"evidence\":\"function() end\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"confidence\":\"High\""));
+            Assert.That(reportJson, Does.Contain("\"ruleId\":\"LUA_GC_002\""));
+            Assert.That(reportJson, Does.Contain("\"legacyRule\":\"R002\""));
+            Assert.That(reportJson, Does.Contain("\"function\":\"update\""));
+            Assert.That(reportJson, Does.Contain("\"evidence\":\"function() end\""));
+            Assert.That(reportJson, Does.Contain("\"confidence\":\"High\""));
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_184.md
         [Test]
         [Category("AGB_Core")]

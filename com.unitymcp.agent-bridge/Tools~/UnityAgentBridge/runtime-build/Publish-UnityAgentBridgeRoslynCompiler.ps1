@@ -64,7 +64,8 @@ if (-not (Test-Path -LiteralPath $publishedPath)) {
     throw "Published Roslyn compiler executable not found: $publishedPath"
 }
 
-Move-Item -LiteralPath $publishedPath -Destination $productPath -Force
+Copy-Item -LiteralPath $publishedPath -Destination $productPath -Force
+Remove-Item -LiteralPath $publishedPath -Force
 
 Get-ChildItem -LiteralPath $outputPath |
     Where-Object { $_.Name -ne "unity-roslyn-compiler.exe" } |

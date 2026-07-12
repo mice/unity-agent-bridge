@@ -818,9 +818,14 @@ namespace UnityMcp.BuiltInPlugins.LuaTools
         public int? line;
         public int? column;
         public string rule;
+        public string ruleId;
+        public string legacyRule;
         public string severity;
+        public string function;
         public string message;
+        public string evidence;
         public string suggestion;
+        public string confidence;
     }
 
     internal sealed class LuaDiagnosticPageItem
@@ -829,9 +834,14 @@ namespace UnityMcp.BuiltInPlugins.LuaTools
         public int? line;
         public int? column;
         public string rule;
+        public string ruleId;
+        public string legacyRule;
         public string severity;
+        public string function;
         public string message;
+        public string evidence;
         public string suggestion;
+        public string confidence;
 
         public static LuaDiagnosticPageItem FromDiagnostic(LuaDiagnostic diagnostic)
         {
@@ -841,9 +851,14 @@ namespace UnityMcp.BuiltInPlugins.LuaTools
                 line = diagnostic.line,
                 column = diagnostic.column,
                 rule = diagnostic.rule,
+                ruleId = diagnostic.ruleId,
+                legacyRule = diagnostic.legacyRule,
                 severity = diagnostic.severity,
+                function = diagnostic.function,
                 message = diagnostic.message,
-                suggestion = diagnostic.suggestion
+                evidence = diagnostic.evidence,
+                suggestion = diagnostic.suggestion,
+                confidence = diagnostic.confidence
             };
         }
     }
