@@ -6,6 +6,14 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-07-14
+
+### Fixed
+
+- Restored all default built-in plugin registrations when loading legacy Agent Bridge settings assets, so MCP ping, project info, and other frozen providers are available without recreating settings.
+- Restored the governed `mcp__unity__project_get_info` C# MCP catalog entry and aligned the P4 verifier with the canonical project-info tool name.
+- Updated the LuaTools runtime payload to Lua GC linter V2.
+
 ## [1.2.7] - 2026-07-06
 
 ### Added

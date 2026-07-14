@@ -397,14 +397,13 @@ namespace UnityMcp.AgentBridge
                 settings.pluginRegistrations = new System.Collections.Generic.List<UnityMcpPluginRegistration>();
             }
 
-            EnsureDefaultPluginRegistration(
-                settings.pluginRegistrations,
-                "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics",
-                "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics.MonoBehaviourSemanticsProvider");
-            EnsureDefaultPluginRegistration(
-                settings.pluginRegistrations,
-                "UnityMcp.BuiltInPlugins.LuaTools",
-                "UnityMcp.BuiltInPlugins.LuaTools.LuaToolsProvider");
+            foreach (var defaultRegistration in CreateDefaultPluginRegistrations())
+            {
+                EnsureDefaultPluginRegistration(
+                    settings.pluginRegistrations,
+                    defaultRegistration.assemblyName,
+                    defaultRegistration.providerTypeName);
+            }
         }
 
         private static void EnsureDefaultPluginRegistration(System.Collections.Generic.List<UnityMcpPluginRegistration> registrations, string assemblyName, string providerTypeName)

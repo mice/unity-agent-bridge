@@ -49,6 +49,29 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(validation.Message, Does.Contain("assemblyName"));
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_186.md
+        [Test]
+        [Category("AGB_Core")]
+        [Category("AGB_186")]
+        public void SettingsMigration_AddsAllMissingDefaultPluginRegistrations()
+        {
+            var settings = AgentBridgeSettingsLoader.CreateDefaultSettings();
+            settings.pluginRegistrations.RemoveAll(registration =>
+                registration != null &&
+                registration.assemblyName != "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics" &&
+                registration.assemblyName != "UnityMcp.BuiltInPlugins.LuaTools");
+
+            InvokeDefaultPluginMigration(settings);
+
+            Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.ProjectInfo"), Is.True);
+            Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.EditorBasics"), Is.True);
+            Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.UnityQueries"), Is.True);
+            Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.TestRunner"), Is.True);
+            Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.RoslynExecution"), Is.True);
+            Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics"), Is.True);
+            Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.LuaTools"), Is.True);
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_157.md
         [Test]
         [Category("AGB_Core")]
@@ -518,6 +541,13 @@ namespace UnityMcp.AgentBridge.Tests
             var parameters = new object[] { settings, null };
             var isValid = (bool)method.Invoke(null, parameters);
             return (isValid, parameters[1] as string);
+        }
+
+        private static void InvokeDefaultPluginMigration(AgentBridgeSettings settings)
+        {
+            var method = typeof(AgentBridgeSettingsLoader).GetMethod("EnsureDefaultPluginRegistrations", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.That(method, Is.Not.Null);
+            method.Invoke(null, new object[] { settings });
         }
 
         private static void AssertPluginTool(AgentToolRegistry registry, string toolName)
