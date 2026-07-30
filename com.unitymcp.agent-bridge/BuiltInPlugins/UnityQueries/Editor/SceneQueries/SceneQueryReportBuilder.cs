@@ -65,11 +65,15 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
             var record = new HierarchyTargetRecord();
             record.locator = resolution.locator;
             record.targetKind = resolution.targetKind;
-            record.scenePath = resolution.scene.IsValid() && !string.IsNullOrWhiteSpace(resolution.scene.path)
+            record.scenePath = !resolution.isDontDestroyOnLoad &&
+                resolution.scene.IsValid() &&
+                !string.IsNullOrWhiteSpace(resolution.scene.path)
                 ? resolution.scene.path.Replace('\\', '/')
                 : null;
             record.path = resolution.gameObject != null ? GameObjectLocatorFormatter.GetHierarchyPath(resolution.gameObject) : null;
-            record.name = resolution.gameObject != null ? resolution.gameObject.name : resolution.scene.name;
+            record.name = resolution.gameObject != null
+                ? resolution.gameObject.name
+                : (!string.IsNullOrWhiteSpace(resolution.displayName) ? resolution.displayName : resolution.scene.name);
             record.instanceId = resolution.gameObject != null ? (int?)resolution.gameObject.GetInstanceID() : null;
             return record;
         }
@@ -96,7 +100,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
             record.name = gameObject.name;
             record.locator = GetTargetScopedLocator(gameObject, resolution);
             record.path = GameObjectLocatorFormatter.GetHierarchyPath(gameObject);
-            record.scenePath = gameObject.scene.IsValid() ? gameObject.scene.path.Replace('\\', '/') : null;
+            record.scenePath = DontDestroyOnLoadHierarchy.GetScenePathOrNull(gameObject);
             record.instanceId = gameObject.GetInstanceID();
             record.depth = depth;
             record.siblingIndex = gameObject.transform.GetSiblingIndex();

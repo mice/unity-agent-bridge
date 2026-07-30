@@ -1,0 +1,19 @@
+{
+  "name": "UnityMcp.AgentBridge.Tests.PlayMode",
+  "rootNamespace": "UnityMcp.AgentBridge.Tests",
+  "references": [
+    "UnityMcp.Plugin.Abstractions"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

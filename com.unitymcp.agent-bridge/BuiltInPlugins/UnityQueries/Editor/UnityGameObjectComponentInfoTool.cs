@@ -75,7 +75,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                 name = gameObject.name,
                 locator = GameObjectLocatorFormatter.GetLocator(gameObject),
                 path = GameObjectLocatorFormatter.GetHierarchyPath(gameObject),
-                scenePath = gameObject.scene.IsValid() ? gameObject.scene.path.Replace('\\', '/') : null,
+                scenePath = DontDestroyOnLoadHierarchy.GetScenePathOrNull(gameObject),
                 instanceId = gameObject.GetInstanceID()
             };
             var targetReport = AssetQueryReportBuilder.CreateGameObjectTargetDetail(gameObject);

@@ -59,7 +59,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
         {
             var assetPath = AssetDatabase.GetAssetPath(target);
             var gameObject = target as GameObject ?? (target as Component)?.gameObject;
-            var scenePath = gameObject != null && gameObject.scene.IsValid() ? gameObject.scene.path : null;
+            var scenePath = DontDestroyOnLoadHierarchy.GetScenePathOrNull(gameObject);
             var prefabAssetPath = gameObject != null ? PrefabUtility.GetPrefabAssetPathOfNearestInstanceRoot(gameObject) : null;
             var globalObjectId = target != null ? GlobalObjectId.GetGlobalObjectIdSlow(target).ToString() : null;
 
@@ -73,7 +73,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                 ["path"] = ToToken(gameObject != null ? GameObjectLocatorFormatter.GetHierarchyPath(gameObject) : (!string.IsNullOrWhiteSpace(assetPath) ? assetPath.Replace('\\', '/') : null)),
                 ["assetPath"] = ToToken(!string.IsNullOrWhiteSpace(assetPath) ? assetPath.Replace('\\', '/') : null),
                 ["hierarchyPath"] = ToToken(gameObject != null ? GameObjectLocatorFormatter.GetHierarchyPath(gameObject) : null),
-                ["scenePath"] = ToToken(!string.IsNullOrWhiteSpace(scenePath) ? scenePath.Replace('\\', '/') : null),
+                ["scenePath"] = ToToken(scenePath),
                 ["instanceId"] = target != null ? JToken.FromObject(target.GetInstanceID()) : JValue.CreateNull(),
                 ["guid"] = ToToken(!string.IsNullOrWhiteSpace(assetPath) ? AssetDatabase.AssetPathToGUID(assetPath) : null),
                 ["globalObjectId"] = ToToken(string.IsNullOrWhiteSpace(globalObjectId) ? null : globalObjectId),
@@ -105,7 +105,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                 ["name"] = gameObject.name,
                 ["locator"] = GameObjectLocatorFormatter.GetLocator(gameObject),
                 ["path"] = GameObjectLocatorFormatter.GetHierarchyPath(gameObject),
-                ["scenePath"] = ToToken(gameObject.scene.IsValid() ? gameObject.scene.path.Replace('\\', '/') : null),
+                ["scenePath"] = ToToken(DontDestroyOnLoadHierarchy.GetScenePathOrNull(gameObject)),
                 ["instanceId"] = gameObject.GetInstanceID(),
                 ["globalObjectId"] = ToToken(string.IsNullOrWhiteSpace(globalObjectId) ? null : globalObjectId),
                 ["prefabAssetPath"] = ToToken(!string.IsNullOrWhiteSpace(prefabAssetPath) ? prefabAssetPath.Replace('\\', '/') : null)

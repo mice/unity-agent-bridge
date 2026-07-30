@@ -336,6 +336,19 @@ Then:
 unity.read_report(reportPath=<from details.reportPath>, jsonPointer=/result/nodes, offset=0, limit=100)
 ```
 
+During Play Mode, query Unity's persistent hierarchy explicitly:
+
+```text
+unity.get_hierarchy(locator=dontDestroyOnLoad)
+-> target.name = DontDestroyOnLoad
+-> target.scenePath = null
+-> nodes[*].locator = dontDestroyOnLoad#Root/Child
+
+unity.get_gameobject_component_info(locator=dontDestroyOnLoad#Root/Child)
+```
+
+The bare root succeeds with an empty node set when no persistent roots exist. `currentScene` remains active-scene-only, and these read-only queries never create a probe object, call `Object.DontDestroyOnLoad`, or change Play Mode.
+
 Compile flow:
 
 1. Call `unity.compile`.

@@ -30,6 +30,31 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                 return true;
             }
 
+            if (string.Equals(locator, DontDestroyOnLoadHierarchy.LocatorRoot, StringComparison.Ordinal))
+            {
+                if (!DontDestroyOnLoadHierarchy.TryGetRoots(out var roots, out failure))
+                {
+                    return false;
+                }
+
+                resolution = HierarchyTargetResolution.ForDontDestroyOnLoadRoot(locator, roots);
+                return true;
+            }
+
+            if (locator.StartsWith(DontDestroyOnLoadHierarchy.LocatorPrefix, StringComparison.Ordinal))
+            {
+                if (!DontDestroyOnLoadHierarchy.TryResolve(
+                        locator.Substring(DontDestroyOnLoadHierarchy.LocatorPrefix.Length),
+                        out var specialObject,
+                        out failure))
+                {
+                    return false;
+                }
+
+                resolution = HierarchyTargetResolution.ForDontDestroyOnLoadObject(locator, specialObject);
+                return true;
+            }
+
             if (string.Equals(locator, "selection:active", StringComparison.Ordinal))
             {
                 var activeObject = Selection.activeObject;
@@ -307,6 +332,19 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
         public Scene scene;
         public GameObject gameObject;
         public string prefabAssetPath;
+        public GameObject[] roots;
+        public string displayName;
+        public bool isDontDestroyOnLoad;
+
+        public GameObject[] GetRootGameObjects()
+        {
+            if (roots != null)
+            {
+                return roots;
+            }
+
+            return scene.IsValid() ? scene.GetRootGameObjects() : Array.Empty<GameObject>();
+        }
 
         public static HierarchyTargetResolution ForScene(string locator, Scene scene)
         {
@@ -326,6 +364,31 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                 targetKind = targetKind,
                 gameObject = gameObject,
                 scene = gameObject != null ? gameObject.scene : default(Scene)
+            };
+        }
+
+        public static HierarchyTargetResolution ForDontDestroyOnLoadRoot(string locator, GameObject[] roots)
+        {
+            return new HierarchyTargetResolution
+            {
+                locator = locator,
+                targetKind = "scene_root",
+                roots = roots ?? Array.Empty<GameObject>(),
+                displayName = DontDestroyOnLoadHierarchy.SceneName,
+                isDontDestroyOnLoad = true
+            };
+        }
+
+        public static HierarchyTargetResolution ForDontDestroyOnLoadObject(string locator, GameObject gameObject)
+        {
+            return new HierarchyTargetResolution
+            {
+                locator = locator,
+                targetKind = "scene_subtree",
+                gameObject = gameObject,
+                scene = gameObject != null ? gameObject.scene : default(Scene),
+                displayName = DontDestroyOnLoadHierarchy.SceneName,
+                isDontDestroyOnLoad = true
             };
         }
 

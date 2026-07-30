@@ -47,6 +47,11 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                 }
             }
 
+            if (DontDestroyOnLoadHierarchy.IsMember(gameObject))
+            {
+                return DontDestroyOnLoadHierarchy.LocatorPrefix + GetHierarchyPath(gameObject);
+            }
+
             if (gameObject.scene.IsValid() && gameObject.scene == EditorSceneManager.GetActiveScene())
             {
                 return "currentScene#" + GetHierarchyPath(gameObject);

@@ -292,15 +292,20 @@ Rules:
   - `hasMissingScripts`
 - Notes:
   - `currentScene` enumerates only the active scene
+  - `dontDestroyOnLoad` enumerates Unity's special Play Mode hierarchy only; it is unavailable in Edit Mode and does not change the meaning of `currentScene`
+  - `dontDestroyOnLoad#A/B` resolves a bounded subtree in that special hierarchy, including inactive GameObjects
+  - a bare `dontDestroyOnLoad` query succeeds with zero counts and an empty `nodes` array when no special roots exist
+  - special targets and nodes report `scenePath = null`; returned `dontDestroyOnLoad#...` node locators can be reused by follow-up hierarchy and component queries
   - additive loaded scenes require explicit `Assets/<scene>.unity` locators
   - bare scene root locators may return `success` with `rootCount = 0`, `nodeCount = 0`, and an empty `nodes` array
   - `selection:active` that does not resolve to a GameObject returns `invalid_args` and does not fall back to `currentScene`
-  - supported locator forms are `currentScene`, `currentScene#A/B`, `Assets/X.unity`, `Assets/X.unity#A/B`, `Assets/X.prefab`, `Assets/X.prefab#A/B`, `selection:active`, and `instance:<id>`
+  - supported locator forms are `currentScene`, `currentScene#A/B`, `dontDestroyOnLoad`, `dontDestroyOnLoad#A/B`, `Assets/X.unity`, `Assets/X.unity#A/B`, `Assets/X.prefab`, `Assets/X.prefab#A/B`, `selection:active`, and `instance:<id>`
   - `includeComponents = true` adds bounded component summaries with `index` and nullable `type` only; each node returns at most 8 summaries and uses `componentsTruncated` when additional components exist
   - default node summaries expose `componentCount` and `hasMissingScripts` without returning heavy component identity by default
   - the hierarchy contract version changed from `hierarchy.v1` to `hierarchy.v2`; callers should migrate any schema assumptions about component summaries and default bounds
   - the tool writes a `reportPath` for terminal results, including `invalid_args`
   - reports are complete only within the applied bounds and explicitly expose bounded completeness state
+  - discovery is read-only: queries do not create or destroy GameObjects, call `Object.DontDestroyOnLoad`, or change Play Mode
 
 ### `unity.get_selection_info`
 
@@ -607,6 +612,7 @@ Supported forms:
 - `selection:active`
 - `instance:<id>`
 - `currentScene#A/B`
+- `dontDestroyOnLoad#A/B` (Play Mode only)
 - `Assets/X.prefab`
 - `Assets/X.prefab#A/B`
 - `Assets/Scenes/X.unity#A/B`
@@ -621,6 +627,8 @@ Rules:
 - active and inactive GameObjects both participate in hierarchy lookup
 - duplicate hierarchy matches resolve to the first deterministic pre-order traversal match
 - scene asset locators only resolve scenes already open or loaded in the current Editor process
+- `dontDestroyOnLoad#...` resolves only Unity's special main-stage hierarchy during Play Mode; its `scenePath` identity is normalized to `null`
+- bare `dontDestroyOnLoad` is a hierarchy-root target and is not a valid single-GameObject locator
 - `instance:<id>` locators are only valid within the current Editor process
 
 ToolResult and report examples for the asset query tools must preserve the same protocol split as existing tools: compact `metrics` in the envelope, large identity/detail payloads behind `reportPath`.

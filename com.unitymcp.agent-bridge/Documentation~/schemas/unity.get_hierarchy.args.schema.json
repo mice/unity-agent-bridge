@@ -9,7 +9,7 @@
         "string",
         "null"
       ],
-      "description": "Hierarchy target locator. Omitted, null, or empty string resolves to currentScene."
+      "description": "Hierarchy target locator. Omitted, null, or empty string resolves to currentScene. Play Mode also supports dontDestroyOnLoad and dontDestroyOnLoad#A/B."
     },
     "maxDepth": {
       "type": "integer",

@@ -189,6 +189,16 @@ mcp__unity__get_gameobject_component_info({ "locator": "currentScene#Main Camera
 mcp__unity__read_report({ "reportPath": "...", "jsonPointer": "/components" })
 ```
 
+For Play Mode objects moved under Unity's persistent hierarchy, discover and reuse the canonical locator:
+
+```text
+mcp__unity__get_hierarchy({ "locator": "dontDestroyOnLoad" })
+mcp__unity__get_hierarchy({ "locator": "dontDestroyOnLoad#RuntimeServices", "maxDepth": 2 })
+mcp__unity__get_gameobject_component_info({ "locator": "dontDestroyOnLoad#RuntimeServices/Audio" })
+```
+
+`dontDestroyOnLoad` is unavailable in Edit Mode. An empty persistent hierarchy is a successful zero-node result; `currentScene` never implicitly includes it.
+
 ## MCP Session Scope
 
 The MCP client binding is session-scoped.

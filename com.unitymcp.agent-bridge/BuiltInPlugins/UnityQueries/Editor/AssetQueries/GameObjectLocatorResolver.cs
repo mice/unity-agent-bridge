@@ -60,6 +60,22 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                 return false;
             }
 
+            if (string.Equals(locator, DontDestroyOnLoadHierarchy.LocatorRoot, StringComparison.Ordinal))
+            {
+                failure = UnityQueriesResult.InvalidArgs(
+                    "AGENTBRIDGE_LOCATOR_UNSUPPORTED",
+                    $"{DontDestroyOnLoadHierarchy.LocatorRoot} is a hierarchy root locator and does not identify a GameObject.");
+                return false;
+            }
+
+            if (locator.StartsWith(DontDestroyOnLoadHierarchy.LocatorPrefix, StringComparison.Ordinal))
+            {
+                return DontDestroyOnLoadHierarchy.TryResolve(
+                    locator.Substring(DontDestroyOnLoadHierarchy.LocatorPrefix.Length),
+                    out gameObject,
+                    out failure);
+            }
+
             if (locator.StartsWith("currentScene#", StringComparison.Ordinal))
             {
                 return TryResolveHierarchyInScene(EditorSceneManager.GetActiveScene(), locator.Substring("currentScene#".Length), false, out gameObject, out failure);

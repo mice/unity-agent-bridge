@@ -1963,8 +1963,10 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(result.errors[0].code, Is.EqualTo("CS1001"));
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_194.md
         [Test]
         [Category("AGB_ReadOnly")]
+        [Category("AGB_194")]
         public void AssetQueryToolSources_DoNotInvokeMutationApis()
         {
             var sourceFiles = new[]
@@ -1978,6 +1980,7 @@ namespace UnityMcp.AgentBridge.Tests
                 "BuiltInPlugins/UnityQueries/Editor/AssetQueries/GameObjectLocatorFormatter.cs",
                 "BuiltInPlugins/UnityQueries/Editor/AssetQueries/GameObjectLocatorResolver.cs",
                 "BuiltInPlugins/UnityQueries/Editor/AssetQueries/SerializedComponentSampler.cs",
+                "BuiltInPlugins/UnityQueries/Editor/Common/DontDestroyOnLoadHierarchy.cs",
                 "BuiltInPlugins/EditorBasics/Editor/EditorBasicsProvider.cs",
                 "BuiltInPlugins/UnityQueries/Editor/UnityGetHierarchyTool.cs",
                 "BuiltInPlugins/UnityQueries/Editor/SceneQueries/SceneQueryReportBuilder.cs",
@@ -1993,6 +1996,9 @@ namespace UnityMcp.AgentBridge.Tests
                 Assert.That(content, Does.Not.Contain("AssetDatabase.Refresh("), relativeFile);
                 Assert.That(content, Does.Not.Contain("AssetDatabase.SaveAssets("), relativeFile);
                 Assert.That(content, Does.Not.Contain("EditorSceneManager.OpenScene("), relativeFile);
+                Assert.That(content, Does.Not.Contain("Object.DontDestroyOnLoad("), relativeFile);
+                Assert.That(content, Does.Not.Contain("new GameObject("), relativeFile);
+                Assert.That(content, Does.Not.Contain("EditorApplication.isPlaying ="), relativeFile);
             }
         }
 

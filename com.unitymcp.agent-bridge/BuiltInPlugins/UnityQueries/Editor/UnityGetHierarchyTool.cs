@@ -71,7 +71,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
 
             if (string.Equals(resolution.targetKind, "scene_root", StringComparison.Ordinal))
             {
-                var roots = resolution.scene.GetRootGameObjects();
+                var roots = resolution.GetRootGameObjects();
                 metrics.rootCount = roots.Length;
                 TraverseRoots(roots, resolution, args, nodes, metrics, cancellation);
             }

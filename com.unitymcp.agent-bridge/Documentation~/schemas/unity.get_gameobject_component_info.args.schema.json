@@ -10,7 +10,7 @@
         "null"
       ],
       "minLength": 1,
-      "description": "Canonical GameObject locator string. Null or omitted means selection:active."
+      "description": "Canonical GameObject locator string, including dontDestroyOnLoad#A/B during Play Mode. Null or omitted means selection:active."
     },
     "componentName": {
       "type": [
