@@ -18,6 +18,10 @@ namespace UnityMcp.AgentBridge.Tests
         {
             Assert.That(EditorApplication.isPlaying, Is.False);
 
+            var rootsSuccess = UnityQueries.DontDestroyOnLoadHierarchy.TryGetRoots(
+                out var roots,
+                out var rootsFailure);
+
             var gameObjectSuccess = UnityQueries.GameObjectLocatorResolver.TryResolve(
                 "dontDestroyOnLoad#Missing",
                 out _,
@@ -34,6 +38,10 @@ namespace UnityMcp.AgentBridge.Tests
             try
             {
                 Assert.That(gameObjectSuccess, Is.False);
+                Assert.That(rootsSuccess, Is.False);
+                Assert.That(roots, Is.Empty);
+                Assert.That(rootsFailure.Status, Is.EqualTo(UnityMcpToolStatus.InvalidArgs));
+                Assert.That(rootsFailure.Errors[0].Code, Is.EqualTo(UnityQueries.DontDestroyOnLoadHierarchy.NotAvailableErrorCode));
                 Assert.That(gameObjectFailure.Status, Is.EqualTo(UnityMcpToolStatus.InvalidArgs));
                 Assert.That(gameObjectFailure.Errors[0].Code, Is.EqualTo(UnityQueries.DontDestroyOnLoadHierarchy.NotAvailableErrorCode));
                 Assert.That(bareGameObjectSuccess, Is.False);

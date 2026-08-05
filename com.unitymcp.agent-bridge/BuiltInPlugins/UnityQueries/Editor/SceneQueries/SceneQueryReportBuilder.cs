@@ -22,8 +22,8 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                     ["limit"] = metrics.limit,
                     ["includeComponents"] = args != null && args.includeComponents
                 },
-                ["target"] = metrics.target != null ? JToken.FromObject(metrics.target) : JValue.CreateNull(),
-                ["result"] = JToken.FromObject(metrics),
+                ["target"] = ToJsonToken(metrics.target),
+                ["result"] = ToJsonToken(metrics),
                 ["boundedCompleteness"] = new JObject
                 {
                     ["completeWithinAppliedBounds"] = true,
@@ -46,12 +46,12 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                     ["limit"] = args != null ? args.limit : SceneQueryContract.DefaultHierarchyLimit,
                     ["includeComponents"] = args != null && args.includeComponents
                 },
-                ["target"] = target != null ? JToken.FromObject(target) : JValue.CreateNull(),
+                ["target"] = ToJsonToken(target),
                 ["status"] = result != null ? ToToken(result.Status) : JValue.CreateNull(),
                 ["success"] = result != null && result.Success,
                 ["summary"] = result != null ? ToToken(result.Summary) : JValue.CreateNull(),
-                ["errors"] = result != null && result.Errors != null ? JToken.FromObject(result.Errors) : new JArray(),
-                ["metrics"] = metrics != null ? JToken.FromObject(metrics) : JValue.CreateNull()
+                ["errors"] = result != null && result.Errors != null ? ToJsonToken(result.Errors) : new JArray(),
+                ["metrics"] = ToJsonToken(metrics)
             };
         }
 
@@ -158,6 +158,18 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
         private static JToken ToToken(string value)
         {
             return value != null ? JToken.FromObject(value) : JValue.CreateNull();
+        }
+
+        // Serialize through JsonConvert before parsing so Unity.Newtonsoft.Json does not
+        // route nested CLR arrays and JObject fields through JTokenWriter's fragile casts.
+        private static JToken ToJsonToken(object value)
+        {
+            if (value == null)
+            {
+                return JValue.CreateNull();
+            }
+
+            return JToken.Parse(SceneQueryJson.Serialize(value));
         }
     }
 }

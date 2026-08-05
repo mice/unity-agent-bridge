@@ -131,6 +131,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Category("AGB_190")]
         public IEnumerator HierarchyTool_RootAndSubtreeReturnReusableHierarchyV2Identity()
         {
+            Assert.That(Application.isPlaying, Is.True);
             CreatePersistentHierarchy("AGB_DDOL_190_Root", "InactiveChild", true);
             var tool = CreateTool("UnityGetHierarchyTool");
 

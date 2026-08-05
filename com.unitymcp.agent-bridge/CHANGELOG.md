@@ -6,6 +6,13 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-08-05
+
+### Fixed
+
+- Fixed `unity.get_hierarchy` report serialization for `dontDestroyOnLoad` results containing nested arrays and follow-up JSON objects.
+- Added explicit EditMode and PlayMode coverage for Play Mode-only `DontDestroyOnLoad` discovery and empty root behavior.
+
 ## [1.2.9] - 2026-08-05
 
 ### Added
