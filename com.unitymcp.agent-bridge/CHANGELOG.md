@@ -6,6 +6,17 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-08-05
+
+### Added
+
+- Added DontDestroyOnLoad hierarchy discovery and locator support for special runtime scenes, including deterministic root ordering and inactive object coverage.
+- Added focused EditMode and PlayMode coverage for DontDestroyOnLoad hierarchy queries and locator behavior.
+
+### Changed
+
+- Updated hierarchy and component query reports, schemas, and integration documentation to expose special-scene metadata and main-stage classification.
+
 ## [1.2.8] - 2026-07-14
 
 ### Fixed
