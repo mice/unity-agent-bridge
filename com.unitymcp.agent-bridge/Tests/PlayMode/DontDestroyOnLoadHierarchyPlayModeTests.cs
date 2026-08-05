@@ -136,7 +136,7 @@ namespace UnityMcp.AgentBridge.Tests
             var tool = CreateTool("UnityGetHierarchyTool");
 
             var rootResult = tool.Execute(
-                CreateContext("agb.ddol.190.root", "unity.get_hierarchy", "{\"locator\":\"dontDestroyOnLoad\",\"maxDepth\":2,\"limit\":100}"),
+                CreateContext("agb.ddol.190.root", "unity.get_hierarchy", "{\"locator\":\"dontDestroyOnLoad\",\"maxDepth\":2,\"limit\":100,\"includeComponents\":true}"),
                 NoOpUnityMcpCancellation.Instance);
             TrackReport(rootResult.ReportPath);
             var rootMetrics = JsonUtility.FromJson<HierarchyMetricsMirror>(rootResult.MetricsObjectJson);
@@ -151,6 +151,7 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(childNode.locator, Is.EqualTo("dontDestroyOnLoad#AGB_DDOL_190_Root/InactiveChild"));
             Assert.That(childNode.path, Is.EqualTo("AGB_DDOL_190_Root/InactiveChild"));
             Assert.That(string.IsNullOrEmpty(childNode.scenePath), Is.True);
+            Assert.That(childNode.components, Is.Not.Null);
             Assert.That(rootResult.MetricsObjectJson, Does.Contain("\"scenePath\":null"));
             Assert.That(rootResult.MetricsObjectJson, Does.Contain("dontDestroyOnLoad#"));
 
@@ -399,6 +400,14 @@ namespace UnityMcp.AgentBridge.Tests
             public string locator;
             public string path;
             public string scenePath;
+            public HierarchyComponentMirror[] components;
+        }
+
+        [Serializable]
+        private sealed class HierarchyComponentMirror
+        {
+            public int index;
+            public string type;
         }
 
         [Serializable]

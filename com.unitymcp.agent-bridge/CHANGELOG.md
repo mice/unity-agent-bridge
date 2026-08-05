@@ -6,6 +6,12 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.11] - 2026-08-06
+
+### Fixed
+
+- Fixed hierarchy metrics serialization by keeping follow-up argument objects as CLR dictionaries instead of nested Unity Newtonsoft `JObject` values.
+
 ## [1.2.10] - 2026-08-05
 
 ### Fixed

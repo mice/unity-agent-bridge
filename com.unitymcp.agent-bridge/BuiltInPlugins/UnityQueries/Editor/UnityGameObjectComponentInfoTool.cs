@@ -214,7 +214,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                     ToolResultMetadata.Option(
                         "unity.get_gameobject_component_info",
                         "Inspect a specific component on this GameObject.",
-                        new JObject
+                        new Dictionary<string, object>
                         {
                             ["locator"] = metrics.target.locator,
                             ["componentIndex"] = metrics.components[0].index
@@ -227,7 +227,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                     ToolResultMetadata.Option(
                         "unity.read_report",
                         "Read the component report for full serialized property detail within the applied bounds.",
-                        new JObject
+                        new Dictionary<string, object>
                         {
                             ["reportPath"] = reportPath,
                             ["jsonPointer"] = "/components"

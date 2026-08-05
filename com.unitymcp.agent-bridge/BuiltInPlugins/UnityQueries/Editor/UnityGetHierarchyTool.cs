@@ -1,7 +1,6 @@
 using System;
 using UnityMcp.Plugin;
 using System.Collections.Generic;
-using Newtonsoft.Json.Linq;
 using UnityEngine;
 
 namespace UnityMcp.BuiltInPlugins.UnityQueries
@@ -127,7 +126,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                     ToolResultMetadata.Option(
                         "unity.read_report",
                         "Read the bounded hierarchy report for the full result within the applied limits.",
-                        new JObject
+                        new Dictionary<string, object>
                         {
                             ["reportPath"] = reportPath,
                             ["jsonPointer"] = "/result/nodes"
@@ -135,7 +134,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                     ToolResultMetadata.Option(
                         "unity.get_hierarchy",
                         "Query a smaller subtree to reduce response size and inspect a narrower target.",
-                        new JObject
+                        new Dictionary<string, object>
                         {
                             ["locator"] = metrics.nodes[0].locator,
                             ["maxDepth"] = SceneQueryContract.DefaultHierarchyMaxDepth,
@@ -149,7 +148,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                     ToolResultMetadata.Option(
                         "unity.get_gameobject_component_info",
                         "Inspect the selected GameObject components in more detail.",
-                        new JObject
+                        new Dictionary<string, object>
                         {
                             ["locator"] = metrics.nodes[0].locator
                         }));
@@ -159,7 +158,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                 ToolResultMetadata.Option(
                     "unity.get_hierarchy",
                     "Inspect a subtree rooted at one of the returned nodes.",
-                    new JObject
+                    new Dictionary<string, object>
                     {
                         ["locator"] = metrics.nodes[0].locator,
                         ["maxDepth"] = SceneQueryContract.DefaultHierarchyMaxDepth,

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Newtonsoft.Json;
@@ -22,7 +23,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
     {
         public string tool;
         public string reason;
-        public JObject args = new JObject();
+        public Dictionary<string, object> args = new Dictionary<string, object>();
     }
 
     [Serializable]
@@ -67,7 +68,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
             };
         }
 
-        public static ToolFollowUpOption Option(string tool, string reason, JObject args = null)
+        public static ToolFollowUpOption Option(string tool, string reason, IDictionary<string, object> args = null)
         {
             if (string.IsNullOrWhiteSpace(tool))
             {
@@ -83,7 +84,9 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
             {
                 tool = tool,
                 reason = reason,
-                args = args ?? new JObject()
+                args = args != null
+                    ? new Dictionary<string, object>(args, StringComparer.Ordinal)
+                    : new Dictionary<string, object>()
             };
         }
 
