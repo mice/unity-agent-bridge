@@ -78,6 +78,16 @@ namespace UnityMcp.AgentBridge.Mcp
                     DrawRow("Command Line", process.CommandLineSummary);
                 }
 
+                if (!string.IsNullOrWhiteSpace(process.CommandLineSource))
+                {
+                    DrawRow("Command Source", process.CommandLineSource);
+                }
+
+                if (process.EvidenceLabels != null && process.EvidenceLabels.Count > 0)
+                {
+                    DrawRow("Evidence", string.Join(", ", process.EvidenceLabels));
+                }
+
                 if (!string.IsNullOrWhiteSpace(process.InspectionError))
                 {
                     DrawRow("Inspection", process.InspectionError, true, process.InspectionError);

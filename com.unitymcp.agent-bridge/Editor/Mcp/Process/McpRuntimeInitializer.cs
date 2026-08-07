@@ -484,6 +484,7 @@ namespace UnityMcp.AgentBridge.Mcp
             var executablePath = NormalizePath(process.ExecutablePath);
             var commandLine = process.CommandLine ?? string.Empty;
             var normalizedCommandLine = NormalizeTextPath(commandLine);
+            var commandLineSource = ResolveCommandLineSource(process, commandLine);
             var processName = process.ProcessName ?? string.Empty;
             if (!LooksLikeUnityAgentBridge(processName, executablePath, normalizedCommandLine))
             {
@@ -491,25 +492,36 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var projectEvidence = ContainsPath(normalizedCommandLine, projectRoot);
-            var runtimeEvidence = IsUnderPath(executablePath, runtimeRoot) || ContainsPath(normalizedCommandLine, runtimeRoot);
+            var executableRuntimeEvidence = IsUnderPath(executablePath, runtimeRoot);
+            var commandLineRuntimeEvidence = ContainsPath(normalizedCommandLine, runtimeRoot);
+            var runtimeEvidence = executableRuntimeEvidence || commandLineRuntimeEvidence;
             var hasContradictoryProject = HasContradictoryProjectBinding(normalizedCommandLine, projectRoot);
+            var evidenceLabels = BuildEvidenceLabels(
+                projectEvidence,
+                executableRuntimeEvidence,
+                commandLineRuntimeEvidence,
+                hasContradictoryProject,
+                commandLine,
+                commandLineSource);
 
             McpServerProcessMatchKind matchKind;
             string matchReason;
             if (projectEvidence && !hasContradictoryProject)
             {
                 matchKind = McpServerProcessMatchKind.CurrentProject;
-                matchReason = "command line references the current Unity project";
+                matchReason = "command line (" + commandLineSource + ") references the current Unity project";
             }
             else if (runtimeEvidence && !hasContradictoryProject)
             {
                 matchKind = McpServerProcessMatchKind.PreparedRuntime;
-                matchReason = "process executable or command line references the prepared runtime";
+                matchReason = executableRuntimeEvidence
+                    ? "executable path references the prepared runtime"
+                    : "command line (" + commandLineSource + ") references the prepared runtime";
             }
             else if (hasContradictoryProject)
             {
                 matchKind = McpServerProcessMatchKind.MismatchedProject;
-                matchReason = "command line references another Unity project";
+                matchReason = "command line (" + commandLineSource + ") references another Unity project";
             }
             else
             {
@@ -523,10 +535,79 @@ namespace UnityMcp.AgentBridge.Mcp
                 ProcessName = processName,
                 ExecutablePath = process.ExecutablePath ?? string.Empty,
                 CommandLineSummary = Summarize(commandLine, 260),
+                CommandLineSource = commandLineSource,
+                EvidenceLabels = evidenceLabels,
                 MatchKind = matchKind,
                 MatchReason = matchReason,
-                InspectionError = process.InspectionError ?? string.Empty,
+                InspectionError = Summarize(
+                    CombineInspectionErrors(process.InspectionError, process.CommandLineInspectionError),
+                    260),
             };
+        }
+
+        private static string ResolveCommandLineSource(McpProcessDescriptor process, string commandLine)
+        {
+            if (!string.IsNullOrWhiteSpace(process.CommandLineSource))
+            {
+                return process.CommandLineSource;
+            }
+
+            return string.IsNullOrWhiteSpace(commandLine) ? "unavailable" : "provided";
+        }
+
+        private static IReadOnlyList<string> BuildEvidenceLabels(
+            bool projectEvidence,
+            bool executableRuntimeEvidence,
+            bool commandLineRuntimeEvidence,
+            bool hasContradictoryProject,
+            string commandLine,
+            string commandLineSource)
+        {
+            var labels = new List<string>();
+            if (executableRuntimeEvidence)
+            {
+                labels.Add("executable_path.runtime");
+            }
+
+            if (projectEvidence)
+            {
+                labels.Add("command_line.project");
+            }
+
+            if (commandLineRuntimeEvidence)
+            {
+                labels.Add("command_line.runtime");
+            }
+
+            if (hasContradictoryProject)
+            {
+                labels.Add("command_line.foreign");
+            }
+
+            if (labels.Count == 0)
+            {
+                labels.Add(string.IsNullOrWhiteSpace(commandLine) ||
+                           string.Equals(commandLineSource, SystemMcpProcessMetadataReader.UnavailableSource, StringComparison.OrdinalIgnoreCase)
+                    ? "command_line.unavailable"
+                    : "command_line.candidate");
+            }
+
+            return labels;
+        }
+
+        private static string CombineInspectionErrors(string first, string second)
+        {
+            if (string.IsNullOrWhiteSpace(first))
+            {
+                return second ?? string.Empty;
+            }
+
+            if (string.IsNullOrWhiteSpace(second))
+            {
+                return first;
+            }
+
+            return first + "; " + second;
         }
 
         private static bool LooksLikeUnityAgentBridge(string processName, string executablePath, string normalizedCommandLine)
@@ -628,6 +709,18 @@ namespace UnityMcp.AgentBridge.Mcp
 
     internal sealed class SystemMcpServerProcessProvider : IMcpServerProcessProvider
     {
+        private readonly IMcpProcessMetadataReader _metadataReader;
+
+        public SystemMcpServerProcessProvider()
+            : this(new SystemMcpProcessMetadataReader())
+        {
+        }
+
+        internal SystemMcpServerProcessProvider(IMcpProcessMetadataReader metadataReader)
+        {
+            _metadataReader = metadataReader ?? throw new ArgumentNullException(nameof(metadataReader));
+        }
+
         public IReadOnlyList<McpProcessDescriptor> GetProcesses()
         {
             var descriptors = new List<McpProcessDescriptor>();
@@ -654,6 +747,24 @@ namespace UnityMcp.AgentBridge.Mcp
                     catch (Exception exception)
                     {
                         descriptor.InspectionError = exception.Message;
+                    }
+
+                    try
+                    {
+                        var metadata = _metadataReader.Read(descriptor.ProcessId);
+                        if (metadata != null)
+                        {
+                            descriptor.CommandLine = metadata.CommandLine ?? string.Empty;
+                            descriptor.CommandLineSource = string.IsNullOrWhiteSpace(metadata.CommandLineSource)
+                                ? SystemMcpProcessMetadataReader.UnavailableSource
+                                : metadata.CommandLineSource;
+                            descriptor.CommandLineInspectionError = metadata.Error ?? string.Empty;
+                        }
+                    }
+                    catch (Exception exception)
+                    {
+                        descriptor.CommandLineSource = SystemMcpProcessMetadataReader.UnavailableSource;
+                        descriptor.CommandLineInspectionError = SystemMcpProcessMetadataReader.SummarizeError(exception.Message);
                     }
 
                     descriptors.Add(descriptor);
@@ -722,6 +833,8 @@ namespace UnityMcp.AgentBridge.Mcp
         public string ProcessName { get; set; } = string.Empty;
         public string ExecutablePath { get; set; } = string.Empty;
         public string CommandLine { get; set; } = string.Empty;
+        public string CommandLineSource { get; set; } = string.Empty;
+        public string CommandLineInspectionError { get; set; } = string.Empty;
         public string InspectionError { get; set; } = string.Empty;
     }
 
@@ -833,6 +946,8 @@ namespace UnityMcp.AgentBridge.Mcp
         public string ProcessName { get; set; } = string.Empty;
         public string ExecutablePath { get; set; } = string.Empty;
         public string CommandLineSummary { get; set; } = string.Empty;
+        public string CommandLineSource { get; set; } = string.Empty;
+        public IReadOnlyList<string> EvidenceLabels { get; set; } = Array.Empty<string>();
         public McpServerProcessMatchKind MatchKind { get; set; }
         public string MatchReason { get; set; } = string.Empty;
         public string InspectionError { get; set; } = string.Empty;
