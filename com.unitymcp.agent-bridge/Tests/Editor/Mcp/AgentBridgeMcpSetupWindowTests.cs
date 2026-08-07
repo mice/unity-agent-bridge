@@ -330,8 +330,10 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Contain("PollRuntimeBuildTask"));
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_185.md
         [Test]
         [Category("AGBM_UI")]
+        [Category("AGBM_185")]
         public void SetupWindow_Source_ExposesMcpServerProcessStateAndStopAction()
         {
             var windowContent = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/UI/AgentBridgeMcpSetupWindow.cs"));
@@ -348,6 +350,10 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(statusContent, Does.Contain("Long-running MCP Server"));
             Assert.That(windowContent, Does.Contain("Server Process Detail"));
             Assert.That(statusContent, Does.Contain("DrawServerProcessDetails"));
+            Assert.That(statusContent, Does.Contain("Command Source"));
+            Assert.That(statusContent, Does.Contain("process.CommandLineSource"));
+            Assert.That(statusContent, Does.Contain("Evidence"));
+            Assert.That(statusContent, Does.Contain("process.EvidenceLabels"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_169.md

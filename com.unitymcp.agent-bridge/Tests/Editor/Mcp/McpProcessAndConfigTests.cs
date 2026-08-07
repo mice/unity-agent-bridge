@@ -846,10 +846,121 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
     }
 
-    public sealed class McpServerProcessProbeTests
+    public sealed class SystemMcpProcessMetadataReaderTests
     {
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_186.md
         [Test]
         [Category("AGBM_MCP_PROCESS")]
+        [Category("AGBM_186")]
+        public void ParseWmicOutput_ExtractsAndNormalizesCommandLine()
+        {
+            var commandLine = SystemMcpProcessMetadataReader.ParseWmicOutput(
+                "\r\nCommandLine=unity-agent-bridge.exe   mcp-server  --project C:\\Project\r\n\r\n");
+
+            Assert.That(commandLine, Is.EqualTo("unity-agent-bridge.exe mcp-server --project C:\\Project"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_187.md
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        [Category("AGBM_187")]
+        public void ParseProcfsOutput_NormalizesNullSeparatedArguments()
+        {
+            var commandLine = SystemMcpProcessMetadataReader.ParseProcfsOutput(
+                "unity-agent-bridge\0mcp-server\0--project\0/tmp/Current Project\0");
+
+            Assert.That(commandLine, Is.EqualTo("unity-agent-bridge mcp-server --project /tmp/Current Project"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_188.md
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        [Category("AGBM_188")]
+        public void ParsePsOutput_NormalizesMultilineOutput()
+        {
+            var commandLine = SystemMcpProcessMetadataReader.ParsePsOutput(
+                "  unity-agent-bridge mcp-server\n  --project /tmp/CurrentProject\n");
+
+            Assert.That(commandLine, Is.EqualTo("unity-agent-bridge mcp-server --project /tmp/CurrentProject"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_189.md
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        [Category("AGBM_189")]
+        public void Read_CommandRunnerTimesOut_ReturnsBoundedUnavailableDiagnostic()
+        {
+            var runner = new FakeMetadataCommandRunner
+            {
+                Result = new McpProcessMetadataCommandResult { TimedOut = true },
+            };
+            var reader = new SystemMcpProcessMetadataReader(
+                runner,
+                PlatformID.Win32NT,
+                "/proc",
+                TimeSpan.FromMilliseconds(25));
+
+            var metadata = reader.Read(123);
+
+            Assert.That(runner.LastFilePath, Is.EqualTo("wmic.exe"));
+            Assert.That(runner.LastTimeout, Is.EqualTo(TimeSpan.FromMilliseconds(25)));
+            Assert.That(metadata.CommandLineSource, Is.EqualTo("unavailable"));
+            Assert.That(metadata.CommandLine, Is.Empty);
+            Assert.That(metadata.Error, Does.Contain("timed out"));
+            Assert.That(metadata.Error.Length, Is.LessThanOrEqualTo(240));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_190.md
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        [Category("AGBM_190")]
+        public void Read_CommandRunnerUnavailable_ReturnsBoundedUnavailableDiagnostic()
+        {
+            var runner = new FakeMetadataCommandRunner
+            {
+                Result = new McpProcessMetadataCommandResult
+                {
+                    Error = "ps unavailable " + new string('x', 400),
+                },
+            };
+            var reader = new SystemMcpProcessMetadataReader(
+                runner,
+                PlatformID.MacOSX,
+                "/proc",
+                TimeSpan.FromMilliseconds(25));
+
+            var metadata = reader.Read(456);
+
+            Assert.That(runner.LastFilePath, Is.EqualTo("ps"));
+            Assert.That(metadata.CommandLineSource, Is.EqualTo("unavailable"));
+            Assert.That(metadata.Error, Does.StartWith("ps: ps unavailable"));
+            Assert.That(metadata.Error.Length, Is.LessThanOrEqualTo(240));
+        }
+
+        private sealed class FakeMetadataCommandRunner : IMcpProcessMetadataCommandRunner
+        {
+            public McpProcessMetadataCommandResult Result { get; set; }
+            public string LastFilePath { get; private set; } = string.Empty;
+            public TimeSpan LastTimeout { get; private set; }
+
+            public McpProcessMetadataCommandResult Run(
+                string filePath,
+                IReadOnlyList<string> arguments,
+                TimeSpan timeout)
+            {
+                LastFilePath = filePath;
+                LastTimeout = timeout;
+                return Result;
+            }
+        }
+    }
+
+    public sealed class McpServerProcessProbeTests
+    {
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_185.md
+        [Test]
+        [Category("AGBM_MCP_PROCESS")]
+        [Category("AGBM_185")]
         public void Classify_CurrentProjectCommandLine_ReturnsCurrentProject()
         {
             var projectRoot = Normalize(Path.Combine(Path.GetTempPath(), "CurrentProject"));
@@ -859,16 +970,21 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                 ProcessName = "unity-agent-bridge",
                 ExecutablePath = Path.Combine(projectRoot, ".unitymcp", "runtime", "UnityAgentBridge", "cli", "out", "win-x64", "unity-agent-bridge.exe"),
                 CommandLine = "UNITY_PROJECT_PATH=" + projectRoot + " unity-agent-bridge.exe mcp-server",
+                CommandLineSource = "wmic",
             };
 
             var info = McpServerProcessProbe.Classify(descriptor, projectRoot, Path.Combine(projectRoot, ".unitymcp", "runtime"));
 
             Assert.That(info, Is.Not.Null);
             Assert.That(info.MatchKind, Is.EqualTo(McpServerProcessMatchKind.CurrentProject));
+            Assert.That(info.CommandLineSource, Is.EqualTo("wmic"));
+            Assert.That(info.EvidenceLabels, Does.Contain("command_line.project"));
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_185.md
         [Test]
         [Category("AGBM_MCP_PROCESS")]
+        [Category("AGBM_185")]
         public void Classify_RuntimePathEvidence_ReturnsPreparedRuntime()
         {
             var projectRoot = Normalize(Path.Combine(Path.GetTempPath(), "RuntimeProject"));
@@ -879,16 +995,22 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                 ProcessName = "unity-agent-bridge",
                 ExecutablePath = Path.Combine(runtimeRoot, "UnityAgentBridge", "cli", "out", "win-x64", "unity-agent-bridge.exe"),
                 CommandLine = "unity-agent-bridge.exe mcp-server",
+                CommandLineSource = "unavailable",
+                CommandLineInspectionError = "wmic: unavailable",
             };
 
             var info = McpServerProcessProbe.Classify(descriptor, projectRoot, runtimeRoot);
 
             Assert.That(info, Is.Not.Null);
             Assert.That(info.MatchKind, Is.EqualTo(McpServerProcessMatchKind.PreparedRuntime));
+            Assert.That(info.EvidenceLabels, Does.Contain("executable_path.runtime"));
+            Assert.That(info.InspectionError, Does.Contain("wmic: unavailable"));
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_185.md
         [Test]
         [Category("AGBM_MCP_PROCESS")]
+        [Category("AGBM_185")]
         public void Classify_DifferentProjectBinding_ReturnsMismatchedProject()
         {
             var projectRoot = Normalize(Path.Combine(Path.GetTempPath(), "CurrentProject"));
@@ -899,16 +1021,21 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                 ProcessName = "unity-agent-bridge",
                 ExecutablePath = Path.Combine(otherRoot, ".unitymcp", "runtime", "UnityAgentBridge", "cli", "out", "win-x64", "unity-agent-bridge.exe"),
                 CommandLine = "UNITY_PROJECT_PATH=" + otherRoot + " unity-agent-bridge.exe mcp-server",
+                CommandLineSource = "procfs",
             };
 
             var info = McpServerProcessProbe.Classify(descriptor, projectRoot, Path.Combine(projectRoot, ".unitymcp", "runtime"));
 
             Assert.That(info, Is.Not.Null);
             Assert.That(info.MatchKind, Is.EqualTo(McpServerProcessMatchKind.MismatchedProject));
+            Assert.That(info.CommandLineSource, Is.EqualTo("procfs"));
+            Assert.That(info.EvidenceLabels, Does.Contain("command_line.foreign"));
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_185.md
         [Test]
         [Category("AGBM_MCP_PROCESS")]
+        [Category("AGBM_185")]
         public void StopCurrentProjectServers_DoesNotTerminateAmbiguousCandidate()
         {
             var provider = new FakeProcessProvider(new[]
@@ -996,9 +1123,11 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var content = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/Process/McpRuntimeInitializer.cs"));
             var filterIndex = content.IndexOf("LooksLikeUnityAgentBridgeProcessName(processName)");
             var mainModuleIndex = content.IndexOf("process.MainModule");
+            var metadataIndex = content.IndexOf("_metadataReader.Read(descriptor.ProcessId)");
 
             Assert.That(filterIndex, Is.GreaterThanOrEqualTo(0));
             Assert.That(mainModuleIndex, Is.GreaterThan(filterIndex));
+            Assert.That(metadataIndex, Is.GreaterThan(mainModuleIndex));
         }
 
         private static string Normalize(string path)
