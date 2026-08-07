@@ -80,6 +80,57 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(schema, Does.Contain("\"pattern\":\"^Assets(?:/.*)?$\""));
             Assert.That(schema, Does.Contain("\"assetTypes\":{\"type\":\"array\",\"uniqueItems\":true"));
             Assert.That(schema, Does.Contain("\"maximum\":1000"));
+            Assert.That(schema, Does.Contain("\"semanticValidation\""));
+            Assert.That(schema, Does.Contain("\"enum\":[\"none\",\"yaml\"]"));
+        }
+
+        [Test]
+        [Category("AGB_MonoBehaviourSemantics")]
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_195.md
+        public void FindScriptGuidUsages_YamlSemanticMode_ResolvesGameObjectAndComponent()
+        {
+            var result = Execute("{\"scriptGuid\":\"" + ScriptGuid + "\",\"semanticValidation\":\"yaml\",\"assetTypes\":[\"prefab\"],\"searchFolders\":[\"Assets\"],\"limit\":10}");
+
+            Assert.That(result.success, Is.True);
+            Assert.That(result.metricsObjectJson, Does.Contain("\"semanticValidation\":\"performed\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"gameObjectPath\":\"SampleGuidUsagePrefab\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"componentIndex\":1"));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"confidence\":\"semantic_yaml\""));
+            Assert.That(result.changedFiles, Is.Empty);
+        }
+
+        [Test]
+        [Category("AGB_MonoBehaviourSemantics")]
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_196.md
+        public void FindScriptGuidUsages_YamlSemanticMode_ReportsSerializedFieldRisk()
+        {
+            var absolutePath = ToAbsoluteProjectPath(PrefabPath);
+            var content = File.ReadAllText(absolutePath)
+                .Replace("m_EditorClassIdentifier: \n", "m_EditorClassIdentifier: \n  m_Target: {fileID: 0}\n  m_Reference: {fileID: 300000}\n");
+            File.WriteAllText(absolutePath, content);
+
+            var result = Execute("{\"scriptGuid\":\"" + ScriptGuid + "\",\"semanticValidation\":\"yaml\",\"assetTypes\":[\"prefab\"],\"searchFolders\":[\"Assets\"],\"limit\":10}");
+
+            Assert.That(result.success, Is.True);
+            Assert.That(result.metricsObjectJson, Does.Contain("\"serializedFieldPaths\":[\"m_Reference\",\"m_Target\"]"));
+            Assert.That(result.metricsObjectJson, Does.Contain("null_reference_candidate"));
+        }
+
+        [Test]
+        [Category("AGB_MonoBehaviourSemantics")]
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_197.md
+        public void FindScriptGuidUsages_YamlSemanticMode_PreservesCandidateWhenYamlIsIncomplete()
+        {
+            File.WriteAllText(
+                ToAbsoluteProjectPath(PrefabPath),
+                "%YAML 1.1\n--- malformed candidate guid " + ScriptGuid + "\n");
+
+            var result = Execute("{\"scriptGuid\":\"" + ScriptGuid + "\",\"semanticValidation\":\"yaml\",\"assetTypes\":[\"prefab\"],\"searchFolders\":[\"Assets\"],\"limit\":10}");
+
+            Assert.That(result.success, Is.True);
+            Assert.That(result.metricsObjectJson, Does.Contain("\"semanticValidation\":\"partial\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("\"semanticStatus\":\"unresolved\""));
+            Assert.That(result.metricsObjectJson, Does.Contain("No Unity YAML object blocks were found"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_172.md

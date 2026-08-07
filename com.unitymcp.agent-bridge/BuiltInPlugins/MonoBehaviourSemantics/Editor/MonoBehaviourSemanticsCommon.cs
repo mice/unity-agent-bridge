@@ -15,6 +15,10 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
         public const int MaxLimit = 1000;
         public const int MaxLineTextLength = 300;
         public const string SemanticValidationNotPerformed = "not_performed";
+        public const string SemanticValidationNone = "none";
+        public const string SemanticValidationYaml = "yaml";
+        public const int MaxSemanticDiagnostics = 32;
+        public const int MaxSemanticFieldPaths = 16;
     }
 
     internal static class MonoBehaviourSemanticsJson
@@ -194,6 +198,15 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
                         args = new JObject()
                     }
                 }
+            };
+        }
+
+        public static ToolFollowUpMetadata SemanticValidationFollowUp()
+        {
+            return new ToolFollowUpMetadata
+            {
+                recommended = false,
+                options = Array.Empty<ToolFollowUpOption>()
             };
         }
     }
