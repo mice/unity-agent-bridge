@@ -19,7 +19,7 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
         {
             Name = "unity.execute_csharp",
             Title = "Unity Execute CSharp",
-            Description = "Run trusted local Unity Editor automation from a __Run() method body. Edit Mode only. Submitted code runs inside the Unity Editor process, can mutate project state, and MVP does not guarantee interruption of dead loops or blocking calls.",
+            Description = "Run trusted or query-only local Unity Editor automation from a __Run() method body. query_only rejects known project mutations and escape hatches but is not a security sandbox. Code runs inside the Unity Editor process, and synchronous execution may not interrupt dead loops or blocking calls.",
             DefaultTimeoutMs = 2000,
             AllowedRuntimeModes = UnityMcpToolRuntimeModes.Edit,
             SideEffect = UnityMcpToolSideEffect.RunsUserCode,
@@ -41,18 +41,34 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                 return failure;
             }
 
+            if (!RoslynExecutionValidation.TryResolvePolicy(args, _availability.DefaultPolicy, out var policy, out var policyValidationMessage))
+            {
+                return RoslynExecutionResultFactory.InvalidArgs("ROSLYN_POLICY_INVALID", policyValidationMessage);
+            }
+
             if (!RoslynExecutionValidation.TryValidate(args, out var validationMessage))
             {
                 return RoslynExecutionResultFactory.ValidationFailed(
                     context,
                     RoslynExecutionContracts.PhaseValidationFailed,
                     validationMessage,
-                    _availability.ProjectRoot);
+                    _availability.ProjectRoot,
+                    policy);
+            }
+
+            if (policy.IsQueryOnly && !RoslynExecutionValidation.TryValidateQueryOnly(args.code, out var denial))
+            {
+                denial.Source = policy.Source;
+                return RoslynExecutionResultFactory.PolicyDenied(
+                    context,
+                    denial,
+                    _availability.ProjectRoot,
+                    RoslynExecutionUtility.ComputeSha256(args.code));
             }
 
             try
             {
-                var service = new RoslynExecutionService(_availability);
+                var service = new RoslynExecutionService(_availability, policy);
                 return service.Execute(context, args, cancellation);
             }
             catch (Exception exception)
@@ -78,6 +94,9 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                         phase = RoslynExecutionContracts.PhaseExecutionFailed,
                         invocationId = context != null && !string.IsNullOrWhiteSpace(context.CommandId) ? context.CommandId : "execute_csharp_exception",
                         sourceHash = string.Empty,
+                        executionPolicy = policy.Policy,
+                        policySource = policy.Source,
+                        policyVersion = policy.Version,
                         stages = RoslynExecutionMetricsStages.CreateEmpty(),
                         result = RoslynExecutionResultEnvelope.CreateNull(),
                         error = exception.Message,

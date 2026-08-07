@@ -12,6 +12,7 @@ namespace UnityMcp.AgentBridge
     {
         public bool enabled = true;
         public bool roslynExecutionEnabled;
+        public string roslynExecutionDefaultPolicy = "trusted";
         public bool monoBehaviourFindReference2ProviderEnabled;
         public int pollIntervalMs = 200;
         public int maxPollIntervalMs = 2000;

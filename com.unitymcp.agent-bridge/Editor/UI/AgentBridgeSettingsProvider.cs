@@ -1,3 +1,4 @@
+using System;
 using UnityEditor;
 using UnityEngine;
 
@@ -30,6 +31,15 @@ namespace UnityMcp.AgentBridge
                     EditorGUI.BeginChangeCheck();
                     settings.enabled = EditorGUILayout.Toggle("Enabled", settings.enabled);
                     settings.roslynExecutionEnabled = EditorGUILayout.Toggle("Enable Roslyn Execution", settings.roslynExecutionEnabled);
+                    var roslynPolicies = new[] { "trusted", "query_only" };
+                    var currentPolicyIndex = Array.IndexOf(roslynPolicies, settings.roslynExecutionDefaultPolicy);
+                    if (currentPolicyIndex < 0)
+                    {
+                        currentPolicyIndex = 0;
+                    }
+
+                    var selectedPolicyIndex = EditorGUILayout.Popup("Roslyn Default Policy", currentPolicyIndex, roslynPolicies);
+                    settings.roslynExecutionDefaultPolicy = roslynPolicies[selectedPolicyIndex];
                     settings.monoBehaviourFindReference2ProviderEnabled = EditorGUILayout.Toggle(
                         "Enable FindReference2 Provider",
                         settings.monoBehaviourFindReference2ProviderEnabled);
@@ -41,7 +51,7 @@ namespace UnityMcp.AgentBridge
                     }
 
                     EditorGUILayout.HelpBox(
-                        "Roslyn execution is trusted local automation. Submitted code runs inside the Unity Editor process, can mutate project state, and MVP does not guarantee interruption of dead loops or blocking calls.",
+                        "Roslyn execution runs submitted code inside the Unity Editor process. Trusted mode can mutate project state. Query-only mode rejects known side-effect and escape-hatch APIs but is not a security sandbox and does not guarantee interruption of dead loops or blocking calls.",
                         MessageType.Warning);
 
                     EditorGUILayout.HelpBox(

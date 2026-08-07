@@ -44,6 +44,37 @@
       "type": "string",
       "pattern": "^sha256:[A-Fa-f0-9]{64}$"
     },
+    "executionPolicy": {
+      "type": "string",
+      "enum": [
+        "trusted",
+        "query_only"
+      ]
+    },
+    "policySource": {
+      "type": "string",
+      "enum": [
+        "request",
+        "settings",
+        "default"
+      ]
+    },
+    "policyVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "policyDenialCategory": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "policyMatchedOperation": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "stages": {
       "$ref": "#/$defs/stages"
     },
@@ -92,7 +123,10 @@
       "properties": {
         "strategy": {
           "type": "string",
-          "const": "external_proxy"
+          "enum": [
+            "external_proxy",
+            "not_started"
+          ]
         },
         "proxy": {
           "type": "string",

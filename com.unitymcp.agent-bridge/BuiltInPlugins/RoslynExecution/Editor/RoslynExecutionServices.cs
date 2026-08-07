@@ -39,8 +39,12 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
         public const int MaxStringLength = 4096;
         public const string EntrySourceFileName = "Entry.g.cs";
         public const string ReportPrefix = "execute_csharp";
+        public const string PolicyTrusted = "trusted";
+        public const string PolicyQueryOnly = "query_only";
+        public const string PolicyVersion = "query-only.v1";
+        public const string PolicyDeniedCode = "ROSLYN_POLICY_DENIED";
         public const string ArgsSchemaJson =
-            "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"unity.execute_csharp args\",\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":65536,\"description\":\"AI-generated C# body for private static object __Run(). The Unity tool wraps this body in the fixed Entry.Run JSON wrapper.\"},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":10000,\"default\":2000}}}";
+            "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"unity.execute_csharp args\",\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":65536,\"description\":\"AI-generated C# body for private static object __Run(). The Unity tool wraps this body in the fixed Entry.Run JSON wrapper.\"},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":10000,\"default\":2000},\"executionPolicy\":{\"type\":\"string\",\"enum\":[\"trusted\",\"query_only\"],\"default\":\"trusted\",\"description\":\"Execution guardrail policy. query_only rejects known project mutations and escape hatches but is not a sandbox.\"}}}";
 
         public static RoslynExecutionLimit CreateLimit()
         {
@@ -52,6 +56,12 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                 maxStringLength = MaxStringLength
             };
         }
+
+        public static bool IsKnownPolicy(string policy)
+        {
+            return string.Equals(policy, PolicyTrusted, StringComparison.Ordinal) ||
+                   string.Equals(policy, PolicyQueryOnly, StringComparison.Ordinal);
+        }
     }
 
     [Serializable]
@@ -59,6 +69,7 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
     {
         public string code;
         public int timeoutMs = RoslynExecutionContracts.DefaultTimeoutMs;
+        public string executionPolicy;
     }
 
     internal sealed class RoslynExecutionAvailability
@@ -66,6 +77,8 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
         public string ProjectRoot { get; set; }
 
         public string CompilerPath { get; set; }
+
+        public string DefaultPolicy { get; set; }
     }
 
     internal static class RoslynExecutionRuntimeState
@@ -95,7 +108,8 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
             availability = new RoslynExecutionAvailability
             {
                 ProjectRoot = Path.GetFullPath(resolvedProjectRoot),
-                CompilerPath = Path.GetFullPath(compilerPath)
+                CompilerPath = Path.GetFullPath(compilerPath),
+                DefaultPolicy = ReadDefaultPolicy(resolvedProjectRoot)
             };
             return true;
         }
@@ -140,6 +154,33 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
             }
 
             return false;
+        }
+
+        private static string ReadDefaultPolicy(string projectRoot)
+        {
+            foreach (var candidatePath in EnumerateSettingsPaths(projectRoot))
+            {
+                if (!File.Exists(candidatePath))
+                {
+                    continue;
+                }
+
+                using var reader = new StringReader(File.ReadAllText(candidatePath));
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    var trimmed = line.Trim();
+                    if (!trimmed.StartsWith("roslynExecutionDefaultPolicy:", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var value = trimmed.Substring("roslynExecutionDefaultPolicy:".Length).Trim().Trim('"');
+                    return RoslynExecutionContracts.IsKnownPolicy(value) ? value : RoslynExecutionContracts.PolicyTrusted;
+                }
+            }
+
+            return RoslynExecutionContracts.PolicyTrusted;
         }
 
         private static IEnumerable<string> EnumerateSettingsPaths(string projectRoot)
@@ -196,6 +237,18 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
         }
     }
 
+    internal sealed class RoslynExecutionPolicyDecision
+    {
+        public string Policy { get; set; }
+        public string Source { get; set; }
+        public string Version { get; set; }
+        public string DenialCategory { get; set; }
+        public string MatchedOperation { get; set; }
+        public string Message { get; set; }
+
+        public bool IsQueryOnly => string.Equals(Policy, RoslynExecutionContracts.PolicyQueryOnly, StringComparison.Ordinal);
+    }
+
     internal static class RoslynExecutionValidation
     {
         private static readonly string[] BlockedTokens =
@@ -215,6 +268,55 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
             "WaitOne(",
             "WaitAny(",
             "WaitAll("
+        };
+
+        private static readonly PolicyPattern[] QueryOnlyPatterns =
+        {
+            new PolicyPattern("process_escape", "System.IO"),
+            new PolicyPattern("process_escape", "System.Net"),
+            new PolicyPattern("process_escape", "System.Diagnostics"),
+            new PolicyPattern("process_escape", "DllImport"),
+            new PolicyPattern("reflection_escape", "System.Reflection"),
+            new PolicyPattern("reflection_escape", "Activator."),
+            new PolicyPattern("reflection_escape", "Type.GetType"),
+            new PolicyPattern("reflection_escape", "Assembly.Load"),
+            new PolicyPattern("project_write", "AssetDatabase.Refresh"),
+            new PolicyPattern("project_write", "AssetDatabase.SaveAssets"),
+            new PolicyPattern("project_write", "AssetDatabase.CreateAsset"),
+            new PolicyPattern("project_write", "AssetDatabase.DeleteAsset"),
+            new PolicyPattern("project_write", "AssetDatabase.MoveAsset"),
+            new PolicyPattern("project_write", "AssetDatabase.CopyAsset"),
+            new PolicyPattern("project_write", "AssetDatabase.ImportAsset"),
+            new PolicyPattern("project_write", "AssetDatabase.StartAssetEditing"),
+            new PolicyPattern("project_write", "AssetDatabase.StopAssetEditing"),
+            new PolicyPattern("project_write", "EditorUtility.SetDirty"),
+            new PolicyPattern("project_write", "EditorPrefs.Set"),
+            new PolicyPattern("project_write", "PlayerPrefs.Set"),
+            new PolicyPattern("scene_prefab_write", "EditorSceneManager.Save"),
+            new PolicyPattern("scene_prefab_write", "PrefabUtility.Save"),
+            new PolicyPattern("scene_prefab_write", "PrefabUtility.Apply"),
+            new PolicyPattern("scene_prefab_write", "PrefabUtility.Revert"),
+            new PolicyPattern("object_mutation", "Object.Instantiate"),
+            new PolicyPattern("object_mutation", "Instantiate("),
+            new PolicyPattern("object_mutation", "Instantiate<"),
+            new PolicyPattern("object_mutation", "Destroy("),
+            new PolicyPattern("object_mutation", "DestroyImmediate("),
+            new PolicyPattern("object_mutation", "AddComponent<"),
+            new PolicyPattern("object_mutation", "GameObject.AddComponent"),
+            new PolicyPattern("object_mutation", "ScriptableObject.CreateInstance"),
+            new PolicyPattern("editor_lifecycle", "EditorApplication.EnterPlaymode"),
+            new PolicyPattern("editor_lifecycle", "EditorApplication.ExitPlaymode"),
+            new PolicyPattern("editor_lifecycle", "EditorApplication.Exit"),
+            new PolicyPattern("editor_lifecycle", "EditorApplication.RequestScriptCompilation"),
+            new PolicyPattern("editor_lifecycle", "SceneManager.LoadScene"),
+            new PolicyPattern("editor_lifecycle", "Application.Quit"),
+            new PolicyPattern("editor_lifecycle", "Undo."),
+            new PolicyPattern("blocking", "Thread.Sleep"),
+            new PolicyPattern("blocking", "WaitOne("),
+            new PolicyPattern("blocking", "WaitAny("),
+            new PolicyPattern("blocking", "WaitAll("),
+            new PolicyPattern("blocking", "while(true)"),
+            new PolicyPattern("blocking", "for(;;)")
         };
 
         public static bool TryValidate(ExecuteCSharpArgs args, out string validationMessage)
@@ -243,9 +345,10 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                 return false;
             }
 
-            if (args.code.IndexOf("class Entry", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                args.code.IndexOf("static string Run(", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                args.code.IndexOf("static object __Run(", StringComparison.OrdinalIgnoreCase) >= 0)
+            var codeForValidation = MaskNonCode(args.code);
+            if (codeForValidation.IndexOf("class Entry", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                codeForValidation.IndexOf("static string Run(", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                codeForValidation.IndexOf("static object __Run(", StringComparison.OrdinalIgnoreCase) >= 0)
             {
                 validationMessage = "Submit only the __Run() method body, not a full C# file.";
                 return false;
@@ -253,7 +356,7 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
 
             for (var index = 0; index < BlockedTokens.Length; index++)
             {
-                if (args.code.IndexOf(BlockedTokens[index], StringComparison.OrdinalIgnoreCase) >= 0)
+                if (codeForValidation.IndexOf(BlockedTokens[index], StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     validationMessage = "Blocked API or pattern detected: " + BlockedTokens[index];
                     return false;
@@ -262,6 +365,147 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
 
             validationMessage = null;
             return true;
+        }
+
+        public static bool TryResolvePolicy(ExecuteCSharpArgs args, string defaultPolicy, out RoslynExecutionPolicyDecision decision, out string validationMessage)
+        {
+            var requestedPolicy = args != null ? args.executionPolicy : null;
+            var policy = string.IsNullOrWhiteSpace(requestedPolicy) ? defaultPolicy : requestedPolicy;
+            if (!RoslynExecutionContracts.IsKnownPolicy(policy))
+            {
+                decision = null;
+                validationMessage = "executionPolicy must be 'trusted' or 'query_only'.";
+                return false;
+            }
+
+            decision = new RoslynExecutionPolicyDecision
+            {
+                Policy = policy,
+                Source = string.IsNullOrWhiteSpace(requestedPolicy) ? "settings" : "request",
+                Version = RoslynExecutionContracts.PolicyVersion
+            };
+            validationMessage = null;
+            return true;
+        }
+
+        public static bool TryValidateQueryOnly(string code, out RoslynExecutionPolicyDecision denial)
+        {
+            var maskedCode = MaskNonCode(code ?? string.Empty);
+            for (var index = 0; index < QueryOnlyPatterns.Length; index++)
+            {
+                var pattern = QueryOnlyPatterns[index];
+                if (maskedCode.IndexOf(pattern.Token, StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                denial = new RoslynExecutionPolicyDecision
+                {
+                    Policy = RoslynExecutionContracts.PolicyQueryOnly,
+                    Version = RoslynExecutionContracts.PolicyVersion,
+                    DenialCategory = pattern.Category,
+                    MatchedOperation = pattern.Token,
+                    Message = "Query-only policy denied " + pattern.Token + " (" + pattern.Category + "). Use a read-only Unity query or explicitly select trusted policy."
+                };
+                return false;
+            }
+
+            denial = null;
+            return true;
+        }
+
+        private static string MaskNonCode(string source)
+        {
+            var buffer = source.ToCharArray();
+            var state = LexState.Code;
+            var escaped = false;
+            for (var index = 0; index < buffer.Length; index++)
+            {
+                var current = buffer[index];
+                var next = index + 1 < buffer.Length ? buffer[index + 1] : '\0';
+                if (state == LexState.Code)
+                {
+                    if (current == '/' && next == '/')
+                    {
+                        buffer[index++] = ' ';
+                        buffer[index] = ' ';
+                        state = LexState.LineComment;
+                    }
+                    else if (current == '/' && next == '*')
+                    {
+                        buffer[index++] = ' ';
+                        buffer[index] = ' ';
+                        state = LexState.BlockComment;
+                    }
+                    else if (current == '"')
+                    {
+                        buffer[index] = ' ';
+                        state = LexState.String;
+                    }
+                    else if (current == '\'')
+                    {
+                        buffer[index] = ' ';
+                        state = LexState.Character;
+                    }
+                }
+                else if (state == LexState.LineComment)
+                {
+                    buffer[index] = current == '\n' || current == '\r' ? current : ' ';
+                    if (current == '\n' || current == '\r')
+                    {
+                        state = LexState.Code;
+                    }
+                }
+                else
+                {
+                    buffer[index] = ' ';
+                    if (state == LexState.String || state == LexState.Character)
+                    {
+                        if (current == '\\' && !escaped)
+                        {
+                            escaped = true;
+                            continue;
+                        }
+
+                        var closesLiteral = (state == LexState.String && current == '"') ||
+                                             (state == LexState.Character && current == '\'');
+                        if (closesLiteral && !escaped)
+                        {
+                            state = LexState.Code;
+                        }
+
+                        escaped = false;
+                    }
+                    else if (state == LexState.BlockComment && current == '*' && next == '/')
+                    {
+                        buffer[++index] = ' ';
+                        state = LexState.Code;
+                    }
+                }
+            }
+
+            return new string(buffer);
+        }
+
+        private enum LexState
+        {
+            Code,
+            LineComment,
+            BlockComment,
+            String,
+            Character
+        }
+
+        private sealed class PolicyPattern
+        {
+            public PolicyPattern(string category, string token)
+            {
+                Category = category;
+                Token = token;
+            }
+
+            public string Category { get; }
+            public string Token { get; }
         }
     }
 
@@ -285,10 +529,16 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
             };
         }
 
-        public static UnityMcpToolResult ValidationFailed(UnityMcpToolContext context, string phase, string message, string projectRoot)
+        public static UnityMcpToolResult ValidationFailed(
+            UnityMcpToolContext context,
+            string phase,
+            string message,
+            string projectRoot,
+            RoslynExecutionPolicyDecision policy = null)
         {
             var invocationId = RoslynExecutionUtility.CreateInvocationId(context != null ? context.CommandId : null);
             var metrics = RoslynExecutionMetrics.CreateFailure(invocationId, string.Empty, phase, message, null);
+            metrics.ApplyPolicy(policy);
             var report = new RoslynExecutionReport
             {
                 metrics = metrics,
@@ -318,15 +568,67 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                 ReportPath = metrics.reportPath
             };
         }
+
+        public static UnityMcpToolResult PolicyDenied(
+            UnityMcpToolContext context,
+            RoslynExecutionPolicyDecision denial,
+            string projectRoot,
+            string sourceHash = null)
+        {
+            var invocationId = RoslynExecutionUtility.CreateInvocationId(context != null ? context.CommandId : null);
+            var message = denial != null && !string.IsNullOrWhiteSpace(denial.Message)
+                ? denial.Message
+                : "Query-only policy denied the submitted code.";
+            var metrics = RoslynExecutionMetrics.CreateFailure(invocationId, sourceHash ?? string.Empty, RoslynExecutionContracts.PhaseValidationFailed, message, null);
+            metrics.ApplyPolicy(denial);
+            metrics.policyDenialCategory = denial != null ? denial.DenialCategory : null;
+            metrics.policyMatchedOperation = denial != null ? denial.MatchedOperation : null;
+            metrics.stages = RoslynExecutionMetricsStages.CreateNotStarted();
+            var report = new RoslynExecutionReport
+            {
+                metrics = metrics,
+                compilerPath = null,
+                generatedSourcePath = null,
+                generatedDllPath = null,
+                rawExecutionJson = null,
+                diagnostics = new List<RoslynCompileDiagnostic>(),
+                exception = null
+            };
+            metrics.reportPath = RoslynExecutionReportWriter.Write(projectRoot, invocationId, report);
+
+            return new UnityMcpToolResult
+            {
+                Success = false,
+                Status = RoslynExecutionContracts.PhaseValidationFailed,
+                Summary = message,
+                Errors = new List<UnityMcpToolError>
+                {
+                    new UnityMcpToolError
+                    {
+                        Code = RoslynExecutionContracts.PolicyDeniedCode,
+                        Message = message
+                    }
+                },
+                MetricsObjectJson = RoslynExecutionJson.Serialize(metrics),
+                ReportPath = metrics.reportPath
+            };
+        }
     }
 
     internal sealed class RoslynExecutionService
     {
         private readonly RoslynExecutionAvailability _availability;
+        private readonly RoslynExecutionPolicyDecision _policy;
 
-        public RoslynExecutionService(RoslynExecutionAvailability availability)
+        public RoslynExecutionService(RoslynExecutionAvailability availability, RoslynExecutionPolicyDecision policy)
         {
             _availability = availability ?? throw new ArgumentNullException(nameof(availability));
+            _policy = policy ?? new RoslynExecutionPolicyDecision
+            {
+                Policy = RoslynExecutionContracts.PolicyTrusted,
+                Source = "default",
+                Version = RoslynExecutionContracts.PolicyVersion
+            };
         }
 
         public UnityMcpToolResult Execute(UnityMcpToolContext context, ExecuteCSharpArgs args, IUnityMcpCancellation cancellation)
@@ -405,7 +707,8 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                         outputDllPath);
                 }
 
-                var metrics = RoslynExecutionMetrics.CreateSuccess(invocationId, sourceHash, compileResponse, loadDurationMs, compileResponse.ProtocolResponse.assemblyName, executionEnvelope);
+            var metrics = RoslynExecutionMetrics.CreateSuccess(invocationId, sourceHash, compileResponse, loadDurationMs, compileResponse.ProtocolResponse.assemblyName, executionEnvelope);
+                metrics.ApplyPolicy(_policy);
                 var report = new RoslynExecutionReport
                 {
                     metrics = metrics,
@@ -423,11 +726,13 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                     Status = UnityMcpToolStatus.Success,
                     Summary = "Roslyn execution completed.",
                     MetricsObjectJson = RoslynExecutionJson.Serialize(metrics),
-                    ChangedFiles = new List<string>
-                    {
-                        RoslynExecutionUtility.MakeProjectRelative(projectRoot, sourcePath),
-                        RoslynExecutionUtility.MakeProjectRelative(projectRoot, outputDllPath)
-                    },
+                    ChangedFiles = _policy.IsQueryOnly
+                        ? new List<string>()
+                        : new List<string>
+                        {
+                            RoslynExecutionUtility.MakeProjectRelative(projectRoot, sourcePath),
+                            RoslynExecutionUtility.MakeProjectRelative(projectRoot, outputDllPath)
+                        },
                     ReportPath = metrics.reportPath
                 };
             }
@@ -509,6 +814,7 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                 ? compileResponse.ProtocolResponse.errorSummary
                 : "Compilation failed.";
             var metrics = RoslynExecutionMetrics.CreateFailure(invocationId, sourceHash, RoslynExecutionContracts.PhaseCompileFailed, summary, compileResponse);
+            metrics.ApplyPolicy(_policy);
             var report = new RoslynExecutionReport
             {
                 metrics = metrics,
@@ -571,6 +877,7 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
             string outputDllPath)
         {
             var metrics = RoslynExecutionMetrics.CreateFailure(invocationId, sourceHash, phase, summary, compileResponse);
+            metrics.ApplyPolicy(_policy);
             var report = new RoslynExecutionReport
             {
                 metrics = metrics,
@@ -1334,11 +1641,23 @@ public static class Entry
         public string phase;
         public string invocationId;
         public string sourceHash;
+        public string executionPolicy;
+        public string policySource;
+        public string policyVersion;
+        public string policyDenialCategory;
+        public string policyMatchedOperation;
         public RoslynExecutionMetricsStages stages;
         public RoslynExecutionResultEnvelope result;
         public string error;
         public string reportPath;
         public RoslynExecutionLimit limit;
+
+        public void ApplyPolicy(RoslynExecutionPolicyDecision policy)
+        {
+            executionPolicy = policy != null ? policy.Policy : RoslynExecutionContracts.PolicyTrusted;
+            policySource = policy != null ? policy.Source : "default";
+            policyVersion = policy != null ? policy.Version : RoslynExecutionContracts.PolicyVersion;
+        }
 
         public static RoslynExecutionMetrics CreateSuccess(
             string invocationId,
@@ -1437,6 +1756,28 @@ public static class Entry
         public static RoslynExecutionMetricsStages CreateEmpty()
         {
             return Create(null, 0, null);
+        }
+
+        public static RoslynExecutionMetricsStages CreateNotStarted()
+        {
+            return new RoslynExecutionMetricsStages
+            {
+                compiler = new RoslynExecutionCompilerStage
+                {
+                    strategy = "not_started",
+                    proxy = RoslynExecutionContracts.CompilerExecutableName,
+                    durationMs = 0,
+                    exitCode = null
+                },
+                load = new RoslynExecutionLoadStage
+                {
+                    durationMs = 0,
+                    assemblyName = null,
+                    entryType = "Entry",
+                    entryMethod = "Run",
+                    scriptBodyMethod = "__Run"
+                }
+            };
         }
     }
 

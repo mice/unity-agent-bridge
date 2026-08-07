@@ -16,6 +16,7 @@ namespace UnityMcp.AgentBridge.Tests
 
             Assert.That(settings.enabled, Is.True);
             Assert.That(settings.roslynExecutionEnabled, Is.False);
+            Assert.That(settings.roslynExecutionDefaultPolicy, Is.EqualTo("trusted"));
             Assert.That(settings.monoBehaviourFindReference2ProviderEnabled, Is.False);
             Assert.That(settings.pollIntervalMs, Is.EqualTo(200));
             Assert.That(settings.maxPollIntervalMs, Is.EqualTo(2000));
@@ -32,6 +33,18 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(settings.pluginCatalogPath, Is.EqualTo("Library/AgentBridge/plugin-catalog.json"));
             Assert.That(settings.allowedStaticMethods, Is.Not.Null);
             Assert.That(settings.pluginRegistrations, Is.Not.Null);
+        }
+
+        [Test]
+        [Category("AGB_Core")]
+        public void AgentBridgeSettings_InvalidRoslynPolicyNormalizesToTrusted()
+        {
+            var settings = ScriptableObject.CreateInstance<AgentBridgeSettings>();
+            settings.roslynExecutionDefaultPolicy = "legacy_policy";
+
+            AgentBridgeSettingsLoader.NormalizeRoslynExecutionPolicy(settings);
+
+            Assert.That(settings.roslynExecutionDefaultPolicy, Is.EqualTo("trusted"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_022.md

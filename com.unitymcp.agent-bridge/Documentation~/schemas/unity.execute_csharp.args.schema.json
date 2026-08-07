@@ -18,6 +18,15 @@
       "minimum": 100,
       "maximum": 10000,
       "default": 2000
+    },
+    "executionPolicy": {
+      "type": "string",
+      "enum": [
+        "trusted",
+        "query_only"
+      ],
+      "default": "trusted",
+      "description": "Execution guardrail policy. query_only rejects known project mutations and escape hatches but is not a sandbox."
     }
   }
 }

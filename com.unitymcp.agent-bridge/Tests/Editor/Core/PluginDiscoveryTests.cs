@@ -465,6 +465,7 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(tool, Is.TypeOf<UnityMcpPluginToolAdapter>());
             Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.execute_csharp" && item.mcpName == "mcp__unity__execute_csharp"), Is.True);
             Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.execute_csharp" && item.allowedRuntimeModes == "Edit"), Is.True);
+            Assert.That(result.Catalog.tools.First(item => item.bridgeTool == "unity.execute_csharp").inputSchemaJson, Does.Contain("query_only"));
 
             var execution = tool.Execute(new AgentToolContext
             {
@@ -480,6 +481,21 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(execution.success, Is.False);
             Assert.That(execution.status, Is.EqualTo("validation_failed"));
             Assert.That(execution.summary, Does.Contain("__Run() method body"));
+
+            var policyDenied = tool.Execute(new AgentToolContext
+            {
+                Command = new AgentCommand
+                {
+                    commandId = "cmd-roslyn-policy",
+                    tool = "unity.execute_csharp",
+                    timeoutMs = 1000
+                },
+                RawArgsJson = "{\"code\":\"UnityEditor.AssetDatabase.SaveAssets(); return null;\",\"executionPolicy\":\"query_only\"}"
+            }, NoOpAgentCancellation.Instance);
+
+            Assert.That(policyDenied.success, Is.False);
+            Assert.That(policyDenied.status, Is.EqualTo("validation_failed"));
+            Assert.That(policyDenied.errors[0].code, Is.EqualTo("ROSLYN_POLICY_DENIED"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_161.md

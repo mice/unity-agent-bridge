@@ -6,6 +6,11 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Added an optional `query_only` execution policy for `unity.execute_csharp` / `mcp__unity__execute_csharp`.
+- Query-only policy rejects known project mutations and escape-hatch APIs before compiler invocation while preserving trusted mode as the default for existing callers.
+
 ## [1.2.11] - 2026-08-06
 
 ### Fixed

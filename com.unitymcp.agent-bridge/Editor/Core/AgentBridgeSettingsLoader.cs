@@ -30,6 +30,7 @@ namespace UnityMcp.AgentBridge
                 return SettingsLoadResult.Stop("AGENTBRIDGE_SETTINGS_DESERIALIZE_FAILED", "AgentBridgeSettings asset exists but could not be deserialized.");
             }
 
+            NormalizeRoslynExecutionPolicy(settingsAsset);
             if (!TryValidate(settingsAsset, out var validationMessage))
             {
                 return SettingsLoadResult.Stop("AGENTBRIDGE_SETTINGS_INVALID_FIELD", validationMessage);
@@ -54,9 +55,22 @@ namespace UnityMcp.AgentBridge
         {
             var settings = ScriptableObject.CreateInstance<AgentBridgeSettings>();
             settings.roslynExecutionEnabled = true;
+            settings.roslynExecutionDefaultPolicy = "trusted";
             settings.allowedStaticMethods = CreateDefaultAllowedStaticMethods();
             settings.pluginRegistrations = CreateDefaultPluginRegistrations();
             return settings;
+        }
+
+        internal static void NormalizeRoslynExecutionPolicy(AgentBridgeSettings settings)
+        {
+            if (settings == null ||
+                string.Equals(settings.roslynExecutionDefaultPolicy, "trusted", StringComparison.Ordinal) ||
+                string.Equals(settings.roslynExecutionDefaultPolicy, "query_only", StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            settings.roslynExecutionDefaultPolicy = "trusted";
         }
 
         private static SettingsLoadResult TryLoadCanonicalAsset()
@@ -73,6 +87,7 @@ namespace UnityMcp.AgentBridge
                 return SettingsLoadResult.Stop("AGENTBRIDGE_SETTINGS_DESERIALIZE_FAILED", "AgentBridgeSettings asset exists but could not be deserialized.");
             }
 
+            NormalizeRoslynExecutionPolicy(settingsAsset);
             if (!TryValidate(settingsAsset, out var validationMessage))
             {
                 return SettingsLoadResult.Stop("AGENTBRIDGE_SETTINGS_INVALID_FIELD", validationMessage);

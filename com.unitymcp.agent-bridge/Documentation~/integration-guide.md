@@ -166,8 +166,13 @@ The public project metadata MCP tool is plugin-owned: `mcp__unity__project_get_i
 - Unity bridge tool: `unity.execute_csharp`
 - MCP name: `mcp__unity__execute_csharp`
 - input contract: caller submits only the `__Run()` method body through `code`
+- optional `executionPolicy`: `trusted` (backward-compatible default) or `query_only`
 - runtime mode: Edit Mode only
-- side-effect posture: runs trusted local Unity Editor automation and can mutate project state
+- side-effect posture: runs code inside the Unity Editor process; trusted mode can mutate project state
+
+`query_only` is intended for common agent inspection queries such as active-scene, hierarchy, selection, AssetDatabase search, dependency, and serialized-property reads. It rejects known project writes, scene/prefab/object mutation, process/filesystem/network/reflection escape hatches, and editor-lifecycle operations before compiler invocation. It is a best-effort guardrail, not a security sandbox or a proof that arbitrary project methods are pure.
+
+The effective policy is selected from the request first, then `roslynExecutionDefaultPolicy` in `AgentBridgeSettings.asset`, and finally `trusted` for legacy settings assets. A policy denial returns `validation_failed` with error code `ROSLYN_POLICY_DENIED` and report metadata identifying the denial category and matched operation.
 
 ### Enablement and readiness
 
