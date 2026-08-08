@@ -12,6 +12,7 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
         public string[] searchFolders;
         public string[] assetTypes;
         public int? limit;
+        public string semanticValidation;
     }
 
     [Serializable]
@@ -58,6 +59,9 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
         public int? componentIndex;
         public string componentType;
         public string serializedFieldPath;
+        public string[] serializedFieldPaths = Array.Empty<string>();
+        public string semanticStatus;
+        public string[] riskCodes = Array.Empty<string>();
     }
 
     [Serializable]
@@ -95,6 +99,7 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
         public int limit;
         public bool truncated;
         public string semanticValidation;
+        public SemanticValidationSummary semanticSummary;
         public ScriptGuidUsageMatch[] matches = Array.Empty<ScriptGuidUsageMatch>();
         public ToolResultDetailsMetadata details;
         public ToolFollowUpMetadata followUp;
@@ -107,6 +112,7 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
         public string[] AssetTypes = Array.Empty<string>();
         public int Limit;
         public string ProviderSelection;
+        public string SemanticValidationMode;
     }
 
     internal sealed class MonoBehaviourReferenceResult
@@ -116,5 +122,18 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
         public int MatchedAssetCount;
         public bool Truncated;
         public ScriptGuidUsageMatch[] Matches = Array.Empty<ScriptGuidUsageMatch>();
+        public SemanticValidationSummary SemanticSummary;
+    }
+
+    [Serializable]
+    internal sealed class SemanticValidationSummary
+    {
+        public string mode;
+        public string status;
+        public int resolvedCount;
+        public int unresolvedCount;
+        public int missingScriptCount;
+        public int nullReferenceCandidateCount;
+        public string[] diagnostics = Array.Empty<string>();
     }
 }

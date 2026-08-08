@@ -13,15 +13,24 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
     {
         private static readonly Regex GuidRegex = new Regex("^[a-fA-F0-9]{32}$", RegexOptions.Compiled);
         private readonly MonoBehaviourReferenceService _referenceService;
+        private readonly MonoBehaviourYamlSemanticValidator _semanticValidator;
 
         public FindScriptGuidUsagesTool()
-            : this(new MonoBehaviourReferenceService())
+            : this(new MonoBehaviourReferenceService(), new MonoBehaviourYamlSemanticValidator())
         {
         }
 
         internal FindScriptGuidUsagesTool(MonoBehaviourReferenceService referenceService)
+            : this(referenceService, new MonoBehaviourYamlSemanticValidator())
+        {
+        }
+
+        internal FindScriptGuidUsagesTool(
+            MonoBehaviourReferenceService referenceService,
+            MonoBehaviourYamlSemanticValidator semanticValidator)
         {
             _referenceService = referenceService ?? new MonoBehaviourReferenceService();
+            _semanticValidator = semanticValidator ?? new MonoBehaviourYamlSemanticValidator();
         }
 
         public UnityMcpToolDescriptor Descriptor { get; } = new UnityMcpToolDescriptor
@@ -52,6 +61,7 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
             args ??= new FindScriptGuidUsagesArgs();
             if (!TryValidateLimit(args.limit, out var limit, out failure) ||
                 !TryNormalizeProvider(args.provider, out var providerSelection, out failure) ||
+                !TryNormalizeSemanticValidation(args.semanticValidation, out var semanticValidation, out failure) ||
                 !TryNormalizeAssetTypes(args.assetTypes, out var assetTypes, out failure) ||
                 !TryNormalizeFolders(args.searchFolders, out var searchFolders, out failure) ||
                 !TryResolveTarget(args, out var script, out failure))
@@ -70,10 +80,14 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
                 SearchFolders = searchFolders,
                 AssetTypes = assetTypes,
                 Limit = limit,
-                ProviderSelection = providerSelection
+                ProviderSelection = providerSelection,
+                SemanticValidationMode = semanticValidation
             };
 
             var searchResult = provider.FindUsages(query);
+            var semanticSummary = _semanticValidator.Enrich(query, searchResult.Matches);
+            ApplySemanticMetadata(searchResult.Provider, query, semanticSummary, searchResult.Matches);
+            searchResult.SemanticSummary = semanticSummary;
             var details = MonoBehaviourSemanticsMetadata.Details(searchResult.Truncated || searchResult.Matches.Length > 0);
             var metrics = new FindScriptGuidUsagesMetrics
             {
@@ -84,10 +98,15 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
                 returnedCount = searchResult.Matches.Length,
                 limit = limit,
                 truncated = searchResult.Truncated,
-                semanticValidation = MonoBehaviourSemanticsContract.SemanticValidationNotPerformed,
+                semanticValidation = semanticValidation == MonoBehaviourSemanticsContract.SemanticValidationYaml
+                    ? semanticSummary.status
+                    : MonoBehaviourSemanticsContract.SemanticValidationNotPerformed,
+                semanticSummary = semanticValidation == MonoBehaviourSemanticsContract.SemanticValidationYaml ? semanticSummary : null,
                 matches = searchResult.Matches,
                 details = details,
-                followUp = MonoBehaviourSemanticsMetadata.CandidatePrecisionFollowUp()
+                followUp = semanticValidation == MonoBehaviourSemanticsContract.SemanticValidationYaml
+                    ? MonoBehaviourSemanticsMetadata.SemanticValidationFollowUp()
+                    : MonoBehaviourSemanticsMetadata.CandidatePrecisionFollowUp()
             };
 
             var report = CreateReport(args, query, metrics);
@@ -121,6 +140,7 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
                     args.scriptPath,
                     args.typeName,
                     provider = string.IsNullOrWhiteSpace(args.provider) ? "auto" : args.provider.Trim(),
+                    semanticValidation = string.IsNullOrWhiteSpace(args.semanticValidation) ? "none" : args.semanticValidation.Trim(),
                     searchFolders = query.SearchFolders,
                     assetTypes = query.AssetTypes,
                     limit = query.Limit
@@ -136,8 +156,30 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
                     metrics.truncated
                 },
                 semanticValidation = metrics.semanticValidation,
+                semanticSummary = metrics.semanticSummary,
                 matches = metrics.matches
             });
+        }
+
+        private static void ApplySemanticMetadata(
+            ReferenceProviderMetadata provider,
+            MonoBehaviourReferenceQuery query,
+            SemanticValidationSummary summary,
+            ScriptGuidUsageMatch[] matches)
+        {
+            if (provider == null || summary == null || !string.Equals(query.SemanticValidationMode, MonoBehaviourSemanticsContract.SemanticValidationYaml, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            provider.capabilities = provider.capabilities ?? new ReferenceProviderCapabilities();
+            provider.capabilities.gameObjectPath = matches.Any(match => !string.IsNullOrWhiteSpace(match?.gameObjectPath));
+            provider.capabilities.componentIndex = matches.Any(match => match?.componentIndex.HasValue == true);
+            provider.capabilities.serializedFields = matches.Any(match => match?.serializedFieldPaths != null && match.serializedFieldPaths.Length > 0);
+            if (summary.resolvedCount > 0)
+            {
+                provider.confidence = "semantic_yaml";
+            }
         }
 
         private static bool TryValidateLimit(int? rawLimit, out int limit, out UnityMcpToolResult failure)
@@ -163,6 +205,22 @@ namespace UnityMcp.BuiltInPlugins.MonoBehaviourSemantics
             }
 
             failure = MonoBehaviourSemanticsResult.InvalidArgs("AGENTBRIDGE_MONO_PROVIDER_INVALID", "provider must be one of: auto, guid_text_scan, findreference2.");
+            return false;
+        }
+
+        private static bool TryNormalizeSemanticValidation(string rawMode, out string mode, out UnityMcpToolResult failure)
+        {
+            failure = null;
+            mode = string.IsNullOrWhiteSpace(rawMode)
+                ? MonoBehaviourSemanticsContract.SemanticValidationNone
+                : rawMode.Trim();
+            if (mode == MonoBehaviourSemanticsContract.SemanticValidationNone ||
+                mode == MonoBehaviourSemanticsContract.SemanticValidationYaml)
+            {
+                return true;
+            }
+
+            failure = MonoBehaviourSemanticsResult.InvalidArgs("AGENTBRIDGE_MONO_SEMANTIC_VALIDATION_INVALID", "semanticValidation must be one of: none, yaml.");
             return false;
         }
 
