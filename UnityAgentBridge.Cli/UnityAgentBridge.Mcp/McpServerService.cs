@@ -145,6 +145,10 @@ public sealed class McpServerService
         structured["resolvedCliPath"] = diagnostics.ResolvedCliPath;
         structured["cliMode"] = diagnostics.CliMode;
         structured["cliWarnings"] = new JsonArray(diagnostics.CliWarnings.Select(w => (JsonNode?)JsonValue.Create(w)).ToArray());
+        structured["packageVersion"] = RuntimeIdentity.PackageVersion;
+        structured["runtimeVersion"] = RuntimeIdentity.RuntimeVersion;
+        structured["protocolVersion"] = RuntimeIdentity.ProtocolVersion;
+        structured["runtimeMode"] = RuntimeIdentity.RuntimeMode;
     }
 
     private static string ReadStatus(string rawJson)

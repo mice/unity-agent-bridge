@@ -398,15 +398,21 @@ namespace UnityMcp.AgentBridge.Mcp
                 return false;
             }
 
+            var executableName = Environment.OSVersion.Platform == PlatformID.Win32NT
+                ? "unity-agent-bridge.exe"
+                : "unity-agent-bridge";
+            var flatRuntimeExecutablePath = Path.Combine(root, McpRuntimeInitializer.GetCurrentRid(), executableName);
+            if (File.Exists(flatRuntimeExecutablePath))
+            {
+                return true;
+            }
+
             var cliRoot = Path.Combine(root, "cli");
             if (!Directory.Exists(cliRoot))
             {
                 return false;
             }
 
-            var executableName = Environment.OSVersion.Platform == PlatformID.Win32NT
-                ? "unity-agent-bridge.exe"
-                : "unity-agent-bridge";
             var ridExecutablePath = Path.Combine(cliRoot, "out", McpRuntimeInitializer.GetCurrentRid(), executableName);
             var rootExecutablePath = Path.Combine(cliRoot, executableName);
 
@@ -441,6 +447,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 : "unity-agent-bridge";
             return File.Exists(Path.Combine(root, "out", "win-x64", executableName))
                    || File.Exists(Path.Combine(root, executableName))
+                   || File.Exists(Path.Combine(root, McpRuntimeInitializer.GetCurrentRid(), executableName))
                    || File.Exists(Path.Combine(root, "unity-agent-bridge.exe"));
         }
 
@@ -504,6 +511,7 @@ namespace UnityMcp.AgentBridge.Mcp
             {
                 Path.Combine(cliRoot, "out", "win-x64", executableName),
                 Path.Combine(cliRoot, executableName),
+                Path.Combine(cliRoot, McpRuntimeInitializer.GetCurrentRid(), executableName),
                 Path.Combine(cliRoot, "unity-agent-bridge.exe"),
             };
 

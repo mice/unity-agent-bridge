@@ -34,6 +34,11 @@ namespace UnityMcp.AgentBridge.Mcp
                 DrawRow("Tools Root", viewModel.ToolsRoot, viewModel.ToolsRootHasIssue, viewModel.ToolsRootIssueTooltip);
                 DrawRow("Long-running MCP Server", viewModel.McpServerProcessState, viewModel.McpServerProcessHasIssue, viewModel.McpServerProcessIssueTooltip);
                 DrawServerProcessDetails(viewModel.McpServerProcesses);
+                DrawRow("Runtime Mode", viewModel.RuntimeMode);
+                DrawRow("Runtime Version", viewModel.RuntimeVersion);
+                DrawRow("Package Version", viewModel.PackageVersion);
+                DrawRow("Protocol Version", viewModel.ProtocolVersion);
+                DrawRow("Compatibility", viewModel.Compatibility, viewModel.Compatibility.StartsWith("blocking", System.StringComparison.OrdinalIgnoreCase), "Package/runtime compatibility is blocking.");
                 DrawRow("Launcher Path", viewModel.LauncherPath);
                 DrawRow("MCP Server Root", viewModel.McpServerRoot);
                 DrawRow("CLI Root", viewModel.CliRoot);
@@ -53,6 +58,7 @@ namespace UnityMcp.AgentBridge.Mcp
             DrawRow("Configured Project", viewModel.ConfiguredUnityProjectPath, viewModel.ConfiguredUnityProjectHasIssue, viewModel.ConfiguredUnityProjectIssueTooltip);
             DrawRow("Tools", viewModel.ToolsRoot, viewModel.ToolsRootHasIssue, viewModel.ToolsRootIssueTooltip);
             DrawRow("Long-running MCP Server", viewModel.McpServerProcessState, viewModel.McpServerProcessHasIssue, viewModel.McpServerProcessIssueTooltip);
+            DrawRow("Runtime", viewModel.RuntimeMode + " / " + viewModel.RuntimeVersion);
         }
 
         private static void DrawServerProcessDetails(IReadOnlyList<McpServerProcessInfo> processes)
@@ -124,6 +130,11 @@ namespace UnityMcp.AgentBridge.Mcp
         public string ConfiguredUnityProjectPath { get; set; } = string.Empty;
         public string ConfiguredUnityProjectConfigPath { get; set; } = string.Empty;
         public string ToolsRoot { get; set; } = string.Empty;
+        public string RuntimeMode { get; set; } = string.Empty;
+        public string RuntimeVersion { get; set; } = string.Empty;
+        public string PackageVersion { get; set; } = string.Empty;
+        public string ProtocolVersion { get; set; } = string.Empty;
+        public string Compatibility { get; set; } = string.Empty;
         public string LauncherPath { get; set; } = string.Empty;
         public string McpServerRoot { get; set; } = string.Empty;
         public string CliRoot { get; set; } = string.Empty;

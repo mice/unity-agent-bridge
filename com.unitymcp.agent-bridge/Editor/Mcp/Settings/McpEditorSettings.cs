@@ -11,6 +11,10 @@ namespace UnityMcp.AgentBridge.Mcp
         public string McpServerRoot { get; set; } = string.Empty;
         public string CliExecutablePath { get; set; } = string.Empty;
         public bool PreferPublishedCli { get; set; }
+        public string RuntimeMode { get; set; } = "project-local";
+        public string RuntimeVersion { get; set; } = string.Empty;
+        public string RuntimeChannel { get; set; } = string.Empty;
+        public string MachineRuntimeRoot { get; set; } = string.Empty;
         public int DiagnosticTimeoutMs { get; set; } = 30000;
     }
 }

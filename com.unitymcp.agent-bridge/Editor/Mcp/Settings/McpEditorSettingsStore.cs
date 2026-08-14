@@ -104,6 +104,10 @@ namespace UnityMcp.AgentBridge.Mcp
                 McpServerRoot = NormalizePathValue(dto.mcpServerRoot),
                 CliExecutablePath = NormalizePathValue(dto.cliExecutablePath),
                 PreferPublishedCli = dto.preferPublishedCli,
+                RuntimeMode = NormalizeRuntimeMode(dto.runtimeMode),
+                RuntimeVersion = NormalizePathValue(dto.runtimeVersion),
+                RuntimeChannel = NormalizeRuntimeChannel(dto.runtimeChannel),
+                MachineRuntimeRoot = NormalizePathValue(dto.machineRuntimeRoot),
                 DiagnosticTimeoutMs = NormalizePositive(dto.diagnosticTimeoutMs, defaults.DiagnosticTimeoutMs),
             };
         }
@@ -119,6 +123,10 @@ namespace UnityMcp.AgentBridge.Mcp
                 mcpServerRoot = NormalizePathValue(settings.McpServerRoot),
                 cliExecutablePath = NormalizePathValue(settings.CliExecutablePath),
                 preferPublishedCli = settings.PreferPublishedCli,
+                runtimeMode = NormalizeRuntimeMode(settings.RuntimeMode),
+                runtimeVersion = NormalizePathValue(settings.RuntimeVersion),
+                runtimeChannel = NormalizeRuntimeChannel(settings.RuntimeChannel),
+                machineRuntimeRoot = NormalizePathValue(settings.MachineRuntimeRoot),
                 diagnosticTimeoutMs = NormalizePositive(settings.DiagnosticTimeoutMs, DefaultDiagnosticTimeoutMs),
             };
         }
@@ -138,6 +146,21 @@ namespace UnityMcp.AgentBridge.Mcp
             return value;
         }
 
+        private static string NormalizeRuntimeMode(string value)
+        {
+            return string.Equals(value, "machine", StringComparison.OrdinalIgnoreCase)
+                ? "machine"
+                : "project-local";
+        }
+
+        private static string NormalizeRuntimeChannel(string value)
+        {
+            if (string.Equals(value, "stable", StringComparison.OrdinalIgnoreCase)) return "stable";
+            if (string.Equals(value, "preview", StringComparison.OrdinalIgnoreCase)) return "preview";
+            if (string.Equals(value, "nightly", StringComparison.OrdinalIgnoreCase)) return "nightly";
+            return string.Empty;
+        }
+
         private static McpEditorSettingsFileDto CreateLoadDto()
         {
             return new McpEditorSettingsFileDto();
@@ -153,6 +176,10 @@ namespace UnityMcp.AgentBridge.Mcp
             public string mcpServerRoot;
             public string cliExecutablePath;
             public bool preferPublishedCli;
+            public string runtimeMode;
+            public string runtimeVersion;
+            public string runtimeChannel;
+            public string machineRuntimeRoot;
             public int diagnosticTimeoutMs;
         }
     }
@@ -170,6 +197,10 @@ namespace UnityMcp.AgentBridge.Mcp
                 McpServerRoot = string.Empty,
                 CliExecutablePath = string.Empty,
                 PreferPublishedCli = false,
+                RuntimeMode = "project-local",
+                RuntimeVersion = string.Empty,
+                RuntimeChannel = string.Empty,
+                MachineRuntimeRoot = string.Empty,
                 DiagnosticTimeoutMs = McpEditorSettingsStore.DefaultDiagnosticTimeoutMs,
             };
         }

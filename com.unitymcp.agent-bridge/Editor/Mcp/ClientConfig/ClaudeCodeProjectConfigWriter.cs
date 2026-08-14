@@ -32,7 +32,21 @@ namespace UnityMcp.AgentBridge.Mcp
                 };
             }
 
-            return _jsonMerger.Apply(GetTargetPath(settings, _pathResolver), BuildManagedJson(executableCommand));
+            if (IsMachineRuntime(settings))
+            {
+                var launcherPath = _pathResolver.ResolveLauncherPath(settings);
+                if (string.IsNullOrWhiteSpace(launcherPath) || !File.Exists(launcherPath))
+                {
+                    return new ManagedBlockApplyResult { Applied = false, TargetPath = GetTargetPath(settings, _pathResolver), Reason = "machine_launcher_missing" };
+                }
+                return _jsonMerger.Apply(
+                    GetTargetPath(settings, _pathResolver),
+                    BuildManagedLauncherJson(launcherPath, _pathResolver.GetProjectRoot()));
+            }
+
+            return _jsonMerger.Apply(
+                GetTargetPath(settings, _pathResolver),
+                BuildManagedJson(executableCommand, string.Empty, false));
         }
 
         public ManagedBlockApplyResult Remove()
@@ -47,7 +61,15 @@ namespace UnityMcp.AgentBridge.Mcp
                 return "{\n  \"mcpServers\": {\n    \"unity_agent_bridge\": {\n      \"error\": \"cli_executable_missing\",\n      \"message\": \"Resolved unity_agent_bridge executable path does not exist. Prepare the project-local MCP runtime before applying managed MCP config.\"\n    }\n  }\n}";
             }
 
-            return "{\n  \"mcpServers\": {\n    \"unity_agent_bridge\": " + BuildManagedJson(executableCommand) + "\n  }\n}";
+            if (IsMachineRuntime(settings) && !File.Exists(_pathResolver.ResolveLauncherPath(settings)))
+            {
+                return "{\n  \"mcpServers\": {\n    \"unity_agent_bridge\": {\n      \"error\": \"machine_launcher_missing\"\n    }\n  }\n}";
+            }
+
+            var serverJson = IsMachineRuntime(settings)
+                ? BuildManagedLauncherJson(_pathResolver.ResolveLauncherPath(settings), _pathResolver.GetProjectRoot())
+                : BuildManagedJson(executableCommand, string.Empty, false);
+            return "{\n  \"mcpServers\": {\n    \"unity_agent_bridge\": " + serverJson + "\n  }\n}";
         }
 
         internal static string GetTargetPath()
@@ -81,8 +103,32 @@ namespace UnityMcp.AgentBridge.Mcp
 
         internal static string BuildManagedJson(string executableCommand)
         {
+            return BuildManagedJson(executableCommand, string.Empty, false);
+        }
+
+        internal static string BuildManagedJson(string executableCommand, string projectRoot, bool includeProjectBinding)
+        {
             executableCommand = (executableCommand ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
-            return "{\n      \"command\": \"" + executableCommand + "\",\n      \"args\": [\"mcp-server\"],\n      \"cwd\": \".\"\n    }";
+            var json = "{\n      \"command\": \"" + executableCommand + "\",\n      \"args\": [\"mcp-server\"],\n      \"cwd\": \".\"";
+            if (includeProjectBinding && !string.IsNullOrWhiteSpace(projectRoot))
+            {
+                var escapedProject = projectRoot.Replace("\\", "\\\\").Replace("\"", "\\\"");
+                json += ",\n      \"env\": {\n        \"UNITY_AGENT_BRIDGE_PROJECT_PATH\": \"" + escapedProject + "\"\n      }";
+            }
+
+            return json + "\n    }";
+        }
+
+        internal static string BuildManagedLauncherJson(string launcherPath, string projectRoot)
+        {
+            var launcher = (launcherPath ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
+            var project = (projectRoot ?? string.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"");
+            return "{\n      \"command\": \"cmd\",\n      \"args\": [\"/d\", \"/s\", \"/c\", \"" + launcher + "\"],\n      \"cwd\": \".\",\n      \"env\": {\n        \"UNITY_AGENT_BRIDGE_PROJECT_PATH\": \"" + project + "\"\n      }\n    }";
+        }
+
+        private static bool IsMachineRuntime(McpEditorSettings settings)
+        {
+            return settings != null && string.Equals(settings.RuntimeMode, "machine", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
+using UnityEditor.PackageManager;
 using UnityEngine;
 using UnityMcp.AgentBridge;
 
@@ -256,6 +257,65 @@ namespace UnityMcp.AgentBridge.Mcp
                         _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
                     }
                 }
+
+                EditorGUILayout.Space(8f);
+                DrawRuntimeSelectionControls();
+            }
+        }
+
+        private void DrawRuntimeSelectionControls()
+        {
+            var settings = _settings ?? McpEditorSettingsDefaults.Create();
+            var modeOptions = new[] { "project-local", "machine" };
+            var currentModeIndex = string.Equals(settings.RuntimeMode, "machine", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+            var nextModeIndex = EditorGUILayout.Popup("Runtime Mode", currentModeIndex, modeOptions);
+            if (nextModeIndex != currentModeIndex)
+            {
+                settings.RuntimeMode = modeOptions[nextModeIndex];
+                _settingsStore.Save(settings);
+                _settings = settings;
+                _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
+            }
+
+            if (string.Equals(settings.RuntimeMode, "machine", StringComparison.OrdinalIgnoreCase))
+            {
+                var version = EditorGUILayout.TextField("Runtime Version", settings.RuntimeVersion ?? string.Empty);
+                if (!string.Equals(version, settings.RuntimeVersion, StringComparison.Ordinal))
+                {
+                    settings.RuntimeVersion = version.Trim();
+                    settings.RuntimeChannel = string.Empty;
+                    _settingsStore.Save(settings);
+                    _settings = settings;
+                }
+
+                var channels = new[] { "(exact version)", "stable", "preview", "nightly" };
+                var channelIndex = string.IsNullOrWhiteSpace(settings.RuntimeChannel)
+                    ? 0
+                    : Array.IndexOf(channels, settings.RuntimeChannel);
+                if (channelIndex < 0) channelIndex = 0;
+                var nextChannelIndex = EditorGUILayout.Popup("Runtime Channel", channelIndex, channels);
+                if (nextChannelIndex != channelIndex)
+                {
+                    settings.RuntimeChannel = nextChannelIndex == 0 ? string.Empty : channels[nextChannelIndex];
+                    if (nextChannelIndex > 0) settings.RuntimeVersion = string.Empty;
+                    _settingsStore.Save(settings);
+                    _settings = settings;
+                }
+
+                var machineRoot = EditorGUILayout.TextField(
+                    "Machine Runtime Root",
+                    string.IsNullOrWhiteSpace(settings.MachineRuntimeRoot)
+                        ? MachineRuntimeLocator.ResolveDefaultManagerRoot()
+                        : settings.MachineRuntimeRoot);
+                if (!string.Equals(machineRoot, settings.MachineRuntimeRoot, StringComparison.Ordinal))
+                {
+                    settings.MachineRuntimeRoot = machineRoot.Trim();
+                    _settingsStore.Save(settings);
+                    _settings = settings;
+                }
+
+                var effectiveVersion = (_pathResolver ?? new McpPathResolver()).ResolveRuntimeVersion(settings);
+                EditorGUILayout.LabelField("Effective Runtime", string.IsNullOrWhiteSpace(effectiveVersion) ? "Unavailable" : effectiveVersion);
             }
         }
 
@@ -538,14 +598,20 @@ namespace UnityMcp.AgentBridge.Mcp
             var effectiveSettings = _settings ?? McpEditorSettingsDefaults.Create();
             var runtimeRoot = (_pathResolver ?? new McpPathResolver()).ResolveWorkspaceRuntimeRoot(effectiveSettings);
             RefreshServerProcessSnapshot();
+            var isMachineRuntime = string.Equals(effectiveSettings.RuntimeMode, "machine", StringComparison.OrdinalIgnoreCase);
             var buildTooltip = "Build the local MCP runtime executables from package-contained source with .NET 8 SDK into the Unity project .unitymcp/runtime directory.";
-            var tooltip = "Prepare a project-local MCP runtime by copying packaged launcher/configuration files and validating the locally built runtime executable in the Unity project .unitymcp/runtime directory.";
+            var tooltip = isMachineRuntime
+                ? "Use the selected machine-level runtime version without rebuilding it in this Unity project."
+                : "Prepare a project-local MCP runtime by copying packaged launcher/configuration files and validating the locally built runtime executable in the Unity project .unitymcp/runtime directory.";
             var stopTooltip = "Stop Unity Agent Bridge MCP server processes matched to this Unity project or prepared runtime.";
+            var displayedRuntimeRoot = isMachineRuntime
+                ? (_pathResolver ?? new McpPathResolver()).ResolveMcpServerRoot(effectiveSettings)
+                : runtimeRoot;
             EditorGUILayout.LabelField(new GUIContent("MCP Runtime", tooltip), EditorStyles.boldLabel);
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.SelectableLabel(string.IsNullOrWhiteSpace(runtimeRoot) ? "Not configured" : runtimeRoot, EditorStyles.textField, GUILayout.Height(EditorGUIUtility.singleLineHeight));
-                using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(runtimeRoot) || _runtimeBuildRunning || _runtimeInitRunning))
+                EditorGUILayout.SelectableLabel(string.IsNullOrWhiteSpace(displayedRuntimeRoot) ? "Not configured" : displayedRuntimeRoot, EditorStyles.textField, GUILayout.Height(EditorGUIUtility.singleLineHeight));
+                using (new EditorGUI.DisabledScope(isMachineRuntime || string.IsNullOrWhiteSpace(runtimeRoot) || _runtimeBuildRunning || _runtimeInitRunning))
                 {
                     if (GUILayout.Button(new GUIContent(_runtimeBuildRunning ? "Building..." : "Build Local Runtime", buildTooltip), GUILayout.Width(150f)))
                     {
@@ -553,7 +619,7 @@ namespace UnityMcp.AgentBridge.Mcp
                     }
                 }
 
-                using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(runtimeRoot) || _runtimeBuildRunning || _runtimeInitRunning))
+                using (new EditorGUI.DisabledScope(isMachineRuntime || string.IsNullOrWhiteSpace(runtimeRoot) || _runtimeBuildRunning || _runtimeInitRunning))
                 {
                     if (GUILayout.Button(new GUIContent(_runtimeInitRunning ? "Preparing..." : "Prepare", tooltip), GUILayout.Width(90f)))
                     {
@@ -604,7 +670,7 @@ namespace UnityMcp.AgentBridge.Mcp
 
             if (_runtimeInitRunning)
             {
-                EditorGUILayout.HelpBox("Preparing a project-local MCP runtime from the packaged payload. The window remains responsive while the background task completes.", MessageType.Info);
+                EditorGUILayout.HelpBox(isMachineRuntime ? "Using the selected machine-level MCP runtime." : "Preparing a project-local MCP runtime from the packaged payload. The window remains responsive while the background task completes.", MessageType.Info);
             }
             else if (!string.IsNullOrWhiteSpace(_runtimeInitMessage))
             {
@@ -659,6 +725,13 @@ namespace UnityMcp.AgentBridge.Mcp
             var configuredUnityProjectPath = ReadConfiguredUnityProjectPath(projectRoot, resolvedWorkspaceRoot);
             var configuredUnityProjectHasIssue = HasConfiguredProjectIssue(projectRoot, configuredUnityProjectPath);
             var effectiveReadiness = AdjustReadinessForConfiguredProject(readiness, configuredUnityProjectHasIssue);
+            var packageVersion = ResolvePackageVersion();
+            var runtimeVersion = effectiveResolver.ResolveRuntimeVersion(effectiveSettings);
+            var compatibility = EvaluateRuntimeCompatibility(packageVersion, runtimeVersion);
+            if (compatibility == "blocking")
+            {
+                effectiveReadiness = McpReadiness.Unavailable;
+            }
 
             return new McpStatusViewModel
             {
@@ -672,8 +745,13 @@ namespace UnityMcp.AgentBridge.Mcp
                 McpReadinessIssueTooltip = GetReadinessIssueTooltip(effectiveReadiness),
                 UnityBridgeStatus = AgentBridgeLocalPreferences.BridgeEnabled ? "OK" : "Disabled",
                 UnityProjectPath = projectRoot,
-                ConfiguredUnityProjectPath = configuredUnityProjectPath,
-                ToolsRoot = string.IsNullOrEmpty(resolvedToolsRoot) ? "Not configured" : resolvedToolsRoot,
+                 ConfiguredUnityProjectPath = configuredUnityProjectPath,
+                 ToolsRoot = string.IsNullOrEmpty(resolvedToolsRoot) ? "Not configured" : resolvedToolsRoot,
+                  RuntimeMode = effectiveResolver.ResolveRuntimeMode(effectiveSettings),
+                  RuntimeVersion = runtimeVersion,
+                  PackageVersion = packageVersion,
+                  ProtocolVersion = "1.0",
+                  Compatibility = compatibility,
                 LauncherPath = string.IsNullOrEmpty(effectiveResolver.ResolveLauncherPath(effectiveSettings)) ? "Not configured" : effectiveResolver.ResolveLauncherPath(effectiveSettings),
                 McpServerRoot = string.IsNullOrEmpty(effectiveResolver.ResolveMcpServerRoot(effectiveSettings)) ? "Not configured" : effectiveResolver.ResolveMcpServerRoot(effectiveSettings),
                 CliRoot = string.IsNullOrEmpty(effectiveResolver.ResolveCliRoot(effectiveSettings)) ? "Not configured" : effectiveResolver.ResolveCliRoot(effectiveSettings),
@@ -785,6 +863,36 @@ namespace UnityMcp.AgentBridge.Mcp
             }
         }
 
+        private static string ResolvePackageVersion()
+        {
+            try
+            {
+                var packageInfo = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(AgentBridgeMcpSetupWindow).Assembly);
+                return packageInfo == null ? string.Empty : packageInfo.version ?? string.Empty;
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        private static string EvaluateRuntimeCompatibility(string packageVersion, string runtimeVersion)
+        {
+            if (string.IsNullOrWhiteSpace(runtimeVersion)) return "unavailable";
+            if (string.IsNullOrWhiteSpace(packageVersion)) return "warning: package version unavailable";
+            var packageParts = packageVersion.Split('.');
+            var runtimeParts = runtimeVersion.Split('.');
+            if (packageParts.Length < 2 || runtimeParts.Length < 2) return "blocking: invalid version";
+            if (!string.Equals(packageParts[0], runtimeParts[0], StringComparison.Ordinal) ||
+                !string.Equals(packageParts[1], runtimeParts[1], StringComparison.Ordinal))
+            {
+                return "blocking: package/runtime major-minor mismatch";
+            }
+            return string.Equals(packageVersion, runtimeVersion, StringComparison.Ordinal)
+                ? "ready"
+                : "warning: patch/prerelease difference";
+        }
+
         private static string FormatCliStatus(McpEditorSettings settings, McpPathResolver pathResolver)
         {
             if (settings == null)
@@ -795,6 +903,11 @@ namespace UnityMcp.AgentBridge.Mcp
             if (!string.IsNullOrWhiteSpace(settings.CliExecutablePath))
             {
                 return File.Exists(settings.CliExecutablePath) ? "OK" : "Missing";
+            }
+
+            if (string.Equals(settings.RuntimeMode, "machine", StringComparison.OrdinalIgnoreCase))
+            {
+                return File.Exists(new MachineRuntimeLocator().ResolveRuntimeExecutablePath(settings)) ? "OK" : "Missing";
             }
 
             if (settings.PreferPublishedCli)

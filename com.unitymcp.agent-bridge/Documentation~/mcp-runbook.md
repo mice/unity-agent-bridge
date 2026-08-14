@@ -2,6 +2,19 @@
 
 This runbook is the package-facing entry point for acceptance agents validating the Editor MCP increment and the package-distribution migration.
 
+## Versioned runtime checks
+
+For multi-project acceptance, install one release artifact into a temporary manager home and configure two projects with different selections:
+
+```powershell
+$env:UNITY_AGENT_BRIDGE_HOME = "$env:TEMP/UnityAgentBridge-acceptance"
+Tools~/UnityAgentBridge/manager/AgentBridgeManager.cmd -Command install -ArtifactPath D:/releases/unity-agent-bridge-1.2.3-win-x64.zip
+Tools~/UnityAgentBridge/manager/AgentBridgeManager.cmd -Command select -ProjectPath D:/Projects/ProjectA -Version 1.2.3
+Tools~/UnityAgentBridge/manager/AgentBridgeManager.cmd -Command doctor -ProjectPath D:/Projects/ProjectA
+```
+
+Record the exact `release-manifest.json`, runtime checksum, launcher path, project binding, and channel pointer in the acceptance report. Change a channel pointer only through the atomic promotion script; never replace a version directory or reuse a Git tag. A checksum failure, missing project binding, or package/runtime major-minor or protocol mismatch is a blocking result. Patch/prerelease differences are compatible warnings.
+
 ## Preconditions
 
 - Work from the repository root.

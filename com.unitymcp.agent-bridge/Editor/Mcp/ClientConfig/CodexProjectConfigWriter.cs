@@ -38,6 +38,19 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var targetPath = GetTargetPath(settings, _pathResolver);
+            if (IsMachineRuntime(settings))
+            {
+                var projectRoot = GetProjectRoot(_pathResolver);
+                var launcherPath = _pathResolver.ResolveLauncherPath(settings);
+                if (string.IsNullOrWhiteSpace(launcherPath) || !File.Exists(launcherPath))
+                {
+                    return new ManagedBlockApplyResult { Applied = false, TargetPath = targetPath, Reason = "machine_launcher_missing" };
+                }
+                return _configEditor.ApplyManagedBlock(
+                    targetPath,
+                    BuildManagedBlockBodyWithLauncher(launcherPath, projectRoot));
+            }
+
             return _configEditor.Apply(targetPath, executableCommand, GetProjectRoot(_pathResolver));
         }
 
@@ -56,7 +69,19 @@ namespace UnityMcp.AgentBridge.Mcp
                        "# Prepare the project-local MCP runtime before applying managed MCP config.";
             }
 
-            return new ManagedBlockTextEditor().Apply(string.Empty, BuildManagedBlockBody(executableCommand, GetProjectRoot(_pathResolver), string.Empty));
+            var projectRoot = GetProjectRoot(_pathResolver);
+            if (IsMachineRuntime(settings))
+            {
+                var launcherPath = _pathResolver.ResolveLauncherPath(settings);
+                if (string.IsNullOrWhiteSpace(launcherPath) || !File.Exists(launcherPath))
+                {
+                    return "# machine_launcher_missing" + Environment.NewLine + "# Install or select a machine runtime before applying managed MCP config.";
+                }
+                return new ManagedBlockTextEditor().Apply(string.Empty, BuildManagedBlockBodyWithLauncher(launcherPath, projectRoot));
+            }
+            return new ManagedBlockTextEditor().Apply(
+                string.Empty,
+                BuildManagedBlockBody(executableCommand, projectRoot, string.Empty));
         }
 
         internal static string GetTargetPath()
@@ -137,9 +162,54 @@ namespace UnityMcp.AgentBridge.Mcp
             return NormalizeProjectRoot(resolver.GetProjectRoot());
         }
 
+        internal static string BuildManagedBlockBodyWithProjectBinding(string executableCommand, string projectRoot)
+        {
+            var body = BuildManagedBlockBody(executableCommand);
+            if (string.IsNullOrWhiteSpace(projectRoot))
+            {
+                return body;
+            }
+
+            return body + Environment.NewLine + Environment.NewLine +
+                   "[mcp_servers.unity_agent_bridge.env]" + Environment.NewLine +
+                   "UNITY_AGENT_BRIDGE_PROJECT_PATH = \"" + EscapeTomlString(projectRoot) + "\"";
+        }
+
+        internal static string BuildManagedBlockBodyWithLauncher(string launcherPath, string projectRoot)
+        {
+            var launcher = EscapeTomlString(launcherPath);
+            var body = "[mcp_servers.unity_agent_bridge]" + Environment.NewLine +
+                       "command = \"cmd\"" + Environment.NewLine +
+                       "args = [\"/d\", \"/s\", \"/c\", \"" + launcher + "\"]" + Environment.NewLine +
+                       "cwd = \".\"" + Environment.NewLine +
+                       "startup_timeout_sec = 20" + Environment.NewLine +
+                       "tool_timeout_sec = 300" + Environment.NewLine +
+                       "required = false";
+            if (!string.IsNullOrWhiteSpace(projectRoot))
+            {
+                body += Environment.NewLine + Environment.NewLine +
+                        "[mcp_servers.unity_agent_bridge.env]" + Environment.NewLine +
+                        "UNITY_AGENT_BRIDGE_PROJECT_PATH = \"" + EscapeTomlString(projectRoot) + "\"";
+            }
+            return body;
+        }
+
+        private static bool IsMachineRuntime(McpEditorSettings settings)
+        {
+            return settings != null && string.Equals(settings.RuntimeMode, "machine", StringComparison.OrdinalIgnoreCase);
+        }
+
         internal static string BuildExecutableCommand(McpEditorSettings settings, McpPathResolver pathResolver)
         {
             var resolver = pathResolver ?? new McpPathResolver();
+            if (settings != null && string.Equals(settings.RuntimeMode, "machine", StringComparison.OrdinalIgnoreCase))
+            {
+                var machineExecutable = new MachineRuntimeLocator().ResolveRuntimeExecutablePath(settings);
+                if (!string.IsNullOrWhiteSpace(machineExecutable) && File.Exists(machineExecutable))
+                {
+                    return machineExecutable;
+                }
+            }
             if (settings != null && !string.IsNullOrWhiteSpace(settings.CliExecutablePath) && File.Exists(settings.CliExecutablePath))
             {
                 return Path.GetFullPath(settings.CliExecutablePath);

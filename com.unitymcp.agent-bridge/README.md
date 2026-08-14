@@ -53,6 +53,19 @@ Documented release-style Git UPM usage:
 
 Release validation requires the tag, `package.json` version, `CHANGELOG.md` entry, package-contained build inputs, and runtime build wrappers to align. Source tags do not carry generated `win-x64` executable payloads by default; external Unity projects build the local runtime from the Setup window with .NET 8 SDK.
 
+### One-time machine runtime (recommended for multiple projects)
+
+Install the MCP runtime once, then bind each Unity project to an exact version or channel:
+
+```powershell
+Tools~/UnityAgentBridge/manager/AgentBridgeManager.cmd -Command install -ArtifactPath D:/releases/unity-agent-bridge-1.2.3-win-x64.zip
+Tools~/UnityAgentBridge/manager/AgentBridgeManager.cmd -Command setup -ProjectPath D:/Projects/MyGame -Version 1.2.3 -PackageUrl git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.3
+```
+
+The cache is `%LOCALAPPDATA%/UnityAgentBridge/versions/<version>`. Version directories are immutable. Use `-Channel stable|preview|nightly` when a project should follow a channel, `-Command rollback -Version <version>` to return to a retained version, and `-Command doctor` to verify the selected executable and checksum. The launcher requires `UNITY_AGENT_BRIDGE_PROJECT_PATH` or `--project-path`, so concurrent Unity projects keep queues, logs, reports, and status files isolated.
+
+`Build Local Runtime` remains the offline/development fallback when no machine artifact is available.
+
 ## First Use
 
 1. Open the Unity project and wait for package resolve and script compilation.

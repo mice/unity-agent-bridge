@@ -7,6 +7,10 @@
     <Deterministic>true</Deterministic>
     <AssemblyName>UnityAgentBridge.Cli</AssemblyName>
     <RootNamespace>UnityAgentBridge.Cli</RootNamespace>
+    <Version>1.2.3</Version>
+    <AssemblyVersion>1.2.3.0</AssemblyVersion>
+    <FileVersion>1.2.3.0</FileVersion>
+    <InformationalVersion>1.2.3</InformationalVersion>
     <RuntimeIdentifiers>win-x64;linux-x64;osx-arm64</RuntimeIdentifiers>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>

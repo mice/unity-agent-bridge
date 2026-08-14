@@ -12,6 +12,7 @@ namespace UnityMcp.AgentBridge.Mcp
     {
         private const string AgentBridgePackageName = "com.unitymcp.agent-bridge";
         private readonly Func<string> _projectRootProvider;
+        private readonly MachineRuntimeLocator _machineRuntimeLocator;
 
         public McpPathResolver()
             : this(null)
@@ -21,6 +22,7 @@ namespace UnityMcp.AgentBridge.Mcp
         internal McpPathResolver(Func<string> projectRootProvider)
         {
             _projectRootProvider = projectRootProvider;
+            _machineRuntimeLocator = new MachineRuntimeLocator();
         }
 
         public string GetProjectRoot()
@@ -65,6 +67,12 @@ namespace UnityMcp.AgentBridge.Mcp
 
         public string ResolveToolsRoot(McpEditorSettings settings)
         {
+            var machineRoot = _machineRuntimeLocator.ResolveRoot(settings);
+            if (!string.IsNullOrEmpty(machineRoot))
+            {
+                return machineRoot;
+            }
+
             var packageToolsRoot = TryResolvePackageToolsRoot();
             if (string.IsNullOrEmpty(packageToolsRoot))
             {
@@ -125,6 +133,13 @@ namespace UnityMcp.AgentBridge.Mcp
 
         public string ResolveMcpServerRoot(McpEditorSettings settings)
         {
+            var machineRuntimeRoot = _machineRuntimeLocator.ResolveRuntimeRoot(settings);
+            if (!string.IsNullOrEmpty(machineRuntimeRoot))
+            {
+                var machineMcpRoot = Path.Combine(machineRuntimeRoot, "UnityAgentBridge");
+                return Directory.Exists(machineMcpRoot) ? machineMcpRoot : machineRuntimeRoot;
+            }
+
             if (settings != null && !string.IsNullOrWhiteSpace(settings.McpServerRoot))
             {
                 var configured = settings.McpServerRoot.Trim();
@@ -153,6 +168,13 @@ namespace UnityMcp.AgentBridge.Mcp
 
         public string ResolveCliRoot(McpEditorSettings settings)
         {
+            var machineRuntimeRoot = _machineRuntimeLocator.ResolveRuntimeRoot(settings);
+            if (!string.IsNullOrEmpty(machineRuntimeRoot))
+            {
+                var machineCliRoot = Path.Combine(machineRuntimeRoot, "UnityAgentBridge", "cli");
+                return Directory.Exists(machineCliRoot) ? machineCliRoot : machineRuntimeRoot;
+            }
+
             if (settings != null && !string.IsNullOrWhiteSpace(settings.CliExecutablePath))
             {
                 var configured = settings.CliExecutablePath.Trim();
@@ -179,6 +201,12 @@ namespace UnityMcp.AgentBridge.Mcp
 
         public string ResolveLauncherPath(McpEditorSettings settings)
         {
+            var machineLauncher = _machineRuntimeLocator.ResolveLauncherPath(settings);
+            if (!string.IsNullOrEmpty(machineLauncher))
+            {
+                return machineLauncher;
+            }
+
             var runtimeRoot = ResolveWorkspaceRuntimeRoot(settings);
             if (string.IsNullOrEmpty(runtimeRoot))
             {
@@ -192,6 +220,18 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             return string.Empty;
+        }
+
+        public string ResolveRuntimeMode(McpEditorSettings settings)
+        {
+            return !string.IsNullOrEmpty(_machineRuntimeLocator.ResolveRoot(settings))
+                ? MachineRuntimeLocator.MachineMode
+                : "project-local";
+        }
+
+        public string ResolveRuntimeVersion(McpEditorSettings settings)
+        {
+            return _machineRuntimeLocator.ResolveVersion(settings);
         }
 
         public string ResolveWorkspaceRuntimeRoot(McpEditorSettings settings)

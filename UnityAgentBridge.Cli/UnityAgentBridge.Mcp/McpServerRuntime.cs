@@ -27,7 +27,7 @@ public static class McpServerRuntime
                 options.ServerInfo = new Implementation
                 {
                     Name = "unity-agent-bridge-mcp",
-                    Version = "1.1.6"
+                    Version = RuntimeIdentity.RuntimeVersion
                 };
             })
             .WithStdioServerTransport()

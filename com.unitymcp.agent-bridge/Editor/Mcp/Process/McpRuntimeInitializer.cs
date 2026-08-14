@@ -35,6 +35,21 @@ namespace UnityMcp.AgentBridge.Mcp
             McpEditorSettings settings,
             CancellationToken cancellationToken)
         {
+            if (settings != null && string.Equals(settings.RuntimeMode, MachineRuntimeLocator.MachineMode, StringComparison.OrdinalIgnoreCase))
+            {
+                var machineRoot = new MachineRuntimeLocator().ResolveRoot(settings);
+                var machineLocator = new MachineRuntimeLocator();
+                var launcherPath = machineLocator.ResolveLauncherPath(settings);
+                var executablePath = machineLocator.ResolveRuntimeExecutablePath(settings);
+
+                return Task.FromResult(new ManagedBlockApplyResult
+                {
+                    Applied = File.Exists(executablePath) && File.Exists(launcherPath),
+                    TargetPath = machineRoot,
+                    Reason = File.Exists(executablePath) && File.Exists(launcherPath) ? string.Empty : "machine_runtime_missing",
+                });
+            }
+
             var payloadToolsRoot = ResolvePayloadToolsRoot(settings);
             if (string.IsNullOrWhiteSpace(payloadToolsRoot) || !Directory.Exists(payloadToolsRoot))
             {

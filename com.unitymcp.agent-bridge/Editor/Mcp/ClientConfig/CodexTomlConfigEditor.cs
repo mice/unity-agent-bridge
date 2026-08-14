@@ -39,6 +39,32 @@ namespace UnityMcp.AgentBridge.Mcp
 
             var original = File.Exists(targetPath) ? File.ReadAllText(targetPath) : string.Empty;
             var updated = ApplyTomlManagedContent(original, executableCommand, projectRoot);
+            return WriteResult(targetPath, updated);
+        }
+
+        public ManagedBlockApplyResult ApplyManagedBlock(string targetPath, string managedBlockBody)
+        {
+            if (string.IsNullOrWhiteSpace(targetPath))
+            {
+                throw new ArgumentException("targetPath must not be empty.", nameof(targetPath));
+            }
+
+            var directory = Path.GetDirectoryName(targetPath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            var original = File.Exists(targetPath) ? File.ReadAllText(targetPath) : string.Empty;
+            var updated = CodexProjectConfigWriter.ApplyManagedContent(
+                NormalizeLineEndings(original),
+                managedBlockBody,
+                _textEditor);
+            return WriteResult(targetPath, updated);
+        }
+
+        private ManagedBlockApplyResult WriteResult(string targetPath, string updated)
+        {
             if (!CodexProjectConfigWriter.ValidateManagedTomlResult(updated))
             {
                 return new ManagedBlockApplyResult

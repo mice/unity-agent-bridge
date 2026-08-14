@@ -6,7 +6,7 @@
 
 ## Prerequisites
 
-- Unity `2021.3+` package compatibility; the current required validation lane is Unity `2022.3.53f1`
+- Unity `2022.3+` package compatibility; the current required validation lane is Unity `2022.3.53f1`
 - Editor-only package usage; no Player/runtime integration
 - Local filesystem access for `Temp/AgentBridge` and `Library/AgentBridge`
 - .NET 8 SDK for MCP workflows that build the project-local runtime from the Setup window.
@@ -64,6 +64,21 @@ For the in-repository workbench `UnityMCP` example project, use the relative dep
 ```
 
 Do not copy the package contents into `Assets/`; consume the package through `Packages/manifest.json`.
+
+## Shared machine runtime
+
+The Unity package is still installed per project through UPM. The external MCP runtime can be installed once per Windows machine and reused by many projects:
+
+```powershell
+Tools~/UnityAgentBridge/manager/AgentBridgeManager.cmd -Command install -ArtifactPath D:/releases/unity-agent-bridge-1.2.3-win-x64.zip
+Tools~/UnityAgentBridge/manager/AgentBridgeManager.cmd -Command setup -ProjectPath D:/Projects/MyGame -Version 1.2.3 -PackageUrl git+https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#v1.2.3
+```
+
+The manager stores immutable versions under `%LOCALAPPDATA%/UnityAgentBridge/versions/<version>`, with `channels/stable.json`, `preview.json`, and `nightly.json` pointing to exact versions. Selection precedence is project exact version, project channel, then machine default channel. `select`, `rollback`, `doctor`, and `cleanup -Force` operate on the project selection and retain referenced versions. Set `UNITY_AGENT_BRIDGE_HOME` to use an internal mirror or a non-default cache root.
+
+Every MCP launch is project-bound. The machine launcher accepts `--project-path` or `UNITY_AGENT_BRIDGE_PROJECT_PATH` and fails before starting when neither is present. Do not share a queue or status directory between projects.
+
+When a machine version is unavailable or incompatible with the package/protocol, switch the Setup window to `project-local` and use `Build Local Runtime`. This fallback writes only under `<UnityProject>/.unitymcp/runtime`.
 
 ## First Editor Run
 

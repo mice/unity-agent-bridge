@@ -2,6 +2,7 @@
 setlocal
 
 set "SCRIPT_DIR=%~dp0"
+set "UNITY_AGENT_BRIDGE_RUNTIME_MODE=project-local"
 for %%I in ("%SCRIPT_DIR%..") do set "TOOLS_ROOT=%%~fI"
 set "CONFIG_PATH=%SCRIPT_DIR%Start-Codex-With-UnityMcp.json"
 set "CONFIG_UNITY_PROJECT="
