@@ -49,12 +49,13 @@ namespace UnityMcp.AgentBridge
             var registrations = settings.pluginRegistrations ?? new List<UnityMcpPluginRegistration>();
             var builtInNames = new HashSet<string>(registry.ListTools().Select(descriptor => descriptor.Name), StringComparer.Ordinal);
             var pluginNames = new HashSet<string>(StringComparer.Ordinal);
+            var pluginMcpNames = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var registration in registrations.Where(static item => item != null && item.enabled))
             {
                 try
                 {
-                    ProcessRegistration(registration, registry, paths, logger, result, builtInNames, pluginNames, hostServices);
+                    ProcessRegistration(registration, registry, paths, logger, result, builtInNames, pluginNames, pluginMcpNames, hostServices);
                 }
                 catch (Exception exception)
                 {
@@ -74,6 +75,7 @@ namespace UnityMcp.AgentBridge
             UnityMcpPluginDiscoveryResult result,
             ISet<string> builtInNames,
             ISet<string> pluginNames,
+            ISet<string> pluginMcpNames,
             UnityMcpPluginHostServices hostServices)
         {
             var assembly = ResolveAssembly(registration, paths.ProjectRoot);
@@ -112,7 +114,7 @@ namespace UnityMcp.AgentBridge
                     var tools = provider.GetTools(pluginContext) ?? Array.Empty<IUnityMcpTool>();
                     foreach (var tool in tools)
                     {
-                        RegisterPluginTool(tool, attribute, assembly, registry, paths, logger, result, builtInNames, pluginNames);
+                        RegisterPluginTool(tool, attribute, assembly, registry, paths, logger, result, builtInNames, pluginNames, pluginMcpNames);
                     }
                 }
                 catch (Exception exception)
@@ -131,7 +133,8 @@ namespace UnityMcp.AgentBridge
             FileAgentBridgeLogger logger,
             UnityMcpPluginDiscoveryResult result,
             ISet<string> builtInNames,
-            ISet<string> pluginNames)
+            ISet<string> pluginNames,
+            ISet<string> pluginMcpNames)
         {
             try
             {
@@ -149,6 +152,13 @@ namespace UnityMcp.AgentBridge
                     return;
                 }
 
+                var mcpToolName = McpToolNameMapper.ToCanonicalMcpName(bridgeToolName);
+                if (!pluginMcpNames.Add(mcpToolName))
+                {
+                    logger?.Warning("plugin_mcp_name_conflict", $"Plugin tool '{bridgeToolName}' maps to MCP tool '{mcpToolName}', which conflicts with another plugin tool and was rejected.");
+                    return;
+                }
+
                 var resolvedSchema = ResolveSchema(tool.InputSchema, assembly, paths.ProjectRoot);
                 var adapted = new UnityMcpPluginToolAdapter(tool, paths.ProjectRoot, paths.TempRoot);
                 registry.Register(adapted);
@@ -159,7 +169,7 @@ namespace UnityMcp.AgentBridge
                     pluginVersion = attribute.PluginVersion,
                     assemblyName = assembly.GetName().Name ?? string.Empty,
                     bridgeTool = bridgeToolName,
-                    mcpName = DeriveMcpToolName(bridgeToolName),
+                    mcpName = mcpToolName,
                     title = tool.Descriptor.Title,
                     description = tool.Descriptor.Description,
                     defaultTimeoutMs = tool.Descriptor.DefaultTimeoutMs,
@@ -259,17 +269,6 @@ namespace UnityMcp.AgentBridge
             }
 
             return token.ToString(Newtonsoft.Json.Formatting.None);
-        }
-
-        private static string DeriveMcpToolName(string bridgeToolName)
-        {
-            const string unityPrefix = "unity.";
-            if (bridgeToolName.StartsWith(unityPrefix, StringComparison.Ordinal))
-            {
-                return "mcp__unity__" + bridgeToolName.Substring(unityPrefix.Length).Replace('.', '_');
-            }
-
-            return "mcp__" + bridgeToolName.Replace('.', '_');
         }
 
         private static void WriteCatalog(string outputPath, UnityMcpPluginCatalog catalog, FileAgentBridgeLogger logger)

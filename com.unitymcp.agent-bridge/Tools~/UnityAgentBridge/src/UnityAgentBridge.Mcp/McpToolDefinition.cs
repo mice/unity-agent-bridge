@@ -10,5 +10,7 @@ public sealed class McpToolDefinition
 
     public string? BridgeTool { get; init; }
 
+    public bool IsForwardedToUnityQueue { get; init; }
+
     public required Func<string, CancellationToken, Task<string>> InvokeAsync { get; init; }
 }

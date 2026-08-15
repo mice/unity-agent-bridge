@@ -6,6 +6,11 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Breaking: replaced all legacy `mcp__unity__*` MCP names with stable domain-first `unity_<domain>_<verb>[_<detail>]` names; no compatibility aliases are provided.
+- Added the shared MCP name mapper for existing bridge commands and future `unity.<domain>.<verb>[.<detail>]` plugin commands.
+
 ### Added
 
 - Added an optional `query_only` execution policy for `unity.execute_csharp` / `mcp__unity__execute_csharp`.

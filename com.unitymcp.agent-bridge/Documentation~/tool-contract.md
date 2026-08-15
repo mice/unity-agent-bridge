@@ -584,24 +584,24 @@ CLI subcommands:
 - `test-play -> unity.run_playmode_tests`
 - `self-test -> unity.agent_bridge_self_test`
 
-MCP tool names:
+MCP tool names use the stable domain-first pattern `unity_<domain>_<verb>[_<detail>]`. Bridge command names remain dotted and are translated at the MCP boundary; `mcp__unity__*` aliases are rejected.
 
-- `mcp__unity__ping`
-- `mcp__unity__project_get_info`
-- `mcp__unity__compile`
-- `mcp__unity__get_console`
-- `mcp__unity__assetdatabase_search`
-- `mcp__unity__get_editor_state`
-- `mcp__unity__open_scene`
-- `mcp__unity__get_hierarchy`
-- `mcp__unity__read_report`
-- `mcp__unity__get_selection_info`
-- `mcp__unity__get_gameobject_component_info`
-- `mcp__unity__run_static_method`
-- `mcp__unity__run_diagnostic`
-- `mcp__unity__run_editmode_tests`
-- `mcp__unity__run_playmode_tests`
-- `mcp__unity__agent_bridge_self_test`
+- `unity_editor_ping`
+- `unity_project_get_info`
+- `unity_project_compile`
+- `unity_console_get`
+- `unity_asset_database_search`
+- `unity_editor_get_state`
+- `unity_scene_open`
+- `unity_hierarchy_get`
+- `unity_report_read`
+- `unity_selection_get_info`
+- `unity_gameobject_component_get_info`
+- `unity_static_method_run`
+- `unity_diagnostic_run`
+- `unity_tests_run_edit_mode`
+- `unity_tests_run_play_mode`
+- `unity_agent_bridge_run_self_test`
 
 ## GameObject Locator Contract
 
@@ -726,7 +726,7 @@ Boundary note for the plugin abstraction layer:
   - empty status values are derived from the plugin `Success` flag
   - empty summaries receive stable defaults
   - invalid or non-object `MetricsObjectJson` values become `{}` with a warning
-- Project metadata callers should use the plugin-owned `mcp__unity__project_get_info` tool. The legacy/core `mcp__unity__project_info` and `unity.project_info` names are removed from the default shipped surface and are not aliased.
+- Project metadata callers should use the plugin-owned `unity_project_get_info` tool. Legacy MCP names, including `mcp__unity__project_info`, are removed from the shipped surface and are not aliased.
 
 Rules:
 
@@ -764,7 +764,7 @@ Schema source rules:
 
 Plugin discovery proof:
 
-- ProjectInfo validates the plugin-owned project metadata path through `unity.project.get_info` / `mcp__unity__project_get_info`
+- ProjectInfo validates the plugin-owned project metadata path through bridge command `unity.project.get_info` / MCP tool `unity_project_get_info`
 - generic dynamic catalog behavior remains covered by non-project-info plugin tools such as EditorBasics or test fixtures
 - plugin tools still cannot override framework-owned names such as `unity.ping` or `unity.compile`
 

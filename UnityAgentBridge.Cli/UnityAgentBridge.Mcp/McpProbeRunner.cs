@@ -25,7 +25,7 @@ public static class McpProbeRunner
             var pingResult = await service.CallToolAsync(
                 new CallToolRequestParams
                 {
-                    Name = "mcp__unity__ping",
+                    Name = "unity_editor_ping",
                     Arguments = new Dictionary<string, JsonElement>()
                 },
                 cancellationToken);
@@ -47,10 +47,20 @@ public static class McpProbeRunner
                     Arguments = new Dictionary<string, JsonElement>()
                 },
                 cancellationToken);
+            var consoleResult = await service.CallToolAsync(
+                new CallToolRequestParams
+                {
+                    Name = "unity_console_get",
+                    Arguments = new Dictionary<string, JsonElement>
+                    {
+                        ["types"] = JsonDocument.Parse("[\"error\"]").RootElement.Clone()
+                    }
+                },
+                cancellationToken);
             var projectInfoResult = await service.CallToolAsync(
                 new CallToolRequestParams
                 {
-                    Name = "mcp__unity__project_get_info",
+                    Name = "unity_project_get_info",
                     Arguments = new Dictionary<string, JsonElement>()
                 },
                 cancellationToken);
@@ -62,6 +72,7 @@ public static class McpProbeRunner
                 pingResult = AdaptCallResult(pingResult),
                 echoResult = AdaptCallResult(echoResult),
                 healthResult = AdaptCallResult(healthResult),
+                consoleResult = AdaptCallResult(consoleResult),
                 projectInfoResult = AdaptCallResult(projectInfoResult)
             };
 

@@ -95,12 +95,12 @@ namespace UnityMcp.AgentBridge.Tests
 
             var result = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, logger);
 
-            Assert.That(registry.TryGetTool("unity.test.project_profile", out var tool), Is.True);
+            Assert.That(registry.TryGetTool("unity.project.get.profile", out var tool), Is.True);
             Assert.That(tool, Is.Not.Null);
             Assert.That(File.Exists(paths.PluginCatalogPath), Is.True);
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.test.project_profile"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.project.get.profile"), Is.True);
             var catalogJson = File.ReadAllText(paths.PluginCatalogPath);
-            Assert.That(catalogJson, Does.Contain("\"mcpName\":\"mcp__unity__test_project_profile\""));
+            Assert.That(catalogJson, Does.Contain("\"mcpName\":\"unity_project_get_profile\""));
         }
 
         [Test]
@@ -125,8 +125,8 @@ namespace UnityMcp.AgentBridge.Tests
 
             UnityMcpPluginRuntime.DiscoverAndRegister(firstRegistry, settings, paths, logger);
 
-            Assert.That(firstRegistry.TryGetTool("unity.test.project_profile", out _), Is.True);
-            Assert.That(File.ReadAllText(paths.PluginCatalogPath), Does.Contain("mcp__unity__test_project_profile"));
+            Assert.That(firstRegistry.TryGetTool("unity.project.get.profile", out _), Is.True);
+            Assert.That(File.ReadAllText(paths.PluginCatalogPath), Does.Contain("unity_project_get_profile"));
 
             registration.enabled = false;
             var refreshedRegistry = new AgentToolRegistry();
@@ -134,11 +134,11 @@ namespace UnityMcp.AgentBridge.Tests
 
             var refreshed = UnityMcpPluginRuntime.DiscoverAndRegister(refreshedRegistry, settings, paths, logger);
 
-            Assert.That(refreshedRegistry.TryGetTool("unity.test.project_profile", out _), Is.False);
+            Assert.That(refreshedRegistry.TryGetTool("unity.project.get.profile", out _), Is.False);
             Assert.That(refreshed.Catalog.tools, Is.Empty);
             var refreshedCatalogJson = File.ReadAllText(paths.PluginCatalogPath);
             Assert.That(refreshedCatalogJson, Does.Contain("\"tools\":[]"));
-            Assert.That(refreshedCatalogJson, Does.Not.Contain("mcp__unity__test_project_profile"));
+            Assert.That(refreshedCatalogJson, Does.Not.Contain("unity_project_get_profile"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_158.md
@@ -195,7 +195,7 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(registry.TryGetTool("unity.project.get_info", out var projectInfoTool), Is.True);
             Assert.That(projectInfoTool, Is.TypeOf<UnityMcpPluginToolAdapter>());
             Assert.That(registry.TryGetTool("unity.project_info", out _), Is.False);
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.project.get_info" && item.mcpName == "mcp__unity__project_get_info"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.project.get_info" && item.mcpName == "unity_project_get_info"), Is.True);
             Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.project_info"), Is.False);
             Assert.That(File.ReadAllText(paths.PluginCatalogPath), Does.Not.Contain("mcp__unity__project_info"));
         }
@@ -229,9 +229,9 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(pingTool, Is.TypeOf<UnityMcpPluginToolAdapter>());
             Assert.That(consoleTool, Is.TypeOf<UnityMcpPluginToolAdapter>());
             Assert.That(editorStateTool, Is.TypeOf<UnityMcpPluginToolAdapter>());
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.ping" && item.mcpName == "mcp__unity__ping"), Is.True);
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_console" && item.mcpName == "mcp__unity__get_console"), Is.True);
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_editor_state" && item.mcpName == "mcp__unity__get_editor_state"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.ping" && item.mcpName == "unity_editor_ping"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_console" && item.mcpName == "unity_console_get"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_editor_state" && item.mcpName == "unity_editor_get_state"), Is.True);
         }
 
         [Test]
@@ -263,11 +263,11 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(registry.TryGetTool("unity.open_scene", out var openSceneTool), Is.True);
             Assert.That(openSceneTool, Is.Not.TypeOf<UnityMcpPluginToolAdapter>());
             Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.open_scene"), Is.False);
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.assetdatabase_search" && item.mcpName == "mcp__unity__assetdatabase_search"), Is.True);
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_hierarchy" && item.mcpName == "mcp__unity__get_hierarchy"), Is.True);
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_gameobject_component_info" && item.mcpName == "mcp__unity__get_gameobject_component_info"), Is.True);
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_selection_info" && item.mcpName == "mcp__unity__get_selection_info"), Is.True);
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.read_report" && item.mcpName == "mcp__unity__read_report"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.assetdatabase_search" && item.mcpName == "unity_asset_database_search"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_hierarchy" && item.mcpName == "unity_hierarchy_get"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_gameobject_component_info" && item.mcpName == "unity_gameobject_component_get_info"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.get_selection_info" && item.mcpName == "unity_selection_get_info"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.read_report" && item.mcpName == "unity_report_read"), Is.True);
         }
 
         [Test]
@@ -300,9 +300,9 @@ namespace UnityMcp.AgentBridge.Tests
             AssertPluginTool(registry, "unity.run_editmode_tests");
             AssertPluginTool(registry, "unity.run_playmode_tests");
             AssertPluginTool(registry, "unity.agent_bridge_self_test");
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.run_editmode_tests" && item.mcpName == "mcp__unity__run_editmode_tests"), Is.True);
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.run_playmode_tests" && item.mcpName == "mcp__unity__run_playmode_tests"), Is.True);
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.agent_bridge_self_test" && item.mcpName == "mcp__unity__agent_bridge_self_test"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.run_editmode_tests" && item.mcpName == "unity_tests_run_edit_mode"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.run_playmode_tests" && item.mcpName == "unity_tests_run_play_mode"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.agent_bridge_self_test" && item.mcpName == "unity_agent_bridge_run_self_test"), Is.True);
         }
 
         [Test]
@@ -330,7 +330,7 @@ namespace UnityMcp.AgentBridge.Tests
             AssertPluginTool(registry, "unity.mono.find_script_guid_usages");
             Assert.That(result.Catalog.tools.Any(item =>
                 item.bridgeTool == "unity.mono.find_script_guid_usages" &&
-                item.mcpName == "mcp__unity__mono_find_script_guid_usages"), Is.True);
+                item.mcpName == "unity_monobehaviour_find_script_guid_usages"), Is.True);
             Assert.That(result.Catalog.tools.Any(item =>
                 item.bridgeTool == "unity.mono.find_script_guid_usages" &&
                 item.description.Contains("MonoBehaviour script GUID")), Is.True);
@@ -366,9 +366,9 @@ namespace UnityMcp.AgentBridge.Tests
 
             var result = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, logger);
 
-            Assert.That(registry.TryGetTool("unity.test.duplicate", out var tool), Is.True);
+            Assert.That(registry.TryGetTool("unity.test.get.duplicate", out var tool), Is.True);
             Assert.That(((UnityMcpPluginToolAdapter)tool).Descriptor.Description, Is.EqualTo("First duplicate provider tool."));
-            Assert.That(result.Catalog.tools.Count(item => item.bridgeTool == "unity.test.duplicate"), Is.EqualTo(1));
+            Assert.That(result.Catalog.tools.Count(item => item.bridgeTool == "unity.test.get.duplicate"), Is.EqualTo(1));
             Assert.That(File.ReadAllText(paths.BridgeLogPath), Does.Contain("plugin_tool_conflict_plugin"));
         }
 
@@ -403,8 +403,8 @@ namespace UnityMcp.AgentBridge.Tests
             UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, new FileAgentBridgeLogger(paths.BridgeLogPath));
 
             var catalogJson = File.ReadAllText(paths.PluginCatalogPath);
-            Assert.That(catalogJson, Does.Contain("\"bridgeTool\":\"unity.test.asset_schema\""));
-            Assert.That(catalogJson, Does.Contain("\"bridgeTool\":\"unity.test.package_schema\""));
+            Assert.That(catalogJson, Does.Contain("\"bridgeTool\":\"unity.schema.get.asset\""));
+            Assert.That(catalogJson, Does.Contain("\"bridgeTool\":\"unity.schema.get.package\""));
             Assert.That(catalogJson, Does.Contain("\\\"name\\\":{\\\"type\\\":\\\"string\\\"}"));
             Assert.That(catalogJson, Does.Contain("\\\"count\\\":{\\\"type\\\":\\\"integer\\\"}"));
         }
@@ -463,7 +463,7 @@ namespace UnityMcp.AgentBridge.Tests
 
             Assert.That(registry.TryGetTool("unity.execute_csharp", out var tool), Is.True);
             Assert.That(tool, Is.TypeOf<UnityMcpPluginToolAdapter>());
-            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.execute_csharp" && item.mcpName == "mcp__unity__execute_csharp"), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.execute_csharp" && item.mcpName == "unity_csharp_execute"), Is.True);
             Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.execute_csharp" && item.allowedRuntimeModes == "Edit"), Is.True);
             Assert.That(result.Catalog.tools.First(item => item.bridgeTool == "unity.execute_csharp").inputSchemaJson, Does.Contain("query_only"));
 
@@ -511,7 +511,7 @@ namespace UnityMcp.AgentBridge.Tests
                 Command = new AgentCommand
                 {
                     commandId = "cmd-null",
-                    tool = "unity.test.null_result",
+                    tool = "unity.result.get.null",
                     timeoutMs = 1000
                 },
                 RawArgsJson = "{}"
@@ -536,7 +536,7 @@ namespace UnityMcp.AgentBridge.Tests
                 Command = new AgentCommand
                 {
                     commandId = "cmd-metrics",
-                    tool = "unity.test.invalid_metrics",
+                    tool = "unity.metrics.get.invalid",
                     timeoutMs = 1000
                 },
                 RawArgsJson = "{}"
@@ -621,7 +621,7 @@ namespace UnityMcp.AgentBridge.Tests
             {
                 return new IUnityMcpTool[]
                 {
-                    new InlineSchemaTool("unity.test.project_profile", "Project profile test tool.")
+                    new InlineSchemaTool("unity.project.get.profile", "Project profile test tool.")
                 };
             }
         }
@@ -645,7 +645,7 @@ namespace UnityMcp.AgentBridge.Tests
             {
                 return new IUnityMcpTool[]
                 {
-                    new InlineSchemaTool("unity.test.duplicate", "First duplicate provider tool.")
+                    new InlineSchemaTool("unity.test.get.duplicate", "First duplicate provider tool.")
                 };
             }
         }
@@ -657,7 +657,7 @@ namespace UnityMcp.AgentBridge.Tests
             {
                 return new IUnityMcpTool[]
                 {
-                    new InlineSchemaTool("unity.test.duplicate", "Second duplicate provider tool.")
+                    new InlineSchemaTool("unity.test.get.duplicate", "Second duplicate provider tool.")
                 };
             }
         }
@@ -670,7 +670,7 @@ namespace UnityMcp.AgentBridge.Tests
                 return new IUnityMcpTool[]
                 {
                     new SchemaPathTool(
-                        "unity.test.asset_schema",
+                        "unity.schema.get.asset",
                         "Asset schema tool.",
                         new UnityMcpSchemaDeclaration
                         {
@@ -678,7 +678,7 @@ namespace UnityMcp.AgentBridge.Tests
                             Value = "Assets/plugin-asset.schema.json"
                         }),
                     new SchemaPathTool(
-                        "unity.test.package_schema",
+                        "unity.schema.get.package",
                         "Package schema tool.",
                         new UnityMcpSchemaDeclaration
                         {
@@ -760,7 +760,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             public UnityMcpToolDescriptor Descriptor { get; } = new UnityMcpToolDescriptor
             {
-                Name = "unity.test.null_result",
+                Name = "unity.result.get.null",
                 Title = "Null Result",
                 Description = "Returns null to verify adapter normalization.",
                 DefaultTimeoutMs = 1000,
@@ -785,7 +785,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             public UnityMcpToolDescriptor Descriptor { get; } = new UnityMcpToolDescriptor
             {
-                Name = "unity.test.invalid_metrics",
+                Name = "unity.metrics.get.invalid",
                 Title = "Invalid Metrics",
                 Description = "Returns invalid metrics to verify adapter normalization.",
                 DefaultTimeoutMs = 1000,

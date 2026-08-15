@@ -2,6 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModelContextProtocol.Protocol;
 using System.Text.Json.Nodes;
 using System.Text.Json;
+using UnityMcp.AgentBridge;
 using UnityAgentBridge.Mcp;
 
 namespace UnityAgentBridge.Cli.Tests;
@@ -14,13 +15,13 @@ public sealed class McpToolCatalogTests
     {
         var expectedNames = new[]
         {
-            "mcp__unity__compile",
-            "mcp__unity__get_console",
-            "mcp__unity__get_editor_state",
-            "mcp__unity__open_scene",
-            "mcp__unity__ping",
-            "mcp__unity__run_diagnostic",
-            "mcp__unity__run_static_method",
+            "unity_project_compile",
+            "unity_console_get",
+            "unity_editor_get_state",
+            "unity_scene_open",
+            "unity_editor_ping",
+            "unity_diagnostic_run",
+            "unity_static_method_run",
             "mcp_echo",
             "unity_editor_list",
             "unity_editor_open",
@@ -37,6 +38,7 @@ public sealed class McpToolCatalogTests
 
         CollectionAssert.AreEqual(expectedNames.OrderBy(name => name, StringComparer.Ordinal).ToArray(), actualNames);
         Assert.AreEqual(13, actualNames.Length);
+        Assert.IsFalse(actualNames.Any(name => name.Contains("__", StringComparison.Ordinal)));
     }
 
     [TestMethod]
@@ -79,13 +81,13 @@ public sealed class McpToolCatalogTests
         File.WriteAllText(
             Path.Combine(catalogDirectory, "plugin-catalog.json"),
             """
-            {"version":1,"tools":[{"pluginId":"UnityMcp.Sample","pluginVersion":"1.0.0","assemblyName":"UnityMcp.Sample","bridgeTool":"unity.sample.status","mcpName":"mcp__unity__sample_status","title":"Unity Sample Status","description":"Plugin tool.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}]}
+            {"version":1,"tools":[{"pluginId":"UnityMcp.Sample","pluginVersion":"1.0.0","assemblyName":"UnityMcp.Sample","bridgeTool":"unity.fbx.scan.import_issues","mcpName":"unity_fbx_scan_import_issues","title":"Unity FBX Scan Import Issues","description":"Plugin tool.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}]}
             """);
 
         var diagnostics = CreateDiagnostics(projectRoot);
         var toolNames = McpToolCatalog.GetTools(diagnostics).Select(tool => tool.ProtocolTool.Name).ToArray();
 
-        CollectionAssert.Contains(toolNames, "mcp__unity__sample_status");
+        CollectionAssert.Contains(toolNames, "unity_fbx_scan_import_issues");
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_info");
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_get_info");
     }
@@ -104,12 +106,13 @@ public sealed class McpToolCatalogTests
 
         var diagnostics = CreateDiagnostics(projectRoot);
         var toolNames = McpToolCatalog.GetTools(diagnostics).Select(tool => tool.ProtocolTool.Name).ToArray();
-        var tool = McpToolCatalog.TryGet("mcp__unity__project_get_info", diagnostics);
+        var tool = McpToolCatalog.TryGet("unity_project_get_info", diagnostics);
 
-        CollectionAssert.Contains(toolNames, "mcp__unity__project_get_info");
+        CollectionAssert.Contains(toolNames, "unity_project_get_info");
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_info");
         Assert.IsNotNull(tool);
         Assert.AreEqual("unity.project.get_info", tool.BridgeTool);
+        Assert.IsNull(McpToolCatalog.TryGet("mcp__unity__project_get_info", diagnostics));
     }
 
     [TestMethod]
@@ -132,14 +135,14 @@ public sealed class McpToolCatalogTests
 
         var diagnostics = CreateDiagnostics(projectRoot);
         var toolNames = McpToolCatalog.GetTools(diagnostics).Select(tool => tool.ProtocolTool.Name).ToArray();
-        var assetSearch = McpToolCatalog.TryGet("mcp__unity__assetdatabase_search", diagnostics);
-        var openScene = McpToolCatalog.TryGet("mcp__unity__open_scene", diagnostics);
+        var assetSearch = McpToolCatalog.TryGet("unity_asset_database_search", diagnostics);
+        var openScene = McpToolCatalog.TryGet("unity_scene_open", diagnostics);
 
-        CollectionAssert.Contains(toolNames, "mcp__unity__assetdatabase_search");
-        CollectionAssert.Contains(toolNames, "mcp__unity__get_hierarchy");
-        CollectionAssert.Contains(toolNames, "mcp__unity__get_gameobject_component_info");
-        CollectionAssert.Contains(toolNames, "mcp__unity__get_selection_info");
-        CollectionAssert.Contains(toolNames, "mcp__unity__read_report");
+        CollectionAssert.Contains(toolNames, "unity_asset_database_search");
+        CollectionAssert.Contains(toolNames, "unity_hierarchy_get");
+        CollectionAssert.Contains(toolNames, "unity_gameobject_component_get_info");
+        CollectionAssert.Contains(toolNames, "unity_selection_get_info");
+        CollectionAssert.Contains(toolNames, "unity_report_read");
         Assert.IsNotNull(assetSearch);
         Assert.AreEqual("unity.assetdatabase_search", assetSearch.BridgeTool);
         Assert.IsNotNull(openScene);
@@ -164,13 +167,13 @@ public sealed class McpToolCatalogTests
 
         var diagnostics = CreateDiagnostics(projectRoot);
         var toolNames = McpToolCatalog.GetTools(diagnostics).Select(tool => tool.ProtocolTool.Name).ToArray();
-        var editMode = McpToolCatalog.TryGet("mcp__unity__run_editmode_tests", diagnostics);
-        var playMode = McpToolCatalog.TryGet("mcp__unity__run_playmode_tests", diagnostics);
-        var selfTest = McpToolCatalog.TryGet("mcp__unity__agent_bridge_self_test", diagnostics);
+        var editMode = McpToolCatalog.TryGet("unity_tests_run_edit_mode", diagnostics);
+        var playMode = McpToolCatalog.TryGet("unity_tests_run_play_mode", diagnostics);
+        var selfTest = McpToolCatalog.TryGet("unity_agent_bridge_run_self_test", diagnostics);
 
-        CollectionAssert.Contains(toolNames, "mcp__unity__run_editmode_tests");
-        CollectionAssert.Contains(toolNames, "mcp__unity__run_playmode_tests");
-        CollectionAssert.Contains(toolNames, "mcp__unity__agent_bridge_self_test");
+        CollectionAssert.Contains(toolNames, "unity_tests_run_edit_mode");
+        CollectionAssert.Contains(toolNames, "unity_tests_run_play_mode");
+        CollectionAssert.Contains(toolNames, "unity_agent_bridge_run_self_test");
         Assert.IsNotNull(editMode);
         Assert.IsNotNull(playMode);
         Assert.IsNotNull(selfTest);
@@ -192,7 +195,7 @@ public sealed class McpToolCatalogTests
             .ToArray();
 
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_info");
-        CollectionAssert.Contains(toolNames, "mcp__unity__ping");
+        CollectionAssert.Contains(toolNames, "unity_editor_ping");
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_get_info");
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__run_editmode_tests");
     }
@@ -210,9 +213,19 @@ public sealed class McpToolCatalogTests
             .ToArray();
 
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_info");
-        CollectionAssert.Contains(toolNames, "mcp__unity__ping");
+        CollectionAssert.Contains(toolNames, "unity_editor_ping");
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_get_info");
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__run_editmode_tests");
+    }
+
+    [TestMethod]
+    public void CanonicalNameMapper_UsesShippedMappingsAndValidatesFutureTools()
+    {
+        Assert.AreEqual("unity_editor_ping", McpToolNameMapper.ToCanonicalMcpName("unity.ping"));
+        Assert.AreEqual("unity_project_get_info", McpToolNameMapper.ToCanonicalMcpName("unity.project.get_info"));
+        Assert.AreEqual("unity_lua_compile", McpToolNameMapper.ToCanonicalMcpName("unity.lua.compile"));
+        Assert.AreEqual("unity_fbx_scan_import_issues", McpToolNameMapper.ToCanonicalMcpName("unity.fbx.scan.import_issues"));
+        Assert.IsFalse(McpToolNameMapper.TryToCanonicalMcpName("unity.sample.status", out _));
     }
 
     [TestMethod]

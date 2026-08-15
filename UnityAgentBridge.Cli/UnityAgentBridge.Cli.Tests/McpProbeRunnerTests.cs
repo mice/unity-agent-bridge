@@ -29,6 +29,7 @@ public sealed class McpProbeRunnerTests
             Assert.IsNotNull(parsed["pingResult"]!["isError"]);
             Assert.AreEqual("success", parsed["echoResult"]!["structuredContent"]!.Value<string>("status"));
             Assert.AreEqual("success", parsed["healthResult"]!["structuredContent"]!.Value<string>("status"));
+            Assert.AreEqual("success", parsed["consoleResult"]!["structuredContent"]!.Value<string>("status"));
             Assert.AreEqual("success", parsed["projectInfoResult"]!["structuredContent"]!.Value<string>("status"));
         }
         finally
@@ -47,7 +48,7 @@ public sealed class McpProbeRunnerTests
         File.WriteAllText(
             Path.Combine(root, "Library", "AgentBridge", "plugin-catalog.json"),
             """
-            {"version":1,"tools":[{"pluginId":"com.unitymcp.builtin.project-info","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.ProjectInfo","bridgeTool":"unity.project.get_info","mcpName":"mcp__unity__project_get_info","title":"Unity Project Info","description":"Report Unity project, scene, and editor state.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}]}
+            {"version":1,"tools":[{"pluginId":"com.unitymcp.builtin.project-info","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.ProjectInfo","bridgeTool":"unity.project.get_info","mcpName":"unity_project_get_info","title":"Unity Project Info","description":"Report Unity project, scene, and editor state.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}]}
             """);
         return root;
     }
@@ -95,7 +96,7 @@ public sealed class McpProbeRunnerTests
                 {
                     var command = JObject.Parse(await File.ReadAllTextAsync(commandPath, _cts.Token));
                     var tool = command.Value<string>("tool") ?? string.Empty;
-                    if (tool is "unity.ping" or "unity.project.get_info")
+                    if (tool is "unity.ping" or "unity.get_console" or "unity.project.get_info")
                     {
                         var commandId = command.Value<string>("id") ?? Path.GetFileNameWithoutExtension(commandPath);
                         var resultPath = Path.Combine(_queuePaths.OutboxDirectory, commandId + ".result.json");
@@ -106,7 +107,7 @@ public sealed class McpProbeRunnerTests
                             ["tool"] = tool,
                             ["success"] = true,
                             ["status"] = "success",
-                            ["summary"] = tool == "unity.ping" ? "Pong." : "Project info collected.",
+                            ["summary"] = tool == "unity.ping" ? "Pong." : tool == "unity.get_console" ? "Console entries collected." : "Project info collected.",
                             ["projectPath"] = _queuePaths.ProjectPath
                         };
                         await File.WriteAllTextAsync(resultPath, result.ToString(Newtonsoft.Json.Formatting.None), _cts.Token);

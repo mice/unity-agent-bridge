@@ -17,7 +17,7 @@ namespace UnityMcp.AgentBridge.Mcp
         internal const string DisabledActionTooltip = "Not wired in this build yet";
         internal const string BridgeToggleLabel = "Enable Unity Agent Bridge";
         internal const string BridgeConfirmTitle = "Confirm Unity Agent Bridge Setting";
-        internal const string AiQuickConnectPrompt = "Use the unity_agent_bridge MCP server for this Unity project. First call unity_bridge_health. If the bridge is available, call mcp__unity__get_editor_state or mcp__unity__project_get_info before running Unity-mutating tools. Do not launch another AI client from Unity.";
+        internal const string AiQuickConnectPrompt = "Use the unity_agent_bridge MCP server for this Unity project. First call unity_bridge_health. If the bridge is available, call unity_editor_get_state or unity_project_get_info before running Unity-mutating tools. Do not launch another AI client from Unity.";
         internal const double ServerProcessRefreshIntervalSeconds = 5.0d;
 
         private Vector2 _scrollPosition;

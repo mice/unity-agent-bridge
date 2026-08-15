@@ -52,7 +52,7 @@ public sealed class McpServerService
             _stageLogger.Write("mcp.invoke_core", commandId, toolName, "started", "Invoking ExternalBridgeClientCore.");
             var resultJson = await definition.InvokeAsync(argumentsJson, cancellationToken);
             var status = ReadStatus(resultJson);
-            if (RequiresWaitStage(toolName))
+            if (RequiresWaitStage(definition, toolName))
             {
                 _stageLogger.Write("mcp.wait_result", commandId, toolName, status, "Core invocation completed.");
             }
@@ -145,6 +145,10 @@ public sealed class McpServerService
         structured["resolvedCliPath"] = diagnostics.ResolvedCliPath;
         structured["cliMode"] = diagnostics.CliMode;
         structured["cliWarnings"] = new JsonArray(diagnostics.CliWarnings.Select(w => (JsonNode?)JsonValue.Create(w)).ToArray());
+        structured["packageVersion"] = RuntimeIdentity.PackageVersion;
+        structured["runtimeVersion"] = RuntimeIdentity.RuntimeVersion;
+        structured["protocolVersion"] = RuntimeIdentity.ProtocolVersion;
+        structured["runtimeMode"] = RuntimeIdentity.RuntimeMode;
     }
 
     private static string ReadStatus(string rawJson)
@@ -153,9 +157,9 @@ public sealed class McpServerService
         return structured?["status"]?.GetValue<string>() ?? string.Empty;
     }
 
-    private static bool RequiresWaitStage(string toolName)
+    private static bool RequiresWaitStage(McpToolDefinition definition, string toolName)
     {
-        return toolName.StartsWith("mcp__unity__", StringComparison.Ordinal) ||
+        return definition.IsForwardedToUnityQueue ||
                string.Equals(toolName, "unity_bridge_wait_result", StringComparison.Ordinal) ||
                string.Equals(toolName, "unity_bridge_submit_only", StringComparison.Ordinal);
     }

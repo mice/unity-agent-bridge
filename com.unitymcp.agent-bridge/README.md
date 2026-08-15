@@ -86,14 +86,14 @@ Version `1.2.x` supports Unity-side plugin discovery for explicitly registered a
 - Registration lives in `AgentBridgeSettings.pluginRegistrations`.
 - Discovery inspects only enabled registrations; unregistered provider assemblies are ignored.
 - Valid plugin tools are exported to `Library/AgentBridge/plugin-catalog.json`.
-- The external MCP server reads that catalog and exposes dynamic `mcp__unity__*` tools without loading Unity plugin assemblies directly.
+- The external MCP server reads that catalog and exposes canonical domain-first `unity_<domain>_<verb>[_<detail>]` tools without loading Unity plugin assemblies directly.
 - Built-in/core tools cannot be overridden by plugins; plugin-owned tools appear only through the exported catalog.
 
-Project metadata is plugin-owned. Keep `UnityMcp.BuiltInPlugins.ProjectInfo` enabled to expose `unity.project.get_info` and `mcp__unity__project_get_info`; the legacy/core `unity.project_info` and `mcp__unity__project_info` names are not shipped as aliases.
+Project metadata is plugin-owned. Keep `UnityMcp.BuiltInPlugins.ProjectInfo` enabled to expose bridge command `unity.project.get_info` as MCP tool `unity_project_get_info`; legacy `mcp__unity__*` names are not shipped as aliases.
 
-Roslyn execution is available only on Unity `2022.3.x` for this release line. The package ships compiler proxy source and runtime build wrappers, and `mcp__unity__execute_csharp` stays hidden until the project explicitly enables Roslyn execution and the local runtime build creates `.unitymcp/runtime/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe`.
+Roslyn execution is available only on Unity `2022.3.x` for this release line. The package ships compiler proxy source and runtime build wrappers, and `unity_csharp_execute` stays hidden until the project explicitly enables Roslyn execution and the local runtime build creates `.unitymcp/runtime/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe`.
 
-Lua tools are provided by `UnityMcp.BuiltInPlugins.LuaTools` and expose `unity.lua.lint` / `mcp__unity__lua_lint` and `unity.lua.compile` / `mcp__unity__lua_compile` when the prepared runtime contains `.unitymcp/runtime/UnityAgentBridge/lua-gc-lint/out/win-x64/lua-gc-lint.exe`. The MVP package payload is Windows x64 only and is copied from `Tools~/UnityAgentBridge/lua-gc-lint/out/win-x64/lua-gc-lint.exe` during runtime preparation. Scans are limited to project-relative `Assets/` and `Packages/` paths, plus optional `AgentBridgeSettings.luaSourceRoots` entries for no-argument compile.
+Lua tools are provided by `UnityMcp.BuiltInPlugins.LuaTools` and expose bridge commands `unity.lua.lint` / `unity.lua.compile` as MCP tools `unity_lua_lint` / `unity_lua_compile` when the prepared runtime contains `.unitymcp/runtime/UnityAgentBridge/lua-gc-lint/out/win-x64/lua-gc-lint.exe`. The MVP package payload is Windows x64 only and is copied from `Tools~/UnityAgentBridge/lua-gc-lint/out/win-x64/lua-gc-lint.exe` during runtime preparation. Scans are limited to project-relative `Assets/` and `Packages/` paths, plus optional `AgentBridgeSettings.luaSourceRoots` entries for no-argument compile.
 
 ## Documentation Index
 
