@@ -6,6 +6,8 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.12-rc.1] - 2026-08-15
+
 ### Changed
 
 - Breaking: replaced all legacy `mcp__unity__*` MCP names with stable domain-first `unity_<domain>_<verb>[_<detail>]` names; no compatibility aliases are provided.
