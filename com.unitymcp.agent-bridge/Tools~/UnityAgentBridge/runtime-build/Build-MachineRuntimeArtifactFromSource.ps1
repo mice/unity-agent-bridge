@@ -15,6 +15,42 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+function Resolve-DotnetExecutablePath {
+    param([Parameter(Mandatory = $true)][string]$ExecutablePath)
+
+    $command = Get-Command -Name $ExecutablePath -CommandType Application -ErrorAction Stop |
+        Select-Object -First 1
+    if ($null -eq $command -or [string]::IsNullOrWhiteSpace($command.Source)) {
+        throw "dotnet executable could not be resolved: $ExecutablePath"
+    }
+    if ($command.Source.Contains('"')) {
+        throw "dotnet executable path contains an unsupported quote: $($command.Source)"
+    }
+    return $command.Source
+}
+
+function Resolve-Dotnet8SdkVersion {
+    param([Parameter(Mandatory = $true)][string]$ExecutablePath)
+
+    $sdkLines = @(& $ExecutablePath --list-sdks 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to list installed .NET SDKs using: $ExecutablePath"
+    }
+
+    $versions = @(
+        foreach ($line in $sdkLines) {
+            if ([string]$line -match '^(8\.0\.\d+)\s+\[') {
+                [System.Version]$Matches[1]
+            }
+        }
+    )
+    $selected = $versions | Sort-Object -Descending | Select-Object -First 1
+    if ($null -eq $selected) {
+        throw '.NET 8 SDK is required to build the runtime from tag source.'
+    }
+    return $selected.ToString()
+}
+
 if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$') {
     throw "Invalid runtime semantic version: $Version"
 }
@@ -46,6 +82,22 @@ try {
     New-Item -ItemType Directory -Path $sourceRoot,$runtimeBuildRoot,$stageRoot -Force | Out-Null
     Expand-Archive -LiteralPath $sourceArchive -DestinationPath $sourceRoot -Force
 
+    $dotnetExecutable = Resolve-DotnetExecutablePath -ExecutablePath $DotnetPath
+    $dotnetSdkVersion = Resolve-Dotnet8SdkVersion -ExecutablePath $dotnetExecutable
+    [ordered]@{
+        sdk = [ordered]@{
+            version = $dotnetSdkVersion
+            rollForward = 'latestPatch'
+            allowPrerelease = $false
+        }
+    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $workRoot 'global.json') -Encoding utf8
+
+    $dotnetWrapper = Join-Path $workRoot 'dotnet-single-node.cmd'
+    @(
+        '@echo off',
+        ('"' + $dotnetExecutable + '" %* -m:1')
+    ) | Set-Content -LiteralPath $dotnetWrapper -Encoding ascii
+
     $packageRoot = $null
     foreach ($manifestFile in @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -File -Filter 'package.json')) {
         try {
@@ -72,9 +124,15 @@ try {
         throw "Tag local-runtime build script is missing: $buildScript"
     }
 
-    & $buildScript -OutputRoot $runtimeBuildRoot -UnityProjectPath $projectRoot -Rid $Rid -DotnetPath $DotnetPath
-    if ($LASTEXITCODE -ne 0) {
-        throw "Tag local-runtime build failed with exit code $LASTEXITCODE."
+    Push-Location -LiteralPath $workRoot
+    try {
+        & $buildScript -OutputRoot $runtimeBuildRoot -UnityProjectPath $projectRoot -Rid $Rid -DotnetPath $dotnetWrapper
+        if ($LASTEXITCODE -ne 0) {
+            throw "Tag local-runtime build failed with exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Pop-Location
     }
 
     $sourceCli = Join-Path $runtimeBuildRoot 'UnityAgentBridge\cli\out\win-x64\unity-agent-bridge.exe'

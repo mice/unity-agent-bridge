@@ -174,15 +174,13 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                 MachineRuntimeRoot = managerRoot,
             });
 
-            Assert.That(versions.Count, Is.EqualTo(3));
+            Assert.That(versions.Count, Is.EqualTo(2));
             Assert.That(versions[0].Version, Is.EqualTo("1.2.12"));
             Assert.That(versions[0].IsInstalled, Is.False);
             Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.2"));
             Assert.That(versions[1].Tag, Is.EqualTo("v1.2.12-rc.2"));
             Assert.That(versions[1].ArtifactUrl, Is.EqualTo("https://example.invalid/1.2.12-rc.2.zip"));
             Assert.That(versions[1].IsInstalled, Is.True);
-            Assert.That(versions[2].Version, Is.EqualTo("1.2.12-rc.1"));
-            Assert.That(versions[2].IsInstalled, Is.False);
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_208.md
@@ -195,15 +193,13 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
             var versions = MachineRuntimeLocator.CreateBuiltInPublishedVersions(managerRoot);
 
-            Assert.That(versions.Count, Is.EqualTo(2));
+            Assert.That(versions.Count, Is.EqualTo(1));
             Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.2"));
             Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.2"));
             Assert.That(versions[0].IsInstalled, Is.False);
             Assert.That(versions[0].ArtifactUrl, Does.EndWith("/v1.2.12-rc.2/unity-agent-bridge-1.2.12-rc.2-win-x64.zip"));
             Assert.That(versions[0].SourceArchiveUrl, Does.EndWith("/archive/refs/tags/v1.2.12-rc.2.zip"));
             Assert.That(versions[0].CommitSha, Is.EqualTo("fa667ca009bab9e5621e16751ab86d014e4ee80b"));
-            Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.1"));
-            Assert.That(versions[1].CommitSha, Is.EqualTo("af3638f0a992835293d3bb88aa6c1bd9842c1338"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_209.md
@@ -224,7 +220,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                 });
 
                 Assert.That(Directory.Exists(Path.Combine(managerRoot, "releases")), Is.False);
-                Assert.That(versions.Count, Is.EqualTo(2));
+                Assert.That(versions.Count, Is.EqualTo(1));
                 Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.2"));
             }
             finally
@@ -277,6 +273,8 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
         [Category("AGBM_211")]
         public void MachineRuntimeDownload_InvalidBinaryChecksumBuildsFromTagSource()
         {
+            var managerRoot = Path.Combine(_tempDirectory, "UnityAgentBridge");
+            CreateMachineRuntimeVersion(managerRoot, "1.2.12-rc.1");
             var artifactClient = new FakeArtifactClient
             {
                 Checksum = "not-a-checksum",
@@ -298,7 +296,12 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                     SourceArchiveUrl = "https://example.invalid/archive/refs/tags/v1.2.12-rc.1.zip",
                     CommitSha = "af3638f0a992835293d3bb88aa6c1bd9842c1338",
                 },
-                new McpEditorSettings(),
+                new McpEditorSettings
+                {
+                    RuntimeMode = "machine",
+                    RuntimeVersion = "1.2.12-rc.1",
+                    MachineRuntimeRoot = managerRoot,
+                },
                 null,
                 CancellationToken.None).GetAwaiter().GetResult();
 
@@ -308,6 +311,9 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(processRunner.Requests.Count, Is.EqualTo(2));
             Assert.That(processRunner.Requests[0].Arguments, Does.Contain("-SourceArchivePath"));
             Assert.That(processRunner.Requests[1].Arguments, Does.Contain("install"));
+            var versionCacheRoot = Path.Combine(_tempDirectory, "Temp", "AgentBridge", "1.2.12-rc.1");
+            Assert.That(File.Exists(Path.Combine(versionCacheRoot, "unity-agent-bridge-1.2.12-rc.1-win-x64.zip.sha256")), Is.True);
+            Assert.That(Directory.GetFiles(versionCacheRoot, ".source-build-output-*", SearchOption.TopDirectoryOnly), Is.Empty);
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_212.md
@@ -602,7 +608,9 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
                     if (outputIndex + 1 < request.Arguments.Count && !string.IsNullOrWhiteSpace(SourceBuildVersion))
                     {
-                        CreateRuntimeArchive(request.Arguments[outputIndex + 1], SourceBuildVersion);
+                        var outputArchive = request.Arguments[outputIndex + 1];
+                        CreateRuntimeArchive(outputArchive, SourceBuildVersion);
+                        File.WriteAllText(outputArchive + ".sha256", "test checksum");
                     }
                 }
 

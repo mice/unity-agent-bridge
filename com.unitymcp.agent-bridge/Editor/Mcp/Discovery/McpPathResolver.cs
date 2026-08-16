@@ -73,6 +73,12 @@ namespace UnityMcp.AgentBridge.Mcp
                 return machineRoot;
             }
 
+            return ResolvePackageToolsRoot(settings);
+        }
+
+        internal string ResolvePackageToolsRoot(McpEditorSettings settings)
+        {
+
             var packageToolsRoot = TryResolvePackageToolsRoot();
             if (string.IsNullOrEmpty(packageToolsRoot))
             {

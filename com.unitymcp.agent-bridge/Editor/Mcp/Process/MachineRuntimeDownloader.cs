@@ -194,7 +194,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 }
 
                 progress?.Report(MachineRuntimeDownloadProgress.Stage("Verifying and installing", 0.92f));
-                var toolsRoot = _pathResolver.ResolveToolsRoot(settings);
+                var toolsRoot = _pathResolver.ResolvePackageToolsRoot(settings);
                 var managerScript = string.IsNullOrWhiteSpace(toolsRoot)
                     ? string.Empty
                     : Path.Combine(toolsRoot, "UnityAgentBridge", "manager", "AgentBridgeManager.ps1");
@@ -312,6 +312,7 @@ namespace UnityMcp.AgentBridge.Mcp
             var sourceArchive = Path.Combine(sourceCacheRoot, "unity-agent-bridge-" + release.Version + "-source.zip");
             var partialSourceArchive = string.Empty;
             var partialBuiltArchive = string.Empty;
+            var partialBuiltChecksum = string.Empty;
             try
             {
                 if (!File.Exists(sourceArchive))
@@ -329,7 +330,7 @@ namespace UnityMcp.AgentBridge.Mcp
                     progress?.Report(MachineRuntimeDownloadProgress.Stage("Using cached tag source", 0.12f));
                 }
 
-                var toolsRoot = _pathResolver.ResolveToolsRoot(settings);
+                var toolsRoot = _pathResolver.ResolvePackageToolsRoot(settings);
                 var buildScript = string.IsNullOrWhiteSpace(toolsRoot)
                     ? string.Empty
                     : Path.Combine(toolsRoot, "UnityAgentBridge", "runtime-build", "Build-MachineRuntimeArtifactFromSource.ps1");
@@ -339,6 +340,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 }
 
                 partialBuiltArchive = Path.Combine(cacheRoot, ".source-build-output-" + Guid.NewGuid().ToString("N") + ".zip");
+                partialBuiltChecksum = partialBuiltArchive + ".sha256";
                 progress?.Report(MachineRuntimeDownloadProgress.Stage("Building runtime from tag source", 0.90f));
                 var dotnetPath = settings != null && !string.IsNullOrWhiteSpace(settings.DotnetPath)
                     ? settings.DotnetPath.Trim()
@@ -400,6 +402,14 @@ namespace UnityMcp.AgentBridge.Mcp
                 var outputArchive = Path.Combine(cacheRoot, outputArchiveName);
                 File.Move(partialBuiltArchive, outputArchive);
                 partialBuiltArchive = string.Empty;
+                if (File.Exists(partialBuiltChecksum))
+                {
+                    File.Delete(partialBuiltChecksum);
+                    partialBuiltChecksum = string.Empty;
+                    File.WriteAllText(
+                        outputArchive + ".sha256",
+                        ComputeSha256(outputArchive) + "  " + Path.GetFileName(outputArchive));
+                }
                 return SourceBuildResult.Success(outputArchive);
             }
             catch (HttpRequestException exception)
@@ -418,6 +428,7 @@ namespace UnityMcp.AgentBridge.Mcp
             {
                 TryDeleteFile(partialSourceArchive);
                 TryDeleteFile(partialBuiltArchive);
+                TryDeleteFile(partialBuiltChecksum);
             }
         }
 
