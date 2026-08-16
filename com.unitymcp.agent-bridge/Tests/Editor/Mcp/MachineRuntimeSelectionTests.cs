@@ -201,7 +201,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(versions[0].IsInstalled, Is.False);
             Assert.That(versions[0].ArtifactUrl, Does.EndWith("/v1.2.12-rc.2/unity-agent-bridge-1.2.12-rc.2-win-x64.zip"));
             Assert.That(versions[0].SourceArchiveUrl, Does.EndWith("/archive/refs/tags/v1.2.12-rc.2.zip"));
-            Assert.That(versions[0].CommitSha, Is.Empty);
+            Assert.That(versions[0].CommitSha, Is.EqualTo("fa667ca009bab9e5621e16751ab86d014e4ee80b"));
             Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.1"));
             Assert.That(versions[1].CommitSha, Is.EqualTo("af3638f0a992835293d3bb88aa6c1bd9842c1338"));
         }

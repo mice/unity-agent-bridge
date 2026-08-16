@@ -262,7 +262,9 @@ namespace UnityMcp.AgentBridge.Mcp
                     Tag = tag,
                     ArtifactUrl = CreateGitHubArtifactUrl(version),
                     SourceArchiveUrl = CreateGitHubSourceArchiveUrl(tag),
-                    CommitSha = version == "1.2.12-rc.1" ? "af3638f0a992835293d3bb88aa6c1bd9842c1338" : string.Empty,
+                    CommitSha = version == "1.2.12-rc.2"
+                        ? "fa667ca009bab9e5621e16751ab86d014e4ee80b"
+                        : version == "1.2.12-rc.1" ? "af3638f0a992835293d3bb88aa6c1bd9842c1338" : string.Empty,
                     IsInstalled = IsUsableInstalledVersion(Path.Combine(managerRoot, "versions", version), version),
                 });
             }
