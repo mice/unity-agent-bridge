@@ -328,6 +328,8 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Contain("\"Building...\""));
             Assert.That(content, Does.Contain("Build Local Runtime"));
             Assert.That(content, Does.Contain("PollRuntimeBuildTask"));
+            Assert.That(content, Does.Contain("if (!isMachineRuntime)"));
+            Assert.That(content, Does.Contain("Prebuilt machine runtime"));
         }
 
         // TestRecord: Documentation~/AgentBridge/test_records/AGBM_185.md

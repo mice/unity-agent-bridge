@@ -29,7 +29,7 @@ A release artifact could be installed successfully but reported missing by Unity
 ## Assertions
 
 - The flat runtime executable resolves to its absolute path.
-- The stable manager shim resolves before the version launcher.
+- The selected version launcher resolves before the stable manager shim.
 - The path-like version resolves to an empty path.
 
 ## Expected Result

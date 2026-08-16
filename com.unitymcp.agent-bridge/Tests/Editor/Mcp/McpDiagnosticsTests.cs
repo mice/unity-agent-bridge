@@ -377,6 +377,59 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(Find(results, "MCP012").Details, Does.Contain("unity-roslyn-compiler.exe"));
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_217.md
+        [Test]
+        [Category("AGBM_RuntimeSelection")]
+        [Category("AGBM_217")]
+        public void RunAsync_MachineRuntimeWithCompiledRoslyn_DoesNotRequireBuildSource()
+        {
+            const string version = "1.2.12-rc.1";
+            var managerRoot = Path.Combine(_tempDirectory, "UnityAgentBridge");
+            var versionRoot = Path.Combine(managerRoot, "versions", version);
+            var runtimeRoot = Path.Combine(versionRoot, "runtime", "win-x64");
+            Directory.CreateDirectory(runtimeRoot);
+            File.WriteAllText(Path.Combine(versionRoot, "release-manifest.json"), "{\"version\":\"" + version + "\"}");
+            File.WriteAllText(Path.Combine(runtimeRoot, "unity-agent-bridge.exe"), string.Empty);
+            var roslynPath = Path.Combine(runtimeRoot, "unity-roslyn-compiler.exe");
+            File.WriteAllText(roslynPath, string.Empty);
+
+            var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
+            Directory.CreateDirectory(projectRoot);
+            var settings = new McpEditorSettings
+            {
+                RuntimeMode = "machine",
+                RuntimeVersion = version,
+                MachineRuntimeRoot = managerRoot,
+            };
+            var fakeRunner = new FakeRunner
+            {
+                Handler = request =>
+                {
+                    if (request.Arguments.Count > 0 && request.Arguments[0] == "mcp-probe")
+                    {
+                        return new ProcessExecutionResult
+                        {
+                            Outcome = ProcessOutcome.Completed,
+                            ExitCode = 0,
+                            Stdout = HealthyProbeStdout,
+                        };
+                    }
+
+                    return VersionSuccess("8.0.422");
+                },
+            };
+            var resolver = new McpPathResolver(() => projectRoot);
+            var probe = new McpEnvironmentProbe(resolver, new ToolVersionParser(), fakeRunner);
+            var runner = new McpDiagnosticsRunner(probe, resolver, fakeRunner);
+
+            var results = runner.RunAsync(settings, CancellationToken.None).GetAwaiter().GetResult();
+
+            Assert.That(Find(results, "MCP011").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
+            Assert.That(Find(results, "MCP011").Details, Does.Contain("prebuilt machine runtime"));
+            Assert.That(Find(results, "MCP012").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
+            Assert.That(Find(results, "MCP012").Details, Is.EqualTo(roslynPath));
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_099.md
         [Test]
         [Category("AGBM_P4")]

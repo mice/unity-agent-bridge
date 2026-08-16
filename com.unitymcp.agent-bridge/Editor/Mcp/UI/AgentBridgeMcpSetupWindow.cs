@@ -38,6 +38,7 @@ namespace UnityMcp.AgentBridge.Mcp
         private McpReportFormatter _reportFormatter;
         private McpRuntimeInitializer _runtimeInitializer;
         private McpRuntimeBuilder _runtimeBuilder;
+        private MachineRuntimeDownloader _machineRuntimeDownloader;
         private McpServerProcessProbe _serverProcessProbe;
         private McpServerProcessSnapshot _serverProcessSnapshot;
         private double _serverProcessLastRefreshTime;
@@ -53,6 +54,14 @@ namespace UnityMcp.AgentBridge.Mcp
         private CancellationTokenSource _runtimeInitCts;
         private Task<ManagedBlockApplyResult> _runtimeInitTask;
         private bool _runtimeInitRunning;
+        private CancellationTokenSource _runtimeDownloadCts;
+        private Task<MachineRuntimeDownloadResult> _runtimeDownloadTask;
+        private bool _runtimeDownloadRunning;
+        private float _runtimeDownloadProgress;
+        private string _runtimeDownloadStatus;
+        private string _runtimeDownloadVersion;
+        private string _runtimeDownloadMessage;
+        private MessageType _runtimeDownloadMessageType;
         private string _runtimeBuildMessage;
         private string _runtimeInitMessage;
         private string _serverProcessMessage;
@@ -85,6 +94,7 @@ namespace UnityMcp.AgentBridge.Mcp
             _reportFormatter = new McpReportFormatter();
             _runtimeInitializer = new McpRuntimeInitializer();
             _runtimeBuilder = new McpRuntimeBuilder();
+            _machineRuntimeDownloader = new MachineRuntimeDownloader();
             _serverProcessProbe = new McpServerProcessProbe();
             _settings = _settingsStore.Load();
             _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
@@ -98,6 +108,11 @@ namespace UnityMcp.AgentBridge.Mcp
             _diagnosticReport = string.Empty;
             _runtimeBuildMessage = string.Empty;
             _runtimeInitMessage = string.Empty;
+            _runtimeDownloadProgress = 0f;
+            _runtimeDownloadStatus = string.Empty;
+            _runtimeDownloadVersion = string.Empty;
+            _runtimeDownloadMessage = string.Empty;
+            _runtimeDownloadMessageType = MessageType.None;
             _serverProcessMessage = string.Empty;
             _serverProcessMessageType = MessageType.None;
             _aiQuickConnectMessage = string.Empty;
@@ -258,8 +273,6 @@ namespace UnityMcp.AgentBridge.Mcp
                     }
                 }
 
-                EditorGUILayout.Space(8f);
-                DrawRuntimeSelectionControls();
             }
         }
 
@@ -272,51 +285,108 @@ namespace UnityMcp.AgentBridge.Mcp
             if (nextModeIndex != currentModeIndex)
             {
                 settings.RuntimeMode = modeOptions[nextModeIndex];
-                _settingsStore.Save(settings);
-                _settings = settings;
-                _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
+                SaveRuntimeSelectionSettings(settings);
             }
 
             if (string.Equals(settings.RuntimeMode, "machine", StringComparison.OrdinalIgnoreCase))
             {
-                var version = EditorGUILayout.TextField("Runtime Version", settings.RuntimeVersion ?? string.Empty);
-                if (!string.Equals(version, settings.RuntimeVersion, StringComparison.Ordinal))
+                var machineRoot = MachineRuntimeLocator.ResolveDefaultManagerRoot();
+                if (!string.Equals(machineRoot, settings.MachineRuntimeRoot, StringComparison.OrdinalIgnoreCase))
                 {
-                    settings.RuntimeVersion = version.Trim();
+                    settings.MachineRuntimeRoot = machineRoot;
+                    SaveRuntimeSelectionSettings(settings);
+                }
+
+                using (new EditorGUI.DisabledScope(true))
+                {
+                    EditorGUILayout.TextField("Machine Runtime Root", machineRoot);
+                    var projectRoot = (_pathResolver ?? new McpPathResolver()).GetProjectRoot();
+                    EditorGUILayout.TextField("Download Cache", Path.Combine(projectRoot, "Temp", "AgentBridge"));
+                }
+
+                var publishedVersions = new MachineRuntimeLocator().ListPublishedVersions(settings);
+                var versionOptions = new string[publishedVersions.Count + 1];
+                versionOptions[0] = "(select published version)";
+                for (var index = 0; index < publishedVersions.Count; index++)
+                {
+                    var publishedVersion = publishedVersions[index];
+                    versionOptions[index + 1] = publishedVersion.Tag + " — " +
+                        (publishedVersion.IsInstalled ? "installed" : "download required");
+                }
+
+                var selectedPublishedIndex = 0;
+                for (var index = 0; index < publishedVersions.Count; index++)
+                {
+                    if (string.Equals(publishedVersions[index].Version, settings.RuntimeVersion, StringComparison.Ordinal))
+                    {
+                        selectedPublishedIndex = index + 1;
+                        break;
+                    }
+                }
+
+                var nextPublishedIndex = selectedPublishedIndex;
+                using (new EditorGUI.DisabledScope(_runtimeDownloadRunning))
+                {
+                    nextPublishedIndex = EditorGUILayout.Popup("Published Runtime Version", selectedPublishedIndex, versionOptions);
+                }
+                if (nextPublishedIndex != selectedPublishedIndex && nextPublishedIndex > 0)
+                {
+                    settings.RuntimeVersion = publishedVersions[nextPublishedIndex - 1].Version;
                     settings.RuntimeChannel = string.Empty;
-                    _settingsStore.Save(settings);
-                    _settings = settings;
+                    SaveRuntimeSelectionSettings(settings);
                 }
 
-                var channels = new[] { "(exact version)", "stable", "preview", "nightly" };
-                var channelIndex = string.IsNullOrWhiteSpace(settings.RuntimeChannel)
-                    ? 0
-                    : Array.IndexOf(channels, settings.RuntimeChannel);
-                if (channelIndex < 0) channelIndex = 0;
-                var nextChannelIndex = EditorGUILayout.Popup("Runtime Channel", channelIndex, channels);
-                if (nextChannelIndex != channelIndex)
+                if (nextPublishedIndex > 0 && nextPublishedIndex <= publishedVersions.Count)
                 {
-                    settings.RuntimeChannel = nextChannelIndex == 0 ? string.Empty : channels[nextChannelIndex];
-                    if (nextChannelIndex > 0) settings.RuntimeVersion = string.Empty;
-                    _settingsStore.Save(settings);
-                    _settings = settings;
+                    var selectedPublishedVersion = publishedVersions[nextPublishedIndex - 1];
+                    EditorGUILayout.LabelField(
+                        "Selected Version Status",
+                        selectedPublishedVersion.IsInstalled ? "Installed and ready" : "Not installed — download required");
+                    if (!selectedPublishedVersion.IsInstalled)
+                    {
+                        EditorGUILayout.HelpBox(
+                            "This version is not installed. Install first checks Temp/AgentBridge/<version> for an offline runtime ZIP. If the published binary is unavailable, it downloads or reuses the matching tag source and builds it locally with .NET 8.",
+                            MessageType.Warning);
+                        if (_runtimeDownloadRunning && string.Equals(_runtimeDownloadVersion, selectedPublishedVersion.Version, StringComparison.Ordinal))
+                        {
+                            var progressRect = GUILayoutUtility.GetRect(18f, 18f, GUILayout.ExpandWidth(true));
+                            var progressLabel = string.IsNullOrWhiteSpace(_runtimeDownloadStatus)
+                                ? "Downloading..."
+                                : _runtimeDownloadStatus;
+                            EditorGUI.ProgressBar(progressRect, _runtimeDownloadProgress, progressLabel);
+                            if (GUILayout.Button("Cancel", GUILayout.Width(90f)))
+                            {
+                                _runtimeDownloadCts?.Cancel();
+                            }
+                        }
+                        else
+                        {
+                            using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(selectedPublishedVersion.ArtifactUrl)))
+                            {
+                                if (GUILayout.Button("Download & Install", GUILayout.Width(150f)))
+                                {
+                                    DownloadMachineRuntime(selectedPublishedVersion);
+                                }
+                            }
+                        }
+                    }
                 }
 
-                var machineRoot = EditorGUILayout.TextField(
-                    "Machine Runtime Root",
-                    string.IsNullOrWhiteSpace(settings.MachineRuntimeRoot)
-                        ? MachineRuntimeLocator.ResolveDefaultManagerRoot()
-                        : settings.MachineRuntimeRoot);
-                if (!string.Equals(machineRoot, settings.MachineRuntimeRoot, StringComparison.Ordinal))
+                if (!string.IsNullOrWhiteSpace(_runtimeDownloadMessage))
                 {
-                    settings.MachineRuntimeRoot = machineRoot.Trim();
-                    _settingsStore.Save(settings);
-                    _settings = settings;
+                    EditorGUILayout.HelpBox(_runtimeDownloadMessage, _runtimeDownloadMessageType);
                 }
 
                 var effectiveVersion = (_pathResolver ?? new McpPathResolver()).ResolveRuntimeVersion(settings);
                 EditorGUILayout.LabelField("Effective Runtime", string.IsNullOrWhiteSpace(effectiveVersion) ? "Unavailable" : effectiveVersion);
             }
+        }
+
+        private void SaveRuntimeSelectionSettings(McpEditorSettings settings)
+        {
+            _settingsStore.Save(settings);
+            _settings = settings;
+            _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
         }
 
         private static void DrawMonoBehaviourSemanticsControls()
@@ -514,6 +584,8 @@ namespace UnityMcp.AgentBridge.Mcp
             using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
                 EditorGUILayout.LabelField("Step 1: Prepare Project Runtime", EditorStyles.boldLabel);
+                DrawRuntimeSelectionControls();
+                EditorGUILayout.Space(8f);
                 DrawRuntimeInitializationControls();
                 EditorGUILayout.Space(8f);
                 DrawWorkspaceConfigTargetSummary();
@@ -611,20 +683,30 @@ namespace UnityMcp.AgentBridge.Mcp
             using (new EditorGUILayout.HorizontalScope())
             {
                 EditorGUILayout.SelectableLabel(string.IsNullOrWhiteSpace(displayedRuntimeRoot) ? "Not configured" : displayedRuntimeRoot, EditorStyles.textField, GUILayout.Height(EditorGUIUtility.singleLineHeight));
-                using (new EditorGUI.DisabledScope(isMachineRuntime || string.IsNullOrWhiteSpace(runtimeRoot) || _runtimeBuildRunning || _runtimeInitRunning))
+                if (!isMachineRuntime)
                 {
-                    if (GUILayout.Button(new GUIContent(_runtimeBuildRunning ? "Building..." : "Build Local Runtime", buildTooltip), GUILayout.Width(150f)))
+                    using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(runtimeRoot) || _runtimeBuildRunning || _runtimeInitRunning))
                     {
-                        BuildLocalRuntime();
+                        if (GUILayout.Button(new GUIContent(_runtimeBuildRunning ? "Building..." : "Build Local Runtime", buildTooltip), GUILayout.Width(150f)))
+                        {
+                            BuildLocalRuntime();
+                        }
+                    }
+
+                    using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(runtimeRoot) || _runtimeBuildRunning || _runtimeInitRunning))
+                    {
+                        if (GUILayout.Button(new GUIContent(_runtimeInitRunning ? "Preparing..." : "Prepare", tooltip), GUILayout.Width(90f)))
+                        {
+                            InitializeMcpRuntime();
+                        }
                     }
                 }
-
-                using (new EditorGUI.DisabledScope(isMachineRuntime || string.IsNullOrWhiteSpace(runtimeRoot) || _runtimeBuildRunning || _runtimeInitRunning))
+                else
                 {
-                    if (GUILayout.Button(new GUIContent(_runtimeInitRunning ? "Preparing..." : "Prepare", tooltip), GUILayout.Width(90f)))
-                    {
-                        InitializeMcpRuntime();
-                    }
+                    EditorGUILayout.LabelField(
+                        new GUIContent("Prebuilt machine runtime", "Machine runtimes are installed and selected in Step 1; project-local Build and Prepare actions do not apply."),
+                        EditorStyles.miniLabel,
+                        GUILayout.Width(145f));
                 }
 
                 var canStopServer = _serverProcessSnapshot != null && _serverProcessSnapshot.SafeStopTargets.Any();
@@ -1421,6 +1503,90 @@ namespace UnityMcp.AgentBridge.Mcp
             Repaint();
         }
 
+        private void DownloadMachineRuntime(PublishedMachineRuntimeVersion release)
+        {
+            if (_runtimeDownloadRunning || release == null)
+            {
+                return;
+            }
+
+            _runtimeDownloadCts?.Cancel();
+            _runtimeDownloadCts?.Dispose();
+            _runtimeDownloadCts = new CancellationTokenSource();
+            _runtimeDownloadRunning = true;
+            _runtimeDownloadProgress = 0f;
+            _runtimeDownloadStatus = "Preparing download";
+            _runtimeDownloadVersion = release.Version;
+            _runtimeDownloadMessage = string.Empty;
+            _runtimeDownloadMessageType = MessageType.None;
+            var progress = new Progress<MachineRuntimeDownloadProgress>(value =>
+            {
+                if (value == null)
+                {
+                    return;
+                }
+
+                _runtimeDownloadProgress = value.Fraction;
+                _runtimeDownloadStatus = value.Status;
+                Repaint();
+            });
+            _runtimeDownloadTask = _machineRuntimeDownloader.DownloadAndInstallAsync(
+                release,
+                _settings,
+                progress,
+                _runtimeDownloadCts.Token);
+            EditorApplication.update -= PollMachineRuntimeDownloadTask;
+            EditorApplication.update += PollMachineRuntimeDownloadTask;
+            Repaint();
+        }
+
+        private void PollMachineRuntimeDownloadTask()
+        {
+            if (_runtimeDownloadTask == null || !_runtimeDownloadTask.IsCompleted)
+            {
+                return;
+            }
+
+            EditorApplication.update -= PollMachineRuntimeDownloadTask;
+            var completedTask = _runtimeDownloadTask;
+            _runtimeDownloadTask = null;
+            _runtimeDownloadRunning = false;
+            _runtimeDownloadCts?.Dispose();
+            _runtimeDownloadCts = null;
+
+            if (completedTask.IsFaulted)
+            {
+                var exception = completedTask.Exception != null ? completedTask.Exception.GetBaseException() : null;
+                _runtimeDownloadMessage = exception != null ? exception.Message : "Runtime download failed.";
+                _runtimeDownloadMessageType = MessageType.Error;
+                Repaint();
+                return;
+            }
+
+            if (completedTask.IsCanceled)
+            {
+                _runtimeDownloadMessage = "Runtime download was cancelled.";
+                _runtimeDownloadMessageType = MessageType.Warning;
+                Repaint();
+                return;
+            }
+
+            var result = completedTask.Result;
+            _runtimeDownloadMessage = string.IsNullOrWhiteSpace(result.Summary)
+                ? (result.Succeeded ? "Runtime downloaded and installed." : "Runtime download failed.")
+                : result.Summary;
+            _runtimeDownloadMessageType = result.Succeeded ? MessageType.Info : MessageType.Error;
+            if (result.Succeeded)
+            {
+                _runtimeDownloadProgress = 1f;
+                _runtimeDownloadStatus = "Installed";
+                AgentBridgeBootstrap.Reconfigure();
+                _snapshot = _environmentProbe.SnapshotAsync(_settings, CancellationToken.None).GetAwaiter().GetResult();
+            }
+
+            Repaint();
+        }
+
         private void PollRuntimeBuildTask()
         {
             if (_runtimeBuildTask == null || !_runtimeBuildTask.IsCompleted)
@@ -1536,6 +1702,7 @@ namespace UnityMcp.AgentBridge.Mcp
             EditorApplication.update -= PollDiagnosticsTask;
             EditorApplication.update -= PollRuntimeBuildTask;
             EditorApplication.update -= PollRuntimeInitializationTask;
+            EditorApplication.update -= PollMachineRuntimeDownloadTask;
             _diagnosticsCts?.Cancel();
             _diagnosticsCts?.Dispose();
             _diagnosticsCts = null;
@@ -1551,6 +1718,11 @@ namespace UnityMcp.AgentBridge.Mcp
             _runtimeInitCts = null;
             _runtimeInitTask = null;
             _runtimeInitRunning = false;
+            _runtimeDownloadCts?.Cancel();
+            _runtimeDownloadCts?.Dispose();
+            _runtimeDownloadCts = null;
+            _runtimeDownloadTask = null;
+            _runtimeDownloadRunning = false;
             _initialDiagnosticsQueued = false;
         }
 

@@ -303,6 +303,21 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             try
             {
+                if (IsMachineRuntime(settings))
+                {
+                    var version = _pathResolver.ResolveRuntimeVersion(settings);
+                    return new McpDiagnosticCheck
+                    {
+                        Code = "MCP011",
+                        Severity = McpDiagnosticSeverity.Info,
+                        Summary = "Roslyn Build Input",
+                        Details = "Not applicable for prebuilt machine runtime" +
+                                  (string.IsNullOrWhiteSpace(version) ? "." : " " + version + "."),
+                        Remediation = "Install or reselect the published machine runtime in Step 1.",
+                        Duration = TimeSpan.Zero,
+                    };
+                }
+
                 var payloadSourcePath = ResolveRoslynPayloadSourcePath(settings);
                 var exists = !string.IsNullOrWhiteSpace(payloadSourcePath) && File.Exists(payloadSourcePath);
                 return new McpDiagnosticCheck
@@ -329,6 +344,7 @@ namespace UnityMcp.AgentBridge.Mcp
             {
                 var runtimePayloadPath = ResolveRoslynPreparedRuntimePath(settings);
                 var exists = !string.IsNullOrWhiteSpace(runtimePayloadPath) && File.Exists(runtimePayloadPath);
+                var machineRuntime = IsMachineRuntime(settings);
                 return new McpDiagnosticCheck
                 {
                     Code = "MCP012",
@@ -337,14 +353,25 @@ namespace UnityMcp.AgentBridge.Mcp
                     Details = exists
                         ? runtimePayloadPath
                         : "Missing prepared runtime payload: " + (string.IsNullOrWhiteSpace(runtimePayloadPath) ? "<unresolved>" : runtimePayloadPath),
-                    Remediation = "Run Build Local Runtime, then Prepare Runtime.",
+                    Remediation = machineRuntime
+                        ? "Install or reselect the published machine runtime in Step 1."
+                        : "Run Build Local Runtime, then Prepare Runtime.",
                     Duration = TimeSpan.Zero,
                 };
             }
             catch (Exception exception)
             {
-                return CreateExceptionCheck("MCP012", "Roslyn Prepared Runtime", "Run Build Local Runtime, then Prepare Runtime.", exception);
+                var remediation = IsMachineRuntime(settings)
+                    ? "Install or reselect the published machine runtime in Step 1."
+                    : "Run Build Local Runtime, then Prepare Runtime.";
+                return CreateExceptionCheck("MCP012", "Roslyn Prepared Runtime", remediation, exception);
             }
+        }
+
+        private static bool IsMachineRuntime(McpEditorSettings settings)
+        {
+            return settings != null &&
+                   string.Equals(settings.RuntimeMode, MachineRuntimeLocator.MachineMode, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsBridgeEnabled()
@@ -544,6 +571,30 @@ namespace UnityMcp.AgentBridge.Mcp
 
         private string ResolveRoslynPreparedRuntimePath(McpEditorSettings settings)
         {
+            if (IsMachineRuntime(settings))
+            {
+                var machineServerRoot = _pathResolver.ResolveMcpServerRoot(settings);
+                if (string.IsNullOrWhiteSpace(machineServerRoot))
+                {
+                    return string.Empty;
+                }
+
+                var machineCandidates = new[]
+                {
+                    Path.Combine(machineServerRoot, "win-x64", "unity-roslyn-compiler.exe"),
+                    Path.Combine(machineServerRoot, "roslyn-execution", "out", "win-x64", "unity-roslyn-compiler.exe"),
+                };
+                for (var index = 0; index < machineCandidates.Length; index++)
+                {
+                    if (File.Exists(machineCandidates[index]))
+                    {
+                        return machineCandidates[index];
+                    }
+                }
+
+                return machineCandidates[0];
+            }
+
             var runtimeRoot = _pathResolver.ResolveWorkspaceRuntimeRoot(settings);
             if (string.IsNullOrWhiteSpace(runtimeRoot))
             {

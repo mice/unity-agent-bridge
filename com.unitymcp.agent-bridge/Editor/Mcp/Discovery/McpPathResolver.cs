@@ -140,6 +140,11 @@ namespace UnityMcp.AgentBridge.Mcp
                 return Directory.Exists(machineMcpRoot) ? machineMcpRoot : machineRuntimeRoot;
             }
 
+            if (IsMachineRuntimeRequested(settings))
+            {
+                return string.Empty;
+            }
+
             if (settings != null && !string.IsNullOrWhiteSpace(settings.McpServerRoot))
             {
                 var configured = settings.McpServerRoot.Trim();
@@ -175,6 +180,11 @@ namespace UnityMcp.AgentBridge.Mcp
                 return Directory.Exists(machineCliRoot) ? machineCliRoot : machineRuntimeRoot;
             }
 
+            if (IsMachineRuntimeRequested(settings))
+            {
+                return string.Empty;
+            }
+
             if (settings != null && !string.IsNullOrWhiteSpace(settings.CliExecutablePath))
             {
                 var configured = settings.CliExecutablePath.Trim();
@@ -207,6 +217,11 @@ namespace UnityMcp.AgentBridge.Mcp
                 return machineLauncher;
             }
 
+            if (IsMachineRuntimeRequested(settings))
+            {
+                return string.Empty;
+            }
+
             var runtimeRoot = ResolveWorkspaceRuntimeRoot(settings);
             if (string.IsNullOrEmpty(runtimeRoot))
             {
@@ -224,14 +239,18 @@ namespace UnityMcp.AgentBridge.Mcp
 
         public string ResolveRuntimeMode(McpEditorSettings settings)
         {
-            return !string.IsNullOrEmpty(_machineRuntimeLocator.ResolveRoot(settings))
-                ? MachineRuntimeLocator.MachineMode
-                : "project-local";
+            return IsMachineRuntimeRequested(settings) ? MachineRuntimeLocator.MachineMode : "project-local";
         }
 
         public string ResolveRuntimeVersion(McpEditorSettings settings)
         {
             return _machineRuntimeLocator.ResolveVersion(settings);
+        }
+
+        private static bool IsMachineRuntimeRequested(McpEditorSettings settings)
+        {
+            return settings != null &&
+                   string.Equals(settings.RuntimeMode, MachineRuntimeLocator.MachineMode, StringComparison.OrdinalIgnoreCase);
         }
 
         public string ResolveWorkspaceRuntimeRoot(McpEditorSettings settings)

@@ -190,6 +190,32 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(resolved, Is.EqualTo(Path.GetFullPath(cliRoot)));
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_207.md
+        [Test]
+        [Category("AGBM_Discovery")]
+        [Category("AGBM_207")]
+        public void MachineMode_UninstalledSelectedVersion_DoesNotFallbackToProjectRuntime()
+        {
+            var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
+            Directory.CreateDirectory(Path.Combine(projectRoot, ".unitymcp", "runtime", "UnityAgentBridge", "cli"));
+            var launcherPath = Path.Combine(projectRoot, ".unitymcp", "runtime", "AgentBridge", "Start-UnityAgentBridge-Mcp.cmd");
+            Directory.CreateDirectory(Path.GetDirectoryName(launcherPath) ?? projectRoot);
+            File.WriteAllText(launcherPath, "echo launcher");
+            var settings = new McpEditorSettings
+            {
+                RuntimeMode = "machine",
+                RuntimeVersion = "1.2.10",
+                MachineRuntimeRoot = Path.Combine(_tempDirectory, "UnityAgentBridge"),
+            };
+            var resolver = new McpPathResolver(() => projectRoot);
+
+            Assert.That(resolver.ResolveRuntimeMode(settings), Is.EqualTo("machine"));
+            Assert.That(resolver.ResolveRuntimeVersion(settings), Is.EqualTo("1.2.10"));
+            Assert.That(resolver.ResolveMcpServerRoot(settings), Is.Empty);
+            Assert.That(resolver.ResolveCliRoot(settings), Is.Empty);
+            Assert.That(resolver.ResolveLauncherPath(settings), Is.Empty);
+        }
+
         [Test]
         [Timeout(5000)]
         [Category("AGBM_Discovery")]
