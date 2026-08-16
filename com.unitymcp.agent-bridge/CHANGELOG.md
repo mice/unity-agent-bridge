@@ -6,6 +6,17 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.12-rc.2] - 2026-08-16
+
+### Added
+
+- Added a published machine-runtime version picker with install-state labels and direct download progress in setup Step 1.
+- Added verified project-cache reuse and tag-source build fallback for release assets that are unavailable.
+
+### Fixed
+
+- Made machine-runtime diagnostics and preparation follow the selected machine version and report incomplete Roslyn source payloads.
+
 ## [1.2.12-rc.1] - 2026-08-15
 
 ### Changed

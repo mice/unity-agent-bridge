@@ -7,6 +7,7 @@ param(
     [Parameter(Mandatory = $true)][string]$OutputArchivePath,
     [Parameter(Mandatory = $true)][string]$UnityProjectPath,
     [string]$SourceArchiveUrl,
+    [string]$ArtifactUrl,
     [string]$DotnetPath = 'dotnet',
     [string]$Rid = 'win-x64'
 )
@@ -117,7 +118,7 @@ try {
         commitSha = $CommitSha.ToLowerInvariant()
         unityMinimum = [string]$packageMetadata.unity
         platform = $Rid
-        artifactUrl = if ($null -eq $SourceArchiveUrl) { '' } else { $SourceArchiveUrl.Trim() }
+        artifactUrl = if (-not [string]::IsNullOrWhiteSpace($ArtifactUrl)) { $ArtifactUrl.Trim() } elseif ($null -eq $SourceArchiveUrl) { '' } else { $SourceArchiveUrl.Trim() }
         artifactSha256 = $runtimeSha
         generatedUtc = (Get-Date).ToUniversalTime().ToString('o')
         buildOrigin = 'git-tag-source'

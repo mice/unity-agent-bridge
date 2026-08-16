@@ -19,5 +19,5 @@ The public version-enumeration entry point must use the packaged catalog when th
 ## Assertions
 
 - No local `releases` directory exists.
-- `ListPublishedVersions` still returns supported published tags beginning with `v1.2.12-rc.1`.
+- `ListPublishedVersions` returns supported published tags beginning with `v1.2.12-rc.2`, followed by `v1.2.12-rc.1`.
 - Legacy runtime tags are absent.

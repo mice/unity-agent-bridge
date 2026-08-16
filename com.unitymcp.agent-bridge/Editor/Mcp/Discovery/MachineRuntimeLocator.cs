@@ -249,6 +249,7 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             var versions = new[]
             {
+                "1.2.12-rc.2",
                 "1.2.12-rc.1",
             };
             var publishedVersions = new List<PublishedMachineRuntimeVersion>(versions.Length);

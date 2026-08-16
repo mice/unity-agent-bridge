@@ -195,13 +195,15 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
             var versions = MachineRuntimeLocator.CreateBuiltInPublishedVersions(managerRoot);
 
-            Assert.That(versions.Count, Is.EqualTo(1));
-            Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.1"));
-            Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.1"));
+            Assert.That(versions.Count, Is.EqualTo(2));
+            Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.2"));
+            Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.2"));
             Assert.That(versions[0].IsInstalled, Is.False);
-            Assert.That(versions[0].ArtifactUrl, Does.EndWith("/v1.2.12-rc.1/unity-agent-bridge-1.2.12-rc.1-win-x64.zip"));
-            Assert.That(versions[0].SourceArchiveUrl, Does.EndWith("/archive/refs/tags/v1.2.12-rc.1.zip"));
-            Assert.That(versions[0].CommitSha, Is.EqualTo("af3638f0a992835293d3bb88aa6c1bd9842c1338"));
+            Assert.That(versions[0].ArtifactUrl, Does.EndWith("/v1.2.12-rc.2/unity-agent-bridge-1.2.12-rc.2-win-x64.zip"));
+            Assert.That(versions[0].SourceArchiveUrl, Does.EndWith("/archive/refs/tags/v1.2.12-rc.2.zip"));
+            Assert.That(versions[0].CommitSha, Is.Empty);
+            Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.1"));
+            Assert.That(versions[1].CommitSha, Is.EqualTo("af3638f0a992835293d3bb88aa6c1bd9842c1338"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_209.md
@@ -222,8 +224,8 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                 });
 
                 Assert.That(Directory.Exists(Path.Combine(managerRoot, "releases")), Is.False);
-                Assert.That(versions.Count, Is.EqualTo(1));
-                Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.1"));
+                Assert.That(versions.Count, Is.EqualTo(2));
+                Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.2"));
             }
             finally
             {
