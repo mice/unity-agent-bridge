@@ -171,6 +171,7 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(result.Errors[0].Code, Is.EqualTo(RoslynExecutionContracts.PolicyDeniedCode));
             Assert.That(result.MetricsObjectJson, Does.Contain("\"policyDenialCategory\":\"project_write\""));
             Assert.That(result.MetricsObjectJson, Does.Contain("\"strategy\":\"not_started\""));
+            AssertReportPathConsistent(result);
         }
 
         [Test]
@@ -226,6 +227,17 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(metrics.policyVersion, Is.EqualTo(RoslynExecutionContracts.PolicyVersion));
             Assert.That(result.MetricsObjectJson, Does.Contain("\"result\""));
             Assert.That(result.ReportPath, Is.Not.Null.And.Not.Empty);
+            AssertReportPathConsistent(result);
+        }
+
+        private static void AssertReportPathConsistent(UnityMcpToolResult result)
+        {
+            var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;
+            var reportPath = Path.Combine(projectRoot, result.ReportPath.Replace('/', Path.DirectorySeparatorChar));
+            var reportJson = File.ReadAllText(reportPath);
+
+            Assert.That(result.MetricsObjectJson, Does.Contain("\"reportPath\":\"" + result.ReportPath + "\""));
+            Assert.That(reportJson, Does.Contain("\"reportPath\":\"" + result.ReportPath + "\""));
         }
 
         [Test]

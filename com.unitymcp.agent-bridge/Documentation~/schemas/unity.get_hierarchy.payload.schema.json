@@ -22,7 +22,7 @@
     },
     "payloadVersion": {
       "type": "string",
-      "const": "hierarchy.v2"
+      "const": "hierarchy.v1"
     },
     "generatedAt": {
       "type": "string",

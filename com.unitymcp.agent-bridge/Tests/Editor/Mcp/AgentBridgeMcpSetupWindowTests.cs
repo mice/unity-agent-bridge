@@ -23,6 +23,22 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             }
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_218.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_218")]
+        public void RuntimeCompatibility_PrereleasesRequireExactPackageAndRuntimeIdentity()
+        {
+            Assert.That(AgentBridgeMcpSetupWindow.EvaluateRuntimeCompatibility("1.2.12-rc.3", "1.2.12-rc.3"), Is.EqualTo("ready"));
+            Assert.That(
+                AgentBridgeMcpSetupWindow.EvaluateRuntimeCompatibility("1.2.12-rc.3", "1.2.12-rc.2"),
+                Is.EqualTo("blocking: prerelease package/runtime exact-match required"));
+            Assert.That(
+                AgentBridgeMcpSetupWindow.IsRuntimeCompatibilityBlocking("blocking: prerelease package/runtime exact-match required"),
+                Is.True);
+            Assert.That(AgentBridgeMcpSetupWindow.EvaluateRuntimeCompatibility("1.2.12", "1.2.13"), Is.EqualTo("warning: patch/prerelease difference"));
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_161.md
         [Test]
         [Category("AGBM_UI")]

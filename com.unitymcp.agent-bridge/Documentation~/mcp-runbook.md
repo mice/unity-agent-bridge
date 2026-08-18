@@ -185,7 +185,7 @@ Lifecycle interpretation:
 
 ## Token-Friendly MCP Usage
 
-When using `mcp__unity__get_hierarchy`, `mcp__unity__get_gameobject_component_info`, or `mcp__unity__compile`, inspect `structuredContent.metrics.details` and `structuredContent.metrics.followUp` before issuing another broad Unity query.
+When using `unity_hierarchy_get`, `unity_gameobject_component_get_info`, or `unity_project_compile`, inspect `structuredContent.metrics.details` and `structuredContent.metrics.followUp` before issuing another broad Unity query.
 
 Recommended pattern:
 
@@ -197,7 +197,7 @@ Recommended pattern:
 Example MCP sequence:
 
 ```text
-mcp__unity__get_hierarchy({ "locator": "currentScene" })
+unity_hierarchy_get({ "locator": "currentScene" })
 mcp__unity__get_gameobject_component_info({ "locator": "currentScene#Main Camera" })
 mcp__unity__read_report({ "reportPath": "...", "jsonPointer": "/components" })
 ```
@@ -205,8 +205,8 @@ mcp__unity__read_report({ "reportPath": "...", "jsonPointer": "/components" })
 For Play Mode objects moved under Unity's persistent hierarchy, discover and reuse the canonical locator:
 
 ```text
-mcp__unity__get_hierarchy({ "locator": "dontDestroyOnLoad" })
-mcp__unity__get_hierarchy({ "locator": "dontDestroyOnLoad#RuntimeServices", "maxDepth": 2 })
+unity_hierarchy_get({ "locator": "dontDestroyOnLoad" })
+unity_hierarchy_get({ "locator": "dontDestroyOnLoad#RuntimeServices", "maxDepth": 2 })
 mcp__unity__get_gameobject_component_info({ "locator": "dontDestroyOnLoad#RuntimeServices/Audio" })
 ```
 

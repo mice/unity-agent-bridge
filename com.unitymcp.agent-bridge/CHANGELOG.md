@@ -6,6 +6,15 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.12-rc.3] - 2026-08-18
+
+### Fixed
+
+- Persist Lua and Roslyn execution reports with the same `reportPath` returned in tool metrics.
+- Block prerelease package/runtime identity mismatches before MCP readiness is reported as ready.
+- Preserve structured `unity.get_hierarchy` failures for invalid `dontDestroyOnLoad` locators.
+- Consolidate hierarchy discovery on `unity_hierarchy_get` and the `hierarchy.v1` contract; the former v2 label is not supported.
+
 ## [1.2.12-rc.2] - 2026-08-16
 
 ### Added

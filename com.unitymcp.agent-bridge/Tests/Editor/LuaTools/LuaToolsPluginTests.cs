@@ -123,6 +123,7 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(File.Exists(GetAbsolutePath(success.reportPath)), Is.True);
             var reportJson = File.ReadAllText(GetAbsolutePath(success.reportPath));
             Assert.That(reportJson, Does.Contain("\"operation\":\"lint\""));
+            AssertReportPathConsistent(success, reportJson);
             Assert.That(packagesPath.success, Is.True);
             Assert.That(omittedChecks.metricsObjectJson, Does.Contain("\"effectiveChecks\":[\"gc\"]"));
             Assert.That(duplicateChecks.metricsObjectJson, Does.Contain("\"effectiveChecks\":[\"gc\"]"));
@@ -266,7 +267,9 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(explicitBad.status, Is.EqualTo("compile_failed"));
             Assert.That(explicitBad.errors.Any(error => error.code == "R000"), Is.True);
             Assert.That(explicitBad.metricsObjectJson, Does.Contain("\"parserDialect\":\"lua-gc-lint parser\""));
-            Assert.That(File.ReadAllText(GetAbsolutePath(explicitBad.reportPath)), Does.Contain("\"rule\":\"R000\""));
+            var explicitBadReport = File.ReadAllText(GetAbsolutePath(explicitBad.reportPath));
+            Assert.That(explicitBadReport, Does.Contain("\"rule\":\"R000\""));
+            AssertReportPathConsistent(explicitBad, explicitBadReport);
             Assert.That(explicitDirectory.status, Is.EqualTo("compile_failed"));
             Assert.That(configuredRoot.status, Is.EqualTo("compile_failed"));
             Assert.That(configuredRoot.metricsObjectJson, Does.Contain("Assets/Lua"));
@@ -275,6 +278,13 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(explicitOk.status, Is.EqualTo(ToolResultStatus.Success));
             Assert.That(directoryOk.success, Is.True);
             Assert.That(afterFiles, Is.EqualTo(beforeFiles - 1));
+        }
+
+        private static void AssertReportPathConsistent(ToolResult result, string reportJson)
+        {
+            Assert.That(result.reportPath, Is.Not.Null.And.Not.Empty);
+            Assert.That(result.metricsObjectJson, Does.Contain("\"reportPath\":\"" + result.reportPath + "\""));
+            Assert.That(reportJson, Does.Contain("\"reportPath\":\"" + result.reportPath + "\""));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_185.md

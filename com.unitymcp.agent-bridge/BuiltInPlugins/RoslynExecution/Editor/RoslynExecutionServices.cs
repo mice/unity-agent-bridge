@@ -549,7 +549,8 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                 diagnostics = new List<RoslynCompileDiagnostic>(),
                 exception = null
             };
-            metrics.reportPath = RoslynExecutionReportWriter.Write(projectRoot, invocationId, report);
+            metrics.reportPath = RoslynExecutionReportWriter.GetRelativePath(invocationId);
+            RoslynExecutionReportWriter.Write(projectRoot, metrics.reportPath, report);
 
             return new UnityMcpToolResult
             {
@@ -594,7 +595,8 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                 diagnostics = new List<RoslynCompileDiagnostic>(),
                 exception = null
             };
-            metrics.reportPath = RoslynExecutionReportWriter.Write(projectRoot, invocationId, report);
+            metrics.reportPath = RoslynExecutionReportWriter.GetRelativePath(invocationId);
+            RoslynExecutionReportWriter.Write(projectRoot, metrics.reportPath, report);
 
             return new UnityMcpToolResult
             {
@@ -718,7 +720,8 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                     rawExecutionJson = rawExecutionJson,
                     diagnostics = compileResponse.ProtocolResponse.diagnostics ?? new List<RoslynCompileDiagnostic>()
                 };
-                metrics.reportPath = RoslynExecutionReportWriter.Write(projectRoot, invocationId, report);
+                metrics.reportPath = RoslynExecutionReportWriter.GetRelativePath(invocationId);
+                RoslynExecutionReportWriter.Write(projectRoot, metrics.reportPath, report);
 
                 return new UnityMcpToolResult
                 {
@@ -826,7 +829,8 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                     ? compileResponse.ProtocolResponse.diagnostics ?? new List<RoslynCompileDiagnostic>()
                     : new List<RoslynCompileDiagnostic>()
             };
-            metrics.reportPath = RoslynExecutionReportWriter.Write(projectRoot, invocationId, report);
+            metrics.reportPath = RoslynExecutionReportWriter.GetRelativePath(invocationId);
+            RoslynExecutionReportWriter.Write(projectRoot, metrics.reportPath, report);
 
             var errors = new List<UnityMcpToolError>();
             if (compileResponse.ProtocolResponse != null && compileResponse.ProtocolResponse.diagnostics != null)
@@ -890,7 +894,8 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                     : new List<RoslynCompileDiagnostic>(),
                 exception = exception != null ? exception.ToString() : null
             };
-            metrics.reportPath = RoslynExecutionReportWriter.Write(projectRoot, invocationId, report);
+            metrics.reportPath = RoslynExecutionReportWriter.GetRelativePath(invocationId);
+            RoslynExecutionReportWriter.Write(projectRoot, metrics.reportPath, report);
 
             return new UnityMcpToolResult
             {
@@ -1531,10 +1536,14 @@ public static class Entry
 
     internal static class RoslynExecutionReportWriter
     {
-        public static string Write(string projectRoot, string invocationId, object report)
+        public static string GetRelativePath(string invocationId)
         {
-            var relativePath = Path.Combine("Temp", "AgentBridge", "reports", RoslynExecutionContracts.ReportPrefix + "_" + invocationId + ".json")
+            return Path.Combine("Temp", "AgentBridge", "reports", RoslynExecutionContracts.ReportPrefix + "_" + invocationId + ".json")
                 .Replace('\\', '/');
+        }
+
+        public static void Write(string projectRoot, string relativePath, object report)
+        {
             var absolutePath = Path.Combine(projectRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
             var directory = Path.GetDirectoryName(absolutePath);
             if (!string.IsNullOrWhiteSpace(directory))
@@ -1543,7 +1552,6 @@ public static class Entry
             }
 
             File.WriteAllText(absolutePath, JsonConvert.SerializeObject(report, Formatting.None), new UTF8Encoding(false));
-            return relativePath;
         }
     }
 

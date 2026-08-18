@@ -343,7 +343,7 @@ Example:
 
 ```text
 unity.get_hierarchy(locator=currentScene)
--> metrics.contractVersion = hierarchy.v2
+> metrics.contractVersion = hierarchy.v1
 -> metrics.limit = 150
 -> metrics.maxDepth = 4
 -> metrics.details.reportPath = Temp/AgentBridge/reports/get_hierarchy_<id>.json

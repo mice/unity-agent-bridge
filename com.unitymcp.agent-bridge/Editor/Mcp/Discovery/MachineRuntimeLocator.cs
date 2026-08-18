@@ -20,7 +20,7 @@ namespace UnityMcp.AgentBridge.Mcp
     {
         internal const string MachineMode = "machine";
         internal const string RuntimeSelectionFileName = "runtime-selection.json";
-        internal const string MinimumPublishedRuntimeVersion = "1.2.12-rc.2";
+        internal const string MinimumPublishedRuntimeVersion = "1.2.12-rc.3";
 
         public string ResolveRoot(McpEditorSettings settings)
         {
@@ -249,7 +249,7 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             var versions = new[]
             {
-                "1.2.12-rc.2",
+                "1.2.12-rc.3",
             };
             var publishedVersions = new List<PublishedMachineRuntimeVersion>(versions.Length);
             foreach (var version in versions)
@@ -261,9 +261,7 @@ namespace UnityMcp.AgentBridge.Mcp
                     Tag = tag,
                     ArtifactUrl = CreateGitHubArtifactUrl(version),
                     SourceArchiveUrl = CreateGitHubSourceArchiveUrl(tag),
-                    CommitSha = version == "1.2.12-rc.2"
-                        ? "fa667ca009bab9e5621e16751ab86d014e4ee80b"
-                        : string.Empty,
+                    CommitSha = string.Empty,
                     IsInstalled = IsUsableInstalledVersion(Path.Combine(managerRoot, "versions", version), version),
                 });
             }

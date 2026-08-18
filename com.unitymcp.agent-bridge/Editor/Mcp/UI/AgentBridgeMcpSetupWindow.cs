@@ -810,7 +810,7 @@ namespace UnityMcp.AgentBridge.Mcp
             var packageVersion = ResolvePackageVersion();
             var runtimeVersion = effectiveResolver.ResolveRuntimeVersion(effectiveSettings);
             var compatibility = EvaluateRuntimeCompatibility(packageVersion, runtimeVersion);
-            if (compatibility == "blocking")
+            if (IsRuntimeCompatibilityBlocking(compatibility))
             {
                 effectiveReadiness = McpReadiness.Unavailable;
             }
@@ -958,7 +958,7 @@ namespace UnityMcp.AgentBridge.Mcp
             }
         }
 
-        private static string EvaluateRuntimeCompatibility(string packageVersion, string runtimeVersion)
+        internal static string EvaluateRuntimeCompatibility(string packageVersion, string runtimeVersion)
         {
             if (string.IsNullOrWhiteSpace(runtimeVersion)) return "unavailable";
             if (string.IsNullOrWhiteSpace(packageVersion)) return "warning: package version unavailable";
@@ -970,9 +970,20 @@ namespace UnityMcp.AgentBridge.Mcp
             {
                 return "blocking: package/runtime major-minor mismatch";
             }
+            if ((packageVersion.IndexOf('-', StringComparison.Ordinal) >= 0 || runtimeVersion.IndexOf('-', StringComparison.Ordinal) >= 0) &&
+                !string.Equals(packageVersion, runtimeVersion, StringComparison.Ordinal))
+            {
+                return "blocking: prerelease package/runtime exact-match required";
+            }
             return string.Equals(packageVersion, runtimeVersion, StringComparison.Ordinal)
                 ? "ready"
                 : "warning: patch/prerelease difference";
+        }
+
+        internal static bool IsRuntimeCompatibilityBlocking(string compatibility)
+        {
+            return !string.IsNullOrWhiteSpace(compatibility) &&
+                   compatibility.StartsWith("blocking:", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string FormatCliStatus(McpEditorSettings settings, McpPathResolver pathResolver)

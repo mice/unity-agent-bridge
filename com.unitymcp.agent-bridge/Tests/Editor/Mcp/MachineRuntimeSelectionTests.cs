@@ -194,12 +194,12 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var versions = MachineRuntimeLocator.CreateBuiltInPublishedVersions(managerRoot);
 
             Assert.That(versions.Count, Is.EqualTo(1));
-            Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.2"));
-            Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.2"));
+            Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.3"));
+            Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.3"));
             Assert.That(versions[0].IsInstalled, Is.False);
-            Assert.That(versions[0].ArtifactUrl, Does.EndWith("/v1.2.12-rc.2/unity-agent-bridge-1.2.12-rc.2-win-x64.zip"));
-            Assert.That(versions[0].SourceArchiveUrl, Does.EndWith("/archive/refs/tags/v1.2.12-rc.2.zip"));
-            Assert.That(versions[0].CommitSha, Is.EqualTo("fa667ca009bab9e5621e16751ab86d014e4ee80b"));
+            Assert.That(versions[0].ArtifactUrl, Does.EndWith("/v1.2.12-rc.3/unity-agent-bridge-1.2.12-rc.3-win-x64.zip"));
+            Assert.That(versions[0].SourceArchiveUrl, Does.EndWith("/archive/refs/tags/v1.2.12-rc.3.zip"));
+            Assert.That(versions[0].CommitSha, Is.Empty);
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_209.md
@@ -221,7 +221,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
                 Assert.That(Directory.Exists(Path.Combine(managerRoot, "releases")), Is.False);
                 Assert.That(versions.Count, Is.EqualTo(1));
-                Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.2"));
+                Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.3"));
             }
             finally
             {

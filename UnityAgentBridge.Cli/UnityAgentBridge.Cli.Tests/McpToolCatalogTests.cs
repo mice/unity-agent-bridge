@@ -140,6 +140,8 @@ public sealed class McpToolCatalogTests
 
         CollectionAssert.Contains(toolNames, "unity_asset_database_search");
         CollectionAssert.Contains(toolNames, "unity_hierarchy_get");
+        Assert.AreEqual(1, toolNames.Count(name => name == "unity_hierarchy_get"));
+        Assert.IsNull(McpToolCatalog.TryGet("mcp__unity__get_hierarchy", diagnostics));
         CollectionAssert.Contains(toolNames, "unity_gameobject_component_get_info");
         CollectionAssert.Contains(toolNames, "unity_selection_get_info");
         CollectionAssert.Contains(toolNames, "unity_report_read");

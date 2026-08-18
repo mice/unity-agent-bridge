@@ -47,7 +47,7 @@ public sealed class PackageSchemaValidationTests
         Assert.AreEqual(false, hierarchyArgs["properties"]?["includeComponents"]?["default"]?.Value<bool>());
 
         var hierarchyMetrics = LoadSchema(schemaRoot, "unity.get_hierarchy.metrics.schema.json");
-        Assert.AreEqual("hierarchy.v2", hierarchyMetrics["properties"]?["contractVersion"]?["const"]?.Value<string>());
+        Assert.AreEqual("hierarchy.v1", hierarchyMetrics["properties"]?["contractVersion"]?["const"]?.Value<string>());
         Assert.AreEqual(3, hierarchyMetrics["$defs"]?["followUp"]?["properties"]?["options"]?["maxItems"]?.Value<int>());
         var componentTypeOptions = hierarchyMetrics["$defs"]?["componentSummary"]?["properties"]?["type"]?["type"]?.Values<string>().ToArray();
         CollectionAssert.AreEqual(new[] { "string", "null" }, componentTypeOptions);

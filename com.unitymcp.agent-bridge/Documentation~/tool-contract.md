@@ -259,7 +259,7 @@ Rules:
   - zero, negative, or `> 5000` `limit` returns `invalid_args`
   - invalid numeric inputs are not clamped
 - Metrics:
-  - `contractVersion = hierarchy.v2`
+  - `contractVersion = hierarchy.v1`
   - `target`
   - `rootCount`
   - `nodeCount`
@@ -302,7 +302,7 @@ Rules:
   - supported locator forms are `currentScene`, `currentScene#A/B`, `dontDestroyOnLoad`, `dontDestroyOnLoad#A/B`, `Assets/X.unity`, `Assets/X.unity#A/B`, `Assets/X.prefab`, `Assets/X.prefab#A/B`, `selection:active`, and `instance:<id>`
   - `includeComponents = true` adds bounded component summaries with `index` and nullable `type` only; each node returns at most 8 summaries and uses `componentsTruncated` when additional components exist
   - default node summaries expose `componentCount` and `hasMissingScripts` without returning heavy component identity by default
-  - the hierarchy contract version changed from `hierarchy.v1` to `hierarchy.v2`; callers should migrate any schema assumptions about component summaries and default bounds
+  - `hierarchy.v1` is the sole supported hierarchy contract; component summaries and default bounds follow this contract
   - the tool writes a `reportPath` for terminal results, including `invalid_args`
   - reports are complete only within the applied bounds and explicitly expose bounded completeness state
   - discovery is read-only: queries do not create or destroy GameObjects, call `Object.DontDestroyOnLoad`, or change Play Mode
@@ -622,8 +622,8 @@ Rules:
 - hierarchy paths use `/` as the segment separator
 - hierarchy segments are exact GameObject names compared ordinally
 - leading slash, trailing slash, empty segments, and `#` inside hierarchy segments return `invalid_args`
-- no hierarchy escape syntax is supported in v1
-- GameObject names containing `/` or `#` are not addressable by hierarchy locators in v1
+- no hierarchy escape syntax is supported
+- GameObject names containing `/` or `#` are not addressable by hierarchy locators
 - active and inactive GameObjects both participate in hierarchy lookup
 - duplicate hierarchy matches resolve to the first deterministic pre-order traversal match
 - scene asset locators only resolve scenes already open or loaded in the current Editor process

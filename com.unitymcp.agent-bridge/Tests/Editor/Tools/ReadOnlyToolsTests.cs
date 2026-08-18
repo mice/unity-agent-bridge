@@ -448,7 +448,7 @@ namespace UnityMcp.AgentBridge.Tests
                 var result = tool.Execute(CreateContext("agb.hierarchy.001", "{}"), NoOpAgentCancellation.Instance);
 
                 Assert.That(result.status, Is.EqualTo(ToolResultStatus.Success));
-                Assert.That(result.metricsObjectJson, Does.Contain("\"contractVersion\":\"hierarchy.v2\""));
+                Assert.That(result.metricsObjectJson, Does.Contain("\"contractVersion\":\"hierarchy.v1\""));
                 Assert.That(result.metricsObjectJson, Does.Contain("\"targetKind\":\"scene_root\""));
                 Assert.That(result.metricsObjectJson, Does.Contain("\"maxDepth\":" + UnityQueries.SceneQueryContract.DefaultHierarchyMaxDepth));
                 Assert.That(result.metricsObjectJson, Does.Contain("\"limit\":" + UnityQueries.SceneQueryContract.DefaultHierarchyLimit));
@@ -463,7 +463,7 @@ namespace UnityMcp.AgentBridge.Tests
                 Assert.That(result.metricsObjectJson, Does.Not.Contain("AdditiveSceneRoot"));
                 Assert.That(result.changedFiles, Is.Empty);
                 var report = File.ReadAllText(GetReportAbsolutePath(result.reportPath));
-                Assert.That(report, Does.Contain("\"payloadVersion\":\"hierarchy.v2\""));
+                Assert.That(report, Does.Contain("\"payloadVersion\":\"hierarchy.v1\""));
                 Assert.That(report, Does.Contain("\"boundedCompleteness\":{\"completeWithinAppliedBounds\":true"));
                 TrackReport(result.reportPath);
             }

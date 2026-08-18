@@ -129,7 +129,7 @@ namespace UnityMcp.AgentBridge.Tests
         [UnityTest]
         [Category("AGB_ReadOnly")]
         [Category("AGB_190")]
-        public IEnumerator HierarchyTool_RootAndSubtreeReturnReusableHierarchyV2Identity()
+        public IEnumerator HierarchyTool_RootAndSubtreeReturnReusableHierarchyV1Identity()
         {
             Assert.That(Application.isPlaying, Is.True);
             CreatePersistentHierarchy("AGB_DDOL_190_Root", "InactiveChild", true);
@@ -144,7 +144,7 @@ namespace UnityMcp.AgentBridge.Tests
 
             Assert.That(rootResult.Status, Is.EqualTo(UnityMcpToolStatus.Success));
             Assert.That(rootResult.ChangedFiles, Is.Empty);
-            Assert.That(rootMetrics.contractVersion, Is.EqualTo("hierarchy.v2"));
+            Assert.That(rootMetrics.contractVersion, Is.EqualTo("hierarchy.v1"));
             Assert.That(rootMetrics.target.targetKind, Is.EqualTo("scene_root"));
             Assert.That(rootMetrics.target.name, Is.EqualTo("DontDestroyOnLoad"));
             Assert.That(string.IsNullOrEmpty(rootMetrics.target.scenePath), Is.True);
@@ -206,6 +206,30 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(currentSceneResult.Status, Is.EqualTo(UnityMcpToolStatus.Success));
             Assert.That(currentMetrics.nodes.Any(node => node.name == "AGB_DDOL_191_CurrentScene"), Is.True);
             Assert.That(currentMetrics.nodes.Any(node => node.name == "AGB_DDOL_191_Persistent"), Is.False);
+
+            yield return null;
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_198.md
+        [UnityTest]
+        [Category("AGB_ReadOnly")]
+        [Category("AGB_198")]
+        public IEnumerator HierarchyTool_InvalidDontDestroyOnLoadLocatorReturnsStructuredFailureReport()
+        {
+            var tool = CreateTool("UnityGetHierarchyTool");
+            var result = tool.Execute(
+                CreateContext("agb.ddol.198.invalid", "unity.get_hierarchy", "{\"locator\":\"dontDestroyOnLoad#AGB_DDOL_198_Root/\",\"maxDepth\":64,\"limit\":1000}"),
+                NoOpUnityMcpCancellation.Instance);
+            TrackReport(result.ReportPath);
+            var report = JsonUtility.FromJson<HierarchyFailureReportMirror>(ReadReport(result.ReportPath));
+
+            Assert.That(result.Status, Is.EqualTo(UnityMcpToolStatus.InvalidArgs));
+            Assert.That(result.Errors, Is.Not.Null.And.Not.Empty);
+            Assert.That(result.Errors[0].Code, Is.EqualTo("AGENTBRIDGE_LOCATOR_UNSUPPORTED"));
+            Assert.That(result.Summary, Does.Not.Contain("Newtonsoft.Json.Linq.JArray"));
+            Assert.That(report, Is.Not.Null);
+            Assert.That(report.errors, Is.Not.Null.And.Not.Empty);
+            Assert.That(report.errors[0].Code, Is.EqualTo("AGENTBRIDGE_LOCATOR_UNSUPPORTED"));
 
             yield return null;
         }
@@ -434,6 +458,12 @@ namespace UnityMcp.AgentBridge.Tests
             public string locator;
             public string path;
             public string scenePath;
+        }
+
+        [Serializable]
+        private sealed class HierarchyFailureReportMirror
+        {
+            public UnityMcpToolError[] errors;
         }
 #pragma warning restore 0649
 

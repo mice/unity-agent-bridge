@@ -385,7 +385,8 @@ namespace UnityMcp.BuiltInPlugins.LuaTools
         {
             metrics.success = success;
             metrics.status = status;
-            metrics.reportPath = LuaToolsReportWriter.Write(projectRoot, context, reportPrefix, metrics.invocationId, report);
+            metrics.reportPath = LuaToolsReportWriter.GetRelativePath(projectRoot, context, reportPrefix, metrics.invocationId);
+            LuaToolsReportWriter.Write(projectRoot, metrics.reportPath, report);
             return new UnityMcpToolResult
             {
                 Success = success,
@@ -774,11 +775,16 @@ namespace UnityMcp.BuiltInPlugins.LuaTools
 
     internal static class LuaToolsReportWriter
     {
-        public static string Write(string projectRoot, UnityMcpToolContext context, string prefix, string invocationId, object report)
+        public static string GetRelativePath(string projectRoot, UnityMcpToolContext context, string prefix, string invocationId)
         {
             var tempRoot = context != null && !string.IsNullOrWhiteSpace(context.TempRoot) ? context.TempRoot : "Temp/AgentBridge";
             var relativePath = Path.Combine(tempRoot.Replace('/', Path.DirectorySeparatorChar), "reports", prefix + "_" + invocationId + ".json");
-            var absolutePath = Path.Combine(projectRoot, relativePath);
+            return Path.GetRelativePath(projectRoot, Path.Combine(projectRoot, relativePath)).Replace('\\', '/');
+        }
+
+        public static void Write(string projectRoot, string relativePath, object report)
+        {
+            var absolutePath = Path.Combine(projectRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
             var directory = Path.GetDirectoryName(absolutePath);
             if (!string.IsNullOrWhiteSpace(directory))
             {
@@ -786,7 +792,6 @@ namespace UnityMcp.BuiltInPlugins.LuaTools
             }
 
             File.WriteAllText(absolutePath, JsonConvert.SerializeObject(report, Formatting.None), new UTF8Encoding(false));
-            return Path.GetRelativePath(projectRoot, absolutePath).Replace('\\', '/');
         }
     }
 

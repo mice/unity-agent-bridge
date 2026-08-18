@@ -6,7 +6,7 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
 {
     internal static class SceneQueryContract
     {
-        public const string HierarchyContractVersion = "hierarchy.v2";
+        public const string HierarchyContractVersion = "hierarchy.v1";
 
         public const int DefaultHierarchyMaxDepth = 4;
         public const int DefaultHierarchyLimit = 150;
