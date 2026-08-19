@@ -232,6 +232,42 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             }
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_220.md
+        [Test]
+        [Category("AGBM_RuntimeSelection")]
+        [Category("AGBM_220")]
+        public void MachineSelection_StaleSourceOnlyManifestUsesVerifiedPackagedCatalog()
+        {
+            var previousManagerRoot = Environment.GetEnvironmentVariable("UNITY_AGENT_BRIDGE_HOME");
+            try
+            {
+                var managerRoot = Path.Combine(_tempDirectory, "UnityAgentBridge");
+                Environment.SetEnvironmentVariable("UNITY_AGENT_BRIDGE_HOME", managerRoot);
+                CreatePublishedMachineRuntimeVersion(
+                    managerRoot,
+                    "1.2.12-rc.3",
+                    "v1.2.12-rc.3",
+                    "https://github.com/mice/unity-agent-bridge/archive/refs/tags/v1.2.12-rc.3.zip",
+                    commitSha: string.Empty,
+                    buildOrigin: "git-tag-source");
+
+                var versions = new MachineRuntimeLocator().ListPublishedVersions(new McpEditorSettings
+                {
+                    RuntimeMode = "machine",
+                });
+
+                Assert.That(versions.Count, Is.EqualTo(2));
+                Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.3"));
+                Assert.That(versions[0].ArtifactUrl, Is.Empty);
+                Assert.That(versions[0].CommitSha, Is.EqualTo("7affaffda8c3ddb7c47dd63831d3a5d67863cbc8"));
+                Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.2"));
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("UNITY_AGENT_BRIDGE_HOME", previousManagerRoot);
+            }
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_210.md
         [Test]
         [Category("AGBM_RuntimeSelection")]
@@ -547,13 +583,15 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             string version,
             string tag,
             string artifactUrl,
-            string manifestVersion = null)
+            string manifestVersion = null,
+            string commitSha = null,
+            string buildOrigin = null)
         {
             var releaseRoot = Path.Combine(managerRoot, "releases", version);
             Directory.CreateDirectory(releaseRoot);
             File.WriteAllText(
                 Path.Combine(releaseRoot, "release-manifest.json"),
-                "{\"version\":\"" + (manifestVersion ?? version) + "\",\"tag\":\"" + tag + "\",\"artifactUrl\":\"" + artifactUrl + "\"}");
+                "{\"version\":\"" + (manifestVersion ?? version) + "\",\"tag\":\"" + tag + "\",\"artifactUrl\":\"" + artifactUrl + "\",\"commitSha\":\"" + (commitSha ?? string.Empty) + "\",\"buildOrigin\":\"" + (buildOrigin ?? string.Empty) + "\"}");
         }
 
         private static void CreateRuntimeArchive(string archivePath, string version)

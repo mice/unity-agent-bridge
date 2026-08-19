@@ -136,12 +136,23 @@ namespace UnityMcp.AgentBridge.Mcp
                         continue;
                     }
 
+                    var tag = !string.IsNullOrWhiteSpace(manifest.tag)
+                        ? manifest.tag.Trim()
+                        : !string.IsNullOrWhiteSpace(manifest.gitTag) ? manifest.gitTag.Trim() : "v" + version;
+                    var sourceArchiveUrl = CreateGitHubSourceArchiveUrl(tag);
+                    var artifactUrl = NormalizeArtifactUrl(version, manifest.artifactUrl);
+                    if (string.Equals(manifest.buildOrigin, "git-tag-source", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(artifactUrl, sourceArchiveUrl, StringComparison.OrdinalIgnoreCase))
+                    {
+                        artifactUrl = string.Empty;
+                    }
+
                     publishedVersions.Add(new PublishedMachineRuntimeVersion
                     {
                         Version = version,
-                        Tag = string.IsNullOrWhiteSpace(manifest.tag) ? "v" + version : manifest.tag.Trim(),
-                        ArtifactUrl = NormalizeArtifactUrl(version, manifest.artifactUrl),
-                        SourceArchiveUrl = CreateGitHubSourceArchiveUrl(string.IsNullOrWhiteSpace(manifest.tag) ? "v" + version : manifest.tag.Trim()),
+                        Tag = tag,
+                        ArtifactUrl = artifactUrl,
+                        SourceArchiveUrl = sourceArchiveUrl,
                         CommitSha = manifest.commitSha?.Trim() ?? string.Empty,
                         IsInstalled = IsUsableInstalledVersion(Path.Combine(managerRoot, "versions", version), version),
                     });
@@ -156,13 +167,61 @@ namespace UnityMcp.AgentBridge.Mcp
                 return Array.Empty<PublishedMachineRuntimeVersion>();
             }
 
-            if (publishedVersions.Count == 0 && IsDefaultManagerRoot(managerRoot))
+            if (IsDefaultManagerRoot(managerRoot))
             {
-                publishedVersions.AddRange(ReadPackagedPublishedVersions(managerRoot));
+                MergePackagedPublishedVersions(managerRoot, publishedVersions);
             }
 
             publishedVersions.Sort((left, right) => CompareSemanticVersionsDescending(left.Version, right.Version));
             return publishedVersions;
+        }
+
+        private static void MergePackagedPublishedVersions(
+            string managerRoot,
+            List<PublishedMachineRuntimeVersion> publishedVersions)
+        {
+            foreach (var packagedVersion in ReadPackagedPublishedVersions(managerRoot))
+            {
+                var existingIndex = -1;
+                for (var index = 0; index < publishedVersions.Count; index++)
+                {
+                    if (string.Equals(publishedVersions[index].Version, packagedVersion.Version, StringComparison.Ordinal))
+                    {
+                        existingIndex = index;
+                        break;
+                    }
+                }
+
+                if (existingIndex < 0)
+                {
+                    publishedVersions.Add(packagedVersion);
+                    continue;
+                }
+
+                if (!HasValidCommitSha(publishedVersions[existingIndex].CommitSha))
+                {
+                    packagedVersion.IsInstalled = publishedVersions[existingIndex].IsInstalled;
+                    publishedVersions[existingIndex] = packagedVersion;
+                }
+            }
+        }
+
+        private static bool HasValidCommitSha(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value) || value.Length != 40)
+            {
+                return false;
+            }
+
+            foreach (var character in value)
+            {
+                if (!Uri.IsHexDigit(character))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool IsDefaultManagerRoot(string managerRoot)
@@ -528,8 +587,10 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             public string version;
             public string tag;
+            public string gitTag;
             public string artifactUrl;
             public string commitSha;
+            public string buildOrigin;
         }
 
         [Serializable]
