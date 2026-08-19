@@ -17,8 +17,9 @@ internal static class McpArgumentValidator
 
     private static void EnsureObjectType(JObject schema, JToken arguments, string path)
     {
-        var type = schema.Value<string>("type");
-        if (string.Equals(type, "object", StringComparison.Ordinal) && arguments.Type != JTokenType.Object)
+        var expectedTypes = GetExpectedTypes(schema);
+        if (expectedTypes.Contains("object", StringComparer.Ordinal) &&
+            !expectedTypes.Any(expectedType => MatchesType(expectedType, arguments)))
         {
             throw new McpArgumentValidationException(BuildSingleIssueMessage(
                 toolName: null,
@@ -126,20 +127,22 @@ internal static class McpArgumentValidator
 
     private static void EnsureType(string toolName, string propertyName, JObject schema, JToken value)
     {
-        var expectedType = schema.Value<string>("type");
-        if (string.IsNullOrWhiteSpace(expectedType))
+        var expectedTypes = GetExpectedTypes(schema);
+        if (expectedTypes.Count == 0)
         {
             return;
         }
 
-        if (MatchesType(expectedType!, value))
+        if (expectedTypes.Any(expectedType => MatchesType(expectedType, value)))
         {
             return;
         }
+
+        var expectedType = DescribeTypes(expectedTypes);
 
         throw new McpArgumentValidationException(BuildSingleIssueMessage(
             toolName,
-            expectedType!,
+            expectedType,
             "invalid_type",
             propertyName,
             $"Invalid input: expected {expectedType}, received {ToNodeTypeName(value.Type)}"));
@@ -263,8 +266,8 @@ internal static class McpArgumentValidator
             return nestedAnyOf.OfType<JObject>().Any(candidate => Matches(candidate, value));
         }
 
-        var expectedType = schema.Value<string>("type");
-        if (!string.IsNullOrWhiteSpace(expectedType) && !MatchesType(expectedType!, value))
+        var expectedTypes = GetExpectedTypes(schema);
+        if (expectedTypes.Count > 0 && !expectedTypes.Any(expectedType => MatchesType(expectedType, value)))
         {
             return false;
         }
@@ -329,6 +332,25 @@ internal static class McpArgumentValidator
             "null" => value.Type == JTokenType.Null,
             _ => true
         };
+    }
+
+    private static IReadOnlyList<string> GetExpectedTypes(JObject schema)
+    {
+        return schema?["type"] switch
+        {
+            JValue { Type: JTokenType.String } scalar => new[] { scalar.Value<string>()! },
+            JArray types => types.Values<string>()
+                .Where(static type => !string.IsNullOrWhiteSpace(type))
+                .Select(static type => type!)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
+            _ => Array.Empty<string>()
+        };
+    }
+
+    private static string DescribeTypes(IEnumerable<string> expectedTypes)
+    {
+        return string.Join(" | ", expectedTypes);
     }
 
     private static string DescribeAnyOf(IEnumerable<JObject> anyOf)

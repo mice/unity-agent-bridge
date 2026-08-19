@@ -152,6 +152,53 @@ public sealed class McpToolCatalogTests
     }
 
     [TestMethod]
+    public async Task PluginNullableTypeSchemas_ValidateAndReachUnityDispatch()
+    {
+        var projectRoot = CreateUnityProject();
+        var catalogDirectory = Path.Combine(projectRoot, "Library", "AgentBridge");
+        Directory.CreateDirectory(catalogDirectory);
+        File.WriteAllText(
+            Path.Combine(catalogDirectory, "plugin-catalog.json"),
+            """
+            {"version":1,"tools":[
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.get_hierarchy","mcpName":"unity_hierarchy_get","title":"Unity Get Hierarchy","description":"Read hierarchy.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"locator\":{\"type\":[\"string\",\"null\"]},\"maxDepth\":{\"type\":\"integer\"},\"limit\":{\"type\":\"integer\"},\"includeComponents\":{\"type\":\"boolean\"}},\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.get_gameobject_component_info","mcpName":"unity_gameobject_component_get_info","title":"Unity GameObject Component Info","description":"Read component info.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"locator\":{\"type\":[\"string\",\"null\"]},\"componentName\":{\"type\":[\"string\",\"null\"]},\"componentIndex\":{\"type\":[\"integer\",\"null\"]}},\"additionalProperties\":false}"}
+            ]}
+            """);
+
+        var diagnostics = CreateDiagnostics(projectRoot);
+        var hierarchy = McpToolCatalog.GetTools(diagnostics).Single(tool => tool.ProtocolTool.Name == "unity_hierarchy_get");
+        Assert.AreEqual(JsonValueKind.Array, hierarchy.ProtocolTool.InputSchema.GetProperty("properties").GetProperty("locator").GetProperty("type").ValueKind);
+
+        McpToolRuntimeContext.QueuePaths = new UnityAgentBridge.ExternalBridgeClientCore.QueuePaths(diagnostics.ProjectPath, diagnostics.QueueRoot);
+        try
+        {
+            var service = new McpServerService(
+                new UnityAgentBridge.ExternalBridgeClientCore.ExternalBridgeClient(),
+                diagnostics,
+                new McpStageLogger(diagnostics.ServerLogPath));
+
+            var hierarchyResult = await service.CallToolAsync(
+                CreateCall("unity_hierarchy_get", """{"locator":"dontDestroyOnLoad#GameObject","maxDepth":0,"limit":20,"includeComponents":true}"""),
+                CancellationToken.None);
+            var componentResult = await service.CallToolAsync(
+                CreateCall("unity_gameobject_component_get_info", """{"locator":"dontDestroyOnLoad#GameObject","componentName":null,"componentIndex":null}"""),
+                CancellationToken.None);
+
+            Assert.AreEqual("blocked", hierarchyResult.StructuredContent.GetValueOrDefault().GetProperty("status").GetString());
+            Assert.AreEqual("blocked", componentResult.StructuredContent.GetValueOrDefault().GetProperty("status").GetString());
+            var logText = File.ReadAllText(diagnostics.ServerLogPath);
+            StringAssert.Contains(logText, "\"tool\":\"unity_hierarchy_get\",\"status\":\"ok\",\"message\":\"Arguments accepted.\"");
+            StringAssert.Contains(logText, "\"tool\":\"unity_gameobject_component_get_info\",\"status\":\"ok\",\"message\":\"Arguments accepted.\"");
+            StringAssert.Contains(logText, "\"stage\":\"mcp.invoke_core\"");
+        }
+        finally
+        {
+            McpToolRuntimeContext.QueuePaths = null;
+        }
+    }
+
+    [TestMethod]
     public void CatalogAddsTestRunnerOnlyFromPluginCatalog()
     {
         var projectRoot = CreateUnityProject();
@@ -369,6 +416,19 @@ public sealed class McpToolCatalogTests
         var result = method.Invoke(null, new object[] { rawJson, diagnostics });
         Assert.IsNotNull(result);
         return (CallToolResult)result;
+    }
+
+    private static CallToolRequestParams CreateCall(string name, string argumentsJson)
+    {
+        using var document = JsonDocument.Parse(argumentsJson);
+        return new CallToolRequestParams
+        {
+            Name = name,
+            Arguments = document.RootElement.EnumerateObject().ToDictionary(
+                property => property.Name,
+                property => property.Value.Clone(),
+                StringComparer.Ordinal)
+        };
     }
 
     private static string CreateUnityProject()
