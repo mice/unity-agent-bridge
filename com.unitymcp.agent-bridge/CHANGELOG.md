@@ -15,6 +15,7 @@ The format follows Keep a Changelog and Semantic Versioning.
 - Preserve structured `unity.get_hierarchy` failures for invalid `dontDestroyOnLoad` locators.
 - Consolidate hierarchy discovery on `unity_hierarchy_get` and the `hierarchy.v1` contract; the former v2 label is not supported.
 - Accept JSON Schema `type` arrays, including nullable hierarchy and component query arguments, before MCP tool dispatch.
+- Key cached source-only runtime archives by immutable commit SHA so an RC tag republish cannot reuse stale source.
 
 ## [1.2.12-rc.2] - 2026-08-16
 

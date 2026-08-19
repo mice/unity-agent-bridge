@@ -337,7 +337,9 @@ namespace UnityMcp.AgentBridge.Mcp
 
             var sourceCacheRoot = Path.Combine(cacheRoot, "source");
             Directory.CreateDirectory(sourceCacheRoot);
-            var sourceArchive = Path.Combine(sourceCacheRoot, "unity-agent-bridge-" + release.Version + "-source.zip");
+            var sourceArchive = Path.Combine(
+                sourceCacheRoot,
+                "unity-agent-bridge-" + release.Version + "-source-" + release.CommitSha.ToLowerInvariant() + ".zip");
             var partialSourceArchive = string.Empty;
             var partialBuiltArchive = string.Empty;
             var partialBuiltChecksum = string.Empty;

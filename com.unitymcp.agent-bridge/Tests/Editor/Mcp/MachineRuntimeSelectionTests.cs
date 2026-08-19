@@ -440,7 +440,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var cacheRoot = Path.Combine(_tempDirectory, "Temp", "AgentBridge");
             var sourceRoot = Path.Combine(cacheRoot, "1.2.12-rc.1", "source");
             Directory.CreateDirectory(sourceRoot);
-            CreateRuntimeArchive(Path.Combine(sourceRoot, "unity-agent-bridge-1.2.12-rc.1-source.zip"), "1.2.12-rc.1");
+            CreateRuntimeArchive(Path.Combine(sourceRoot, "unity-agent-bridge-1.2.12-rc.1-source-af3638f0a992835293d3bb88aa6c1bd9842c1338.zip"), "1.2.12-rc.1");
             var artifactClient = new FakeArtifactClient { Checksum = "not-a-checksum" };
             var processRunner = new RecordingProcessRunner { SourceBuildVersion = "1.2.12-rc.1" };
             var downloader = new MachineRuntimeDownloader(
@@ -470,7 +470,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var cacheRoot = Path.Combine(_tempDirectory, "Temp", "AgentBridge");
             var sourceRoot = Path.Combine(cacheRoot, "1.2.12-rc.1", "source");
             Directory.CreateDirectory(sourceRoot);
-            CreateRuntimeArchive(Path.Combine(sourceRoot, "unity-agent-bridge-1.2.12-rc.1-source.zip"), "1.2.12-rc.1");
+            CreateRuntimeArchive(Path.Combine(sourceRoot, "unity-agent-bridge-1.2.12-rc.1-source-af3638f0a992835293d3bb88aa6c1bd9842c1338.zip"), "1.2.12-rc.1");
             var artifactClient = new FakeArtifactClient { Checksum = "not-a-checksum" };
             var processRunner = new RecordingProcessRunner { SourceBuildFailure = "compile failed" };
             var downloader = new MachineRuntimeDownloader(
@@ -491,6 +491,38 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(result.Summary, Does.Contain("compile failed"));
             Assert.That(processRunner.Requests.Count, Is.EqualTo(1));
             Assert.That(processRunner.Requests[0].Arguments, Does.Not.Contain("install"));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_222.md
+        [Test]
+        [Category("AGBM_RuntimeSelection")]
+        [Category("AGBM_222")]
+        public void MachineRuntimeDownload_DoesNotReuseCachedSourceForDifferentCommit()
+        {
+            var cacheRoot = Path.Combine(_tempDirectory, "Temp", "AgentBridge");
+            var sourceRoot = Path.Combine(cacheRoot, "1.2.12-rc.1", "source");
+            Directory.CreateDirectory(sourceRoot);
+            CreateRuntimeArchive(
+                Path.Combine(sourceRoot, "unity-agent-bridge-1.2.12-rc.1-source-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.zip"),
+                "1.2.12-rc.1");
+            var artifactClient = new FakeArtifactClient { Checksum = "not-a-checksum" };
+            var processRunner = new RecordingProcessRunner { SourceBuildVersion = "1.2.12-rc.1" };
+            var downloader = new MachineRuntimeDownloader(
+                artifactClient,
+                processRunner,
+                new McpPathResolver(),
+                TimeSpan.FromSeconds(5),
+                cacheRoot);
+
+            var result = downloader.DownloadAndInstallAsync(
+                CreateSourceBuildRelease(),
+                new McpEditorSettings(),
+                null,
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(artifactClient.FileUrls, Is.EqualTo(new[] { "https://example.invalid/archive/refs/tags/v1.2.12-rc.1.zip" }));
+            Assert.That(processRunner.Requests[0].Arguments, Does.Contain("af3638f0a992835293d3bb88aa6c1bd9842c1338"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_213.md
