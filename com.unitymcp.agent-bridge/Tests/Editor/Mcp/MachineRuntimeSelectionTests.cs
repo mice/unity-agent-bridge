@@ -198,8 +198,8 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.3"));
             Assert.That(versions[0].IsInstalled, Is.False);
             Assert.That(versions[0].ArtifactUrl, Is.Empty);
-            Assert.That(versions[0].SourceArchiveUrl, Does.EndWith("/archive/refs/tags/v1.2.12-rc.3.zip"));
-            Assert.That(versions[0].CommitSha, Is.EqualTo("7affaffda8c3ddb7c47dd63831d3a5d67863cbc8"));
+            Assert.That(versions[0].SourceArchiveUrl, Is.EqualTo("https://github.com/mice/unity-agent-bridge/archive/956f695ade6ab73c947bad9b78a01fc4fc2a154a.zip"));
+            Assert.That(versions[0].CommitSha, Is.EqualTo("956f695ade6ab73c947bad9b78a01fc4fc2a154a"));
             Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.2"));
             Assert.That(versions[1].CommitSha, Is.EqualTo("fa667ca009bab9e5621e16751ab86d014e4ee80b"));
         }
@@ -259,7 +259,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                 Assert.That(versions.Count, Is.EqualTo(2));
                 Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.3"));
                 Assert.That(versions[0].ArtifactUrl, Is.Empty);
-                Assert.That(versions[0].CommitSha, Is.EqualTo("7affaffda8c3ddb7c47dd63831d3a5d67863cbc8"));
+                Assert.That(versions[0].CommitSha, Is.EqualTo("956f695ade6ab73c947bad9b78a01fc4fc2a154a"));
                 Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.2"));
             }
             finally

@@ -19,7 +19,7 @@ An empty machine runtime root must still expose the published release tags from 
 ## Assertions
 
 - The catalog contains the current and previous RC release targets: `v1.2.12-rc.3` and `v1.2.12-rc.2`.
-- The RC3 source-only entry carries no binary asset URL and has its final tagged commit SHA.
+- The RC3 source-only entry carries no binary asset URL and a direct immutable commit archive plus SHA.
 - The RC2 entry carries its final tagged commit SHA.
 - Empty local storage reports the versions as not installed.
 - Source-capable entries retain their direct tagged-source archive URL.
