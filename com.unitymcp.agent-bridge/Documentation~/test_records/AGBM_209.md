@@ -19,5 +19,5 @@ The public version-enumeration entry point must use the packaged catalog when th
 ## Assertions
 
 - No local `releases` directory exists.
-- `ListPublishedVersions` returns only the RC3 release target `v1.2.12-rc.3`.
-- Legacy and removed runtime tags are absent.
+- `ListPublishedVersions` returns the RC3 and RC2 release targets, ordered newest first.
+- Older removed runtime tags are absent.

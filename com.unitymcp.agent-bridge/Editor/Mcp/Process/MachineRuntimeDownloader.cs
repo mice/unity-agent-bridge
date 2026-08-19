@@ -99,13 +99,17 @@ namespace UnityMcp.AgentBridge.Mcp
                 return MachineRuntimeDownloadResult.Fail("release_missing", "Select a published runtime version first.");
             }
 
-            if (!TryValidateArtifactUrl(release.ArtifactUrl, out var artifactUri, out var urlFailure))
+            var hasBinaryArtifact = !string.IsNullOrWhiteSpace(release.ArtifactUrl);
+            Uri artifactUri = null;
+            if (hasBinaryArtifact && !TryValidateArtifactUrl(release.ArtifactUrl, out artifactUri, out var urlFailure))
             {
                 return MachineRuntimeDownloadResult.Fail("artifact_url_invalid", urlFailure);
             }
 
             var cacheRoot = ResolveDownloadCacheRoot(release.Version);
-            var archiveName = Path.GetFileName(artifactUri.LocalPath);
+            var archiveName = hasBinaryArtifact
+                ? Path.GetFileName(artifactUri.LocalPath)
+                : "unity-agent-bridge-" + release.Version + "-win-x64.zip";
             var cachedArchive = ResolveCachedArchive(cacheRoot, archiveName);
             var partialArchive = string.Empty;
             var installedFromCache = !string.IsNullOrWhiteSpace(cachedArchive);
@@ -128,50 +132,11 @@ namespace UnityMcp.AgentBridge.Mcp
                 }
                 else
                 {
-                    Directory.CreateDirectory(cacheRoot);
-                    var binaryFailure = string.Empty;
                     expectedSha256 = string.Empty;
-                    try
+                    if (!hasBinaryArtifact)
                     {
-                        progress?.Report(MachineRuntimeDownloadProgress.Stage("Checking binary release", 0.02f));
-                        var checksumText = await _artifactClient
-                            .DownloadTextAsync(artifactUri.AbsoluteUri + ".sha256", cancellationToken)
-                            .ConfigureAwait(false);
-                        expectedSha256 = ParseSha256(checksumText);
-                        if (string.IsNullOrWhiteSpace(expectedSha256))
-                        {
-                            binaryFailure = "The published binary checksum is missing or invalid.";
-                        }
-
-                        if (string.IsNullOrWhiteSpace(binaryFailure))
-                        {
-                            partialArchive = Path.Combine(cacheRoot, ".download-" + Guid.NewGuid().ToString("N") + ".zip");
-                            progress?.Report(MachineRuntimeDownloadProgress.Stage("Starting binary download", 0.05f));
-                            await _artifactClient
-                                .DownloadFileAsync(artifactUri.AbsoluteUri, partialArchive, progress, cancellationToken)
-                                .ConfigureAwait(false);
-
-                            var downloadedVersion = ReadCachedArtifactVersion(partialArchive);
-                            if (!string.Equals(downloadedVersion, release.Version, StringComparison.Ordinal))
-                            {
-                                return MachineRuntimeDownloadResult.Fail(
-                                    "downloaded_artifact_version_mismatch",
-                                    "Downloaded runtime archive does not match selected version " + release.Version + ".");
-                            }
-
-                            cachedArchive = Path.Combine(cacheRoot, archiveName);
-                            File.Move(partialArchive, cachedArchive);
-                            partialArchive = string.Empty;
-                        }
-                    }
-                    catch (HttpRequestException exception)
-                    {
-                        binaryFailure = exception.Message;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(binaryFailure))
-                    {
-                        progress?.Report(MachineRuntimeDownloadProgress.Stage("Binary unavailable; preparing tag source", 0.05f));
+                        Directory.CreateDirectory(cacheRoot);
+                        progress?.Report(MachineRuntimeDownloadProgress.Stage("Preparing tag source", 0.05f));
                         var sourceBuild = await BuildFromSourceAsync(
                                 release,
                                 settings,
@@ -182,14 +147,77 @@ namespace UnityMcp.AgentBridge.Mcp
                             .ConfigureAwait(false);
                         if (!sourceBuild.Succeeded)
                         {
-                            return MachineRuntimeDownloadResult.Fail(
-                                sourceBuild.Reason,
-                                "Binary release unavailable (" + binaryFailure + "). " + sourceBuild.Summary);
+                            return MachineRuntimeDownloadResult.Fail(sourceBuild.Reason, sourceBuild.Summary);
                         }
 
                         cachedArchive = sourceBuild.ArchivePath;
                         expectedSha256 = ComputeSha256(cachedArchive);
                         builtFromSource = true;
+                    }
+                    else
+                    {
+                        Directory.CreateDirectory(cacheRoot);
+                        var binaryFailure = string.Empty;
+                        try
+                        {
+                            progress?.Report(MachineRuntimeDownloadProgress.Stage("Checking binary release", 0.02f));
+                            var checksumText = await _artifactClient
+                                .DownloadTextAsync(artifactUri.AbsoluteUri + ".sha256", cancellationToken)
+                                .ConfigureAwait(false);
+                            expectedSha256 = ParseSha256(checksumText);
+                            if (string.IsNullOrWhiteSpace(expectedSha256))
+                            {
+                                binaryFailure = "The published binary checksum is missing or invalid.";
+                            }
+
+                            if (string.IsNullOrWhiteSpace(binaryFailure))
+                            {
+                                partialArchive = Path.Combine(cacheRoot, ".download-" + Guid.NewGuid().ToString("N") + ".zip");
+                                progress?.Report(MachineRuntimeDownloadProgress.Stage("Starting binary download", 0.05f));
+                                await _artifactClient
+                                    .DownloadFileAsync(artifactUri.AbsoluteUri, partialArchive, progress, cancellationToken)
+                                    .ConfigureAwait(false);
+
+                                var downloadedVersion = ReadCachedArtifactVersion(partialArchive);
+                                if (!string.Equals(downloadedVersion, release.Version, StringComparison.Ordinal))
+                                {
+                                    return MachineRuntimeDownloadResult.Fail(
+                                        "downloaded_artifact_version_mismatch",
+                                        "Downloaded runtime archive does not match selected version " + release.Version + ".");
+                                }
+
+                                cachedArchive = Path.Combine(cacheRoot, archiveName);
+                                File.Move(partialArchive, cachedArchive);
+                                partialArchive = string.Empty;
+                            }
+                        }
+                        catch (HttpRequestException exception)
+                        {
+                            binaryFailure = exception.Message;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(binaryFailure))
+                        {
+                            progress?.Report(MachineRuntimeDownloadProgress.Stage("Binary unavailable; preparing tag source", 0.05f));
+                            var sourceBuild = await BuildFromSourceAsync(
+                                    release,
+                                    settings,
+                                    cacheRoot,
+                                    archiveName,
+                                    progress,
+                                    cancellationToken)
+                                .ConfigureAwait(false);
+                            if (!sourceBuild.Succeeded)
+                            {
+                                return MachineRuntimeDownloadResult.Fail(
+                                    sourceBuild.Reason,
+                                    "Binary release unavailable (" + binaryFailure + "). " + sourceBuild.Summary);
+                            }
+
+                            cachedArchive = sourceBuild.ArchivePath;
+                            expectedSha256 = ComputeSha256(cachedArchive);
+                            builtFromSource = true;
+                        }
                     }
                 }
 

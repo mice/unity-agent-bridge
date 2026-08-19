@@ -193,13 +193,15 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
             var versions = MachineRuntimeLocator.CreateBuiltInPublishedVersions(managerRoot);
 
-            Assert.That(versions.Count, Is.EqualTo(1));
+            Assert.That(versions.Count, Is.EqualTo(2));
             Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.3"));
             Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.3"));
             Assert.That(versions[0].IsInstalled, Is.False);
-            Assert.That(versions[0].ArtifactUrl, Does.EndWith("/v1.2.12-rc.3/unity-agent-bridge-1.2.12-rc.3-win-x64.zip"));
+            Assert.That(versions[0].ArtifactUrl, Is.Empty);
             Assert.That(versions[0].SourceArchiveUrl, Does.EndWith("/archive/refs/tags/v1.2.12-rc.3.zip"));
-            Assert.That(versions[0].CommitSha, Is.Empty);
+            Assert.That(versions[0].CommitSha, Is.EqualTo("7affaffda8c3ddb7c47dd63831d3a5d67863cbc8"));
+            Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.2"));
+            Assert.That(versions[1].CommitSha, Is.EqualTo("fa667ca009bab9e5621e16751ab86d014e4ee80b"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_209.md
@@ -220,8 +222,9 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                 });
 
                 Assert.That(Directory.Exists(Path.Combine(managerRoot, "releases")), Is.False);
-                Assert.That(versions.Count, Is.EqualTo(1));
+                Assert.That(versions.Count, Is.EqualTo(2));
                 Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.3"));
+                Assert.That(versions[1].Tag, Is.EqualTo("v1.2.12-rc.2"));
             }
             finally
             {
@@ -314,6 +317,43 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var versionCacheRoot = Path.Combine(_tempDirectory, "Temp", "AgentBridge", "1.2.12-rc.1");
             Assert.That(File.Exists(Path.Combine(versionCacheRoot, "unity-agent-bridge-1.2.12-rc.1-win-x64.zip.sha256")), Is.True);
             Assert.That(Directory.GetFiles(versionCacheRoot, ".source-build-output-*", SearchOption.TopDirectoryOnly), Is.Empty);
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_219.md
+        [Test]
+        [Category("AGBM_RuntimeSelection")]
+        [Category("AGBM_219")]
+        public void MachineRuntimeDownload_SourceOnlyReleaseBuildsFromTagWithoutBinaryRequest()
+        {
+            var artifactClient = new FakeArtifactClient();
+            var processRunner = new RecordingProcessRunner { SourceBuildVersion = "1.2.12-rc.3" };
+            var downloader = new MachineRuntimeDownloader(
+                artifactClient,
+                processRunner,
+                new McpPathResolver(),
+                TimeSpan.FromSeconds(5),
+                Path.Combine(_tempDirectory, "Temp", "AgentBridge"));
+
+            var result = downloader.DownloadAndInstallAsync(
+                new PublishedMachineRuntimeVersion
+                {
+                    Version = "1.2.12-rc.3",
+                    Tag = "v1.2.12-rc.3",
+                    SourceArchiveUrl = "https://example.invalid/archive/refs/tags/v1.2.12-rc.3.zip",
+                    CommitSha = "7affaffda8c3ddb7c47dd63831d3a5d67863cbc8",
+                },
+                new McpEditorSettings { RuntimeMode = "machine" },
+                null,
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            Assert.That(result.Succeeded, Is.True);
+            Assert.That(result.Summary, Does.Contain("built from tag source"));
+            Assert.That(result.Summary, Does.Not.Contain("Binary release unavailable"));
+            Assert.That(artifactClient.TextUrl, Is.Empty);
+            Assert.That(artifactClient.FileUrls, Is.EqualTo(new[] { "https://example.invalid/archive/refs/tags/v1.2.12-rc.3.zip" }));
+            Assert.That(processRunner.Requests.Count, Is.EqualTo(2));
+            Assert.That(processRunner.Requests[0].Arguments, Does.Contain("-SourceArchivePath"));
+            Assert.That(processRunner.Requests[1].Arguments, Does.Contain("install"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_212.md

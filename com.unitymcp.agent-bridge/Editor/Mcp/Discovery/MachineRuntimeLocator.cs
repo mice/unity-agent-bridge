@@ -250,6 +250,7 @@ namespace UnityMcp.AgentBridge.Mcp
             var versions = new[]
             {
                 "1.2.12-rc.3",
+                "1.2.12-rc.2",
             };
             var publishedVersions = new List<PublishedMachineRuntimeVersion>(versions.Length);
             foreach (var version in versions)
@@ -259,9 +260,11 @@ namespace UnityMcp.AgentBridge.Mcp
                 {
                     Version = version,
                     Tag = tag,
-                    ArtifactUrl = CreateGitHubArtifactUrl(version),
+                    ArtifactUrl = version == "1.2.12-rc.3" ? string.Empty : CreateGitHubArtifactUrl(version),
                     SourceArchiveUrl = CreateGitHubSourceArchiveUrl(tag),
-                    CommitSha = string.Empty,
+                    CommitSha = version == "1.2.12-rc.3"
+                        ? "7affaffda8c3ddb7c47dd63831d3a5d67863cbc8"
+                        : "fa667ca009bab9e5621e16751ab86d014e4ee80b",
                     IsInstalled = IsUsableInstalledVersion(Path.Combine(managerRoot, "versions", version), version),
                 });
             }
