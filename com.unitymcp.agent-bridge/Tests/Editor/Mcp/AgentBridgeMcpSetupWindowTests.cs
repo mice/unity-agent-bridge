@@ -39,6 +39,25 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(AgentBridgeMcpSetupWindow.EvaluateRuntimeCompatibility("1.2.12", "1.2.13"), Is.EqualTo("warning: patch/prerelease difference"));
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_221.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_221")]
+        public void SourceOnlyPublishedRuntimeIsEligibleForDownloadAndInstall()
+        {
+            Assert.That(AgentBridgeMcpSetupWindow.CanDownloadAndInstall(new PublishedMachineRuntimeVersion
+            {
+                Version = "1.2.12-rc.3",
+                SourceArchiveUrl = "https://example.invalid/archive/refs/tags/v1.2.12-rc.3.zip",
+                CommitSha = "7affaffda8c3ddb7c47dd63831d3a5d67863cbc8",
+            }), Is.True);
+            Assert.That(AgentBridgeMcpSetupWindow.CanDownloadAndInstall(new PublishedMachineRuntimeVersion
+            {
+                Version = "1.2.12-rc.3",
+                SourceArchiveUrl = "https://example.invalid/archive/refs/tags/v1.2.12-rc.3.zip",
+            }), Is.False);
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_161.md
         [Test]
         [Category("AGBM_UI")]

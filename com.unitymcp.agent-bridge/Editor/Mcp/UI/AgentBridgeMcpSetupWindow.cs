@@ -361,7 +361,7 @@ namespace UnityMcp.AgentBridge.Mcp
                         }
                         else
                         {
-                            using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(selectedPublishedVersion.ArtifactUrl)))
+                            using (new EditorGUI.DisabledScope(!CanDownloadAndInstall(selectedPublishedVersion)))
                             {
                                 if (GUILayout.Button("Download & Install", GUILayout.Width(150f)))
                                 {
@@ -984,6 +984,36 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             return !string.IsNullOrWhiteSpace(compatibility) &&
                    compatibility.StartsWith("blocking:", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static bool CanDownloadAndInstall(PublishedMachineRuntimeVersion release)
+        {
+            if (release == null || string.IsNullOrWhiteSpace(release.Version))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(release.ArtifactUrl))
+            {
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(release.SourceArchiveUrl) ||
+                string.IsNullOrWhiteSpace(release.CommitSha) ||
+                release.CommitSha.Length != 40)
+            {
+                return false;
+            }
+
+            foreach (var character in release.CommitSha)
+            {
+                if (!Uri.IsHexDigit(character))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static string FormatCliStatus(McpEditorSettings settings, McpPathResolver pathResolver)
