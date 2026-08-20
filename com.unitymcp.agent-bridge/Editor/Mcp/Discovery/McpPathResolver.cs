@@ -661,7 +661,12 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var codexDirectory = Path.Combine(candidateRoot, ".codex");
-            return Directory.Exists(codexDirectory);
+            if (Directory.Exists(codexDirectory))
+            {
+                return true;
+            }
+
+            return Directory.Exists(Path.Combine(candidateRoot, ".grok"));
         }
 
         private bool IsProjectOrLegacyRepositoryToolsRoot(string toolsRoot)

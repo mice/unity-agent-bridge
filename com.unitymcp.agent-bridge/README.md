@@ -7,7 +7,7 @@
 - Unity validation lane: `2022.3.x`
 - Declared package compatibility: `2022.3+`
 - Runtime support: none; this package is Editor-only
-- External requirements for MCP workflows: a supported MCP client such as Codex or Claude Code, plus .NET 8 SDK for building the project-local MCP runtime from the Setup window.
+- External requirements for MCP workflows: a supported MCP client such as Codex, Claude Code, Cursor, GitHub Copilot, or Grok, plus .NET 8 SDK for building the project-local MCP runtime from the Setup window.
 - Lua tooling MVP scope: Windows x64 `lua-gc-lint.exe` payload only.
 
 ## Install
@@ -72,8 +72,10 @@ The cache is `%LOCALAPPDATA%/UnityAgentBridge/versions/<version>`. Version direc
 2. Open `Edit -> Project Settings -> Agent Bridge` and create the settings asset if needed.
 3. Open `Tools -> Unity Agent Bridge -> MCP Setup & Diagnostics`.
 4. Click `Build Local Runtime` to generate `unity-agent-bridge.exe` and `unity-roslyn-compiler.exe` under `<UnityProject>/.unitymcp/runtime/`.
-5. Click `Prepare Runtime`, then review project-level client config before applying changes.
+5. Click `Prepare Runtime`, then review project-level client config for Codex, Claude Code, Cursor, GitHub Copilot, or Grok before applying changes.
 6. Run Quick Diagnostics when validating the local environment.
+
+Grok uses project-level `.grok/config.toml`. Apply it from Step 2 or AI Quick Connect, then restart or refresh Grok's MCP session and run `grok mcp doctor unity_agent_bridge` before a fresh-session smoke test. Unity Editor does not install or launch Grok.
 
 MCP setup uses the project-local executable at `<UnityProject>/.unitymcp/runtime/UnityAgentBridge/cli/out/win-x64/unity-agent-bridge.exe`. `unity_bridge_health` reports `resolvedCliPath`, `cliMode=project-local-runtime`, and `cliWarnings`.
 

@@ -561,6 +561,209 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(preview, Does.Contain("Resolved unity_agent_bridge executable path does not exist."));
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_223.md
+        [Test]
+        [Category("AGBM_P3")]
+        [Category("AGBM_223")]
+        public void GrokProjectConfigWriter_GetTargetPath_UsesGrokWorkspaceRoot()
+        {
+            var workspaceRoot = Path.Combine(_tempDirectory, "workspace");
+            var projectRoot = Path.Combine(workspaceRoot, "nested", "RuntimeCallSample");
+            Directory.CreateDirectory(Path.Combine(workspaceRoot, ".grok"));
+            Directory.CreateDirectory(projectRoot);
+
+            var targetPath = GrokProjectConfigWriter.GetTargetPath(
+                new McpPathResolver(() => projectRoot));
+
+            Assert.That(targetPath, Is.EqualTo(Path.Combine(workspaceRoot, ".grok", "config.toml")));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_224.md
+        [Test]
+        [Category("AGBM_P3")]
+        [Category("AGBM_224")]
+        public void GrokProjectConfigWriter_Preview_UsesProjectLocalLauncherAndGrokContract()
+        {
+            var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
+            var launcherPath = CreatePreparedLauncher(projectRoot);
+            var writer = new GrokProjectConfigWriter(
+                new ManagedTomlConfigEditor(),
+                new McpPathResolver(() => projectRoot));
+
+            var preview = writer.Preview(new McpEditorSettings());
+
+            Assert.That(preview, Does.Contain(ManagedBlockTextEditor.BeginMarker));
+            Assert.That(preview, Does.Contain(launcherPath.Replace("\\", "\\\\")));
+            Assert.That(preview, Does.Contain("args = [\"/d\", \"/s\", \"/c\""));
+            Assert.That(preview, Does.Contain("enabled = true"));
+            Assert.That(preview, Does.Contain("startup_timeout_sec = 30"));
+            Assert.That(preview, Does.Contain("tool_timeout_sec = 300"));
+            Assert.That(preview, Does.Contain("[mcp_servers.unity_agent_bridge.env]"));
+            Assert.That(preview, Does.Contain(projectRoot.Replace("\\", "\\\\")));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_225.md
+        [Test]
+        [Category("AGBM_P3")]
+        [Category("AGBM_225")]
+        public void GrokProjectConfigWriter_Preview_UsesSelectedMachineLauncher()
+        {
+            const string version = "1.2.12-rc.3";
+            var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
+            Directory.CreateDirectory(projectRoot);
+            var managerRoot = Path.Combine(_tempDirectory, "machine-runtime");
+            var launcherPath = CreateMachineLauncher(managerRoot, version);
+            var writer = new GrokProjectConfigWriter(
+                new ManagedTomlConfigEditor(),
+                new McpPathResolver(() => projectRoot));
+
+            var preview = writer.Preview(new McpEditorSettings
+            {
+                RuntimeMode = MachineRuntimeLocator.MachineMode,
+                RuntimeVersion = version,
+                MachineRuntimeRoot = managerRoot,
+            });
+
+            Assert.That(preview, Does.Contain(launcherPath.Replace("\\", "\\\\")));
+            Assert.That(preview, Does.Contain("command = \"cmd\""));
+            Assert.That(preview, Does.Contain("UNITY_AGENT_BRIDGE_PROJECT_PATH"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_226.md
+        [Test]
+        [Category("AGBM_P3")]
+        [Category("AGBM_226")]
+        public void GrokProjectConfigWriter_BuildManagedBlockBody_EscapesTomlStrings()
+        {
+            const string launcherPath = "C:\\Tools\\bridge\"quoted.cmd";
+            var projectRoot = Path.Combine(_tempDirectory, "Unity Project");
+
+            var body = GrokProjectConfigWriter.BuildManagedBlockBody(
+                launcherPath,
+                projectRoot,
+                string.Empty);
+
+            Assert.That(body, Does.Contain(launcherPath.Replace("\\", "\\\\").Replace("\"", "\\\"")));
+            Assert.That(body, Does.Contain(projectRoot.Replace("\\", "\\\\")));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_227.md
+        [Test]
+        [Category("AGBM_P3")]
+        [Category("AGBM_227")]
+        public void GrokProjectConfigWriter_Apply_AdoptsStandaloneEntryAndBacksUpExistingFile()
+        {
+            var workspaceRoot = Path.Combine(_tempDirectory, "workspace");
+            var configDirectory = Path.Combine(workspaceRoot, ".grok");
+            Directory.CreateDirectory(configDirectory);
+            var targetPath = Path.Combine(configDirectory, "config.toml");
+            File.WriteAllText(targetPath,
+                "[mcp_servers.unity_agent_bridge]\ncommand = \"custom\"\nenabled = false\n\n" +
+                "[mcp_servers.unity_agent_bridge.env]\nUNITY_AGENT_BRIDGE_PROJECT_PATH = \"D:/OldProject\"\n\n" +
+                "[mcp_servers.other]\ncommand = \"keep\"\n\n" +
+                "[other]\nvalue = 1\n");
+
+            var projectRoot = Path.Combine(workspaceRoot, "nested", "RuntimeCallSample");
+            Directory.CreateDirectory(projectRoot);
+            CreatePreparedLauncher(projectRoot);
+            var writer = new GrokProjectConfigWriter(
+                new ManagedTomlConfigEditor(),
+                new McpPathResolver(() => projectRoot));
+
+            var result = writer.Apply(new McpEditorSettings { WorkspaceRoot = workspaceRoot });
+
+            var content = File.ReadAllText(targetPath);
+            Assert.That(result.Applied, Is.True);
+            Assert.That(result.BackupPath, Is.Not.Empty);
+            Assert.That(File.Exists(result.BackupPath), Is.True);
+            Assert.That(content.Split(new[] { "[mcp_servers.unity_agent_bridge]" }, StringSplitOptions.None).Length - 1, Is.EqualTo(1));
+            Assert.That(content, Does.Not.Contain("command = \"custom\""));
+            Assert.That(content, Does.Contain("[mcp_servers.other]"));
+            Assert.That(content, Does.Contain("command = \"keep\""));
+            Assert.That(content, Does.Contain("[other]"));
+            Assert.That(content, Does.Contain("value = 1"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_228.md
+        [Test]
+        [Category("AGBM_P3")]
+        [Category("AGBM_228")]
+        public void GrokProjectConfigWriter_Apply_PreservesCustomChildTablesAndReplacesEnvironment()
+        {
+            var workspaceRoot = Path.Combine(_tempDirectory, "workspace");
+            var configDirectory = Path.Combine(workspaceRoot, ".grok");
+            Directory.CreateDirectory(configDirectory);
+            var targetPath = Path.Combine(configDirectory, "config.toml");
+            File.WriteAllText(targetPath,
+                "[mcp_servers.unity_agent_bridge]\ncommand = \"custom\"\n\n" +
+                "[mcp_servers.unity_agent_bridge.env]\nUNITY_AGENT_BRIDGE_PROJECT_PATH = \"D:/OldProject\"\n\n" +
+                "[mcp_servers.unity_agent_bridge.tools.unity_editor_ping]\napproval_mode = \"approve\"\n");
+
+            var projectRoot = Path.Combine(workspaceRoot, "nested", "RuntimeCallSample");
+            Directory.CreateDirectory(projectRoot);
+            CreatePreparedLauncher(projectRoot);
+            var writer = new GrokProjectConfigWriter(
+                new ManagedTomlConfigEditor(),
+                new McpPathResolver(() => projectRoot));
+
+            var result = writer.Apply(new McpEditorSettings { WorkspaceRoot = workspaceRoot });
+
+            var content = File.ReadAllText(targetPath);
+            Assert.That(result.Applied, Is.True);
+            Assert.That(content, Does.Contain("[mcp_servers.unity_agent_bridge.tools.unity_editor_ping]"));
+            Assert.That(content, Does.Contain("approval_mode = \"approve\""));
+            Assert.That(content, Does.Not.Contain("D:/OldProject"));
+            Assert.That(content, Does.Contain(projectRoot.Replace("\\", "\\\\")));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_229.md
+        [Test]
+        [Category("AGBM_P3")]
+        [Category("AGBM_229")]
+        public void GrokProjectConfigWriter_Remove_PreservesUnrelatedTomlContent()
+        {
+            var workspaceRoot = Path.Combine(_tempDirectory, "workspace");
+            Directory.CreateDirectory(Path.Combine(workspaceRoot, ".grok"));
+            var projectRoot = Path.Combine(workspaceRoot, "nested", "RuntimeCallSample");
+            Directory.CreateDirectory(projectRoot);
+            CreatePreparedLauncher(projectRoot);
+            var writer = new GrokProjectConfigWriter(
+                new ManagedTomlConfigEditor(),
+                new McpPathResolver(() => projectRoot));
+            var targetPath = GrokProjectConfigWriter.GetTargetPath(workspaceRoot);
+            File.WriteAllText(targetPath, "[other]\nvalue = 1\n");
+            Assert.That(writer.Apply(new McpEditorSettings { WorkspaceRoot = workspaceRoot }).Applied, Is.True);
+
+            var result = writer.Remove();
+
+            var content = File.ReadAllText(targetPath);
+            Assert.That(result.Applied, Is.True);
+            Assert.That(content, Does.Not.Contain("[mcp_servers.unity_agent_bridge]"));
+            Assert.That(content, Does.Contain("[other]"));
+            Assert.That(content, Does.Contain("value = 1"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_230.md
+        [Test]
+        [Category("AGBM_P3")]
+        [Category("AGBM_230")]
+        public void GrokProjectConfigWriter_Apply_MissingLauncherReturnsDeterministicFailure()
+        {
+            var workspaceRoot = Path.Combine(_tempDirectory, "workspace");
+            var projectRoot = Path.Combine(workspaceRoot, "nested", "RuntimeCallSample");
+            Directory.CreateDirectory(projectRoot);
+            var writer = new GrokProjectConfigWriter(
+                new ManagedTomlConfigEditor(),
+                new McpPathResolver(() => projectRoot));
+
+            var result = writer.Apply(new McpEditorSettings { WorkspaceRoot = workspaceRoot });
+
+            Assert.That(result.Applied, Is.False);
+            Assert.That(result.Reason, Is.EqualTo("launcher_missing"));
+            Assert.That(result.TargetPath, Is.EqualTo(Path.Combine(workspaceRoot, ".grok", "config.toml")));
+            Assert.That(File.Exists(result.TargetPath), Is.False);
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_174.md
         [Test]
         [Category("AGBM_P3")]
@@ -797,6 +1000,19 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
         {
             var launcherPath = Path.Combine(projectRoot, ".unitymcp", "runtime", "AgentBridge", "Start-UnityAgentBridge-Mcp.cmd");
             Directory.CreateDirectory(Path.GetDirectoryName(launcherPath) ?? projectRoot);
+            File.WriteAllText(launcherPath, "echo launcher");
+            return launcherPath;
+        }
+
+        private static string CreateMachineLauncher(string managerRoot, string version)
+        {
+            var versionRoot = Path.Combine(managerRoot, "versions", version);
+            Directory.CreateDirectory(versionRoot);
+            File.WriteAllText(
+                Path.Combine(versionRoot, "release-manifest.json"),
+                "{\"version\":\"" + version + "\"}");
+            var launcherPath = Path.Combine(versionRoot, "launcher", "Start-UnityAgentBridge-Mcp.cmd");
+            Directory.CreateDirectory(Path.GetDirectoryName(launcherPath) ?? versionRoot);
             File.WriteAllText(launcherPath, "echo launcher");
             return launcherPath;
         }

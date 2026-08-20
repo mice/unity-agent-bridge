@@ -30,6 +30,7 @@ namespace UnityMcp.AgentBridge.Mcp
         private IMcpClientConfigWriter _claudeWriter;
         private IMcpClientConfigWriter _cursorWriter;
         private IMcpClientConfigWriter _copilotWriter;
+        private IMcpClientConfigWriter _grokWriter;
         private IMcpEditorSettingsStore _settingsStore;
         private McpEnvironmentProbe _environmentProbe;
         private McpPathResolver _pathResolver;
@@ -103,6 +104,7 @@ namespace UnityMcp.AgentBridge.Mcp
             _claudeWriter = new ClaudeCodeProjectConfigWriter();
             _cursorWriter = new CursorProjectConfigWriter();
             _copilotWriter = new GitHubCopilotProjectConfigWriter();
+            _grokWriter = new GrokProjectConfigWriter();
             _diagnosticChecks = new McpDiagnosticCheck[0];
             _readiness = McpReadiness.NotChecked;
             _diagnosticReport = string.Empty;
@@ -134,7 +136,7 @@ namespace UnityMcp.AgentBridge.Mcp
             DrawSetupFlowControls();
             EditorGUILayout.Space(12f);
 
-            _clientConfigSection.Draw(_codexWriter, _claudeWriter, _cursorWriter, _copilotWriter, _settings);
+            _clientConfigSection.Draw(_codexWriter, _claudeWriter, _cursorWriter, _copilotWriter, _grokWriter, _settings);
             EditorGUILayout.Space(12f);
 
             DrawAiQuickConnect();
@@ -479,19 +481,16 @@ namespace UnityMcp.AgentBridge.Mcp
             {
                 EditorGUILayout.LabelField("AI Quick Connect", EditorStyles.boldLabel);
                 EditorGUILayout.HelpBox(
-                    "Refresh project-local MCP config for Codex, Claude Code, Cursor, and GitHub Copilot, then give the AI a low-risk first-use prompt for unity_agent_bridge.",
+                    "Refresh project-local MCP config for Codex, Claude Code, Cursor, GitHub Copilot, and Grok, then give the AI a low-risk first-use prompt for unity_agent_bridge.",
                     MessageType.Info);
 
                 var effectiveSettings = _settings ?? McpEditorSettingsDefaults.Create();
                 var resolver = _pathResolver ?? new McpPathResolver();
-                var runtimeLauncher = Path.Combine(
-                    resolver.ResolveWorkspaceRuntimeRoot(effectiveSettings),
-                    "AgentBridge",
-                    "Start-UnityAgentBridge-Mcp.cmd");
+                var runtimeLauncher = resolver.ResolveLauncherPath(effectiveSettings);
 
                 var runtimeReady = File.Exists(runtimeLauncher);
                 EditorGUILayout.LabelField("MCP Server", "unity_agent_bridge");
-                EditorGUILayout.LabelField("Supported Clients", "Codex, Claude Code, Cursor, GitHub Copilot");
+                EditorGUILayout.LabelField("Supported Clients", "Codex, Claude Code, Cursor, GitHub Copilot, Grok");
                 EditorGUILayout.LabelField("Prepared Launcher", runtimeReady ? runtimeLauncher : "Prepare runtime first");
 
                 if (!runtimeReady)
@@ -534,6 +533,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 _claudeWriter,
                 _cursorWriter,
                 _copilotWriter,
+                _grokWriter,
             };
 
             var appliedTargets = new System.Collections.Generic.List<string>();
@@ -568,7 +568,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 }
             }
 
-            _aiQuickConnectMessage = "AI Quick Connect refreshed project-local MCP configs.";
+            _aiQuickConnectMessage = "AI Quick Connect refreshed project-local MCP configs. Restart or refresh Grok's MCP session to load the new server process configuration.";
             if (appliedTargets.Count > 0)
             {
                 _aiQuickConnectMessage += Environment.NewLine + string.Join(Environment.NewLine, appliedTargets.ToArray());
@@ -619,7 +619,7 @@ namespace UnityMcp.AgentBridge.Mcp
             var effectiveSettings = _settings ?? McpEditorSettingsDefaults.Create();
             var resolver = _pathResolver ?? new McpPathResolver();
             var workspaceRoot = resolver.GetWorkspaceRoot(effectiveSettings);
-            var tooltip = "Managed Codex, Claude Code, Cursor, and GitHub Copilot config files are written under this workspace root. Edit it in Advanced Details when the detected root is wrong.";
+            var tooltip = "Managed Codex, Claude Code, Cursor, GitHub Copilot, and Grok config files are written under this workspace root. Edit it in Advanced Details when the detected root is wrong.";
 
             EditorGUILayout.LabelField(new GUIContent("Workspace Config Target", tooltip), EditorStyles.boldLabel);
             EditorGUILayout.SelectableLabel(

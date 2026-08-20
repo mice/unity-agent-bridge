@@ -275,7 +275,7 @@ The primary setup flow is:
 4. `Verify`: run diagnostics after build, preparation, and config.
 5. `Command List`: use the button in Step 4 to open a dedicated window that lists the registered Unity MCP commands, their purpose, runtime mode policy, side-effect classification, and domain reload risk.
 
-The main panel also shows `Workspace Config Target` so you can verify where `.codex/config.toml` and `.mcp.json` will be written. Use `Advanced Details` to adjust `Workspace Root` when the detected target is wrong.
+The main panel also shows `Workspace Config Target` so you can verify where `.codex/config.toml`, `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`, and `.grok/config.toml` will be written. Use `Advanced Details` to adjust `Workspace Root` when the detected target is wrong.
 The Step 2 primary action row is intentionally limited to `Apply` and `Remove`.
 
 Important path expectation after `Apply MCP Client Config`:
@@ -294,8 +294,8 @@ Recommended operator flow:
 
 1. Open the window from `Tools -> Unity Agent Bridge -> MCP Setup & Diagnostics`.
 2. In `Status`, confirm bridge settings, executable runtime, runtime binding, `.NET 8 SDK`, CLI, and server files.
-3. In `Client Config`, choose `Codex` or `Claude Code` and inspect the generated project-level preview before applying changes.
-4. Use `Apply` only for project-local config; do not edit user-global Codex or Claude files from this workflow.
+3. In `Client Config`, choose `Codex`, `Claude Code`, `Cursor`, `GitHub Copilot`, or `Grok` and inspect the generated project-level preview before applying changes.
+4. Use `Apply` only for project-local config; do not edit user-global client files from this workflow. After applying Grok config, restart or refresh Grok's MCP session.
 5. In `Diagnostics`, run Quick Diagnostics and review `MCP001` through `MCP011`.
 6. Use `Copy Report` for a redacted summary and `Open MCP Log Folder` to inspect `Library/AgentBridge/logs/`.
 7. In `Command List`, use `Open Command List` to review the command surface before invoking tools from an MCP client. The list is generated from the same descriptor metadata that governs runtime mode blocking.
@@ -441,17 +441,17 @@ The MCP server:
 
 Current MCP behavior is session-bound by design.
 
-- A Codex or Claude Code session binds `unity_agent_bridge` to one Unity project at launcher/startup time.
+- A supported MCP client session binds `unity_agent_bridge` to one Unity project at launcher/startup time.
 - The binding is carried through `UNITY_AGENT_BRIDGE_PROJECT_PATH`.
-- `mcp__unity__*` calls in that session continue to target the same Unity project queue until a new client session is started.
-- Switching the open Unity Editor project does not hot-switch an existing Codex MCP session.
+- Canonical `unity_*` calls in that session continue to target the same Unity project queue until a new client session is started.
+- Switching the open Unity Editor project does not hot-switch an existing MCP client session.
 
 Operational consequence:
 
 1. Open the target Unity project first.
 2. Confirm the bridge is running in that project.
-3. Start Codex or Claude Code with the MCP launcher/config bound to that same project.
-4. Run `mcp__unity__*` only from that bound client session.
+3. Start the supported MCP client with its project-level launcher/config bound to that same project.
+4. Run canonical `unity_*` tools only from that bound client session.
 
 Direct MCP project binding uses:
 
@@ -463,7 +463,7 @@ If none is supplied, it falls back to the repository example project `UnityMCP/`
 Recommended path:
 
 1. Set `ToolsRoot` in the MCP Setup window for the current Unity project.
-2. Apply the project-local Codex or Claude Code config.
+2. Apply the project-local config for the selected supported client.
 3. Use the generated direct MCP launcher from that project-local config.
 
 Managed config rules:
@@ -477,7 +477,10 @@ Managed config rules:
 6. `Workspace Root` must be the opened Unity project root or one of its first three ancestor directories.
 7. Use the MCP Setup window `Build Local Runtime` action to generate runtime executables into `<UnityProject>/.unitymcp/runtime/`, then run `Prepare Runtime`.
 8. The prepared runtime must not require `node_modules`, `npm install`, or Node.js execution. Building it requires .NET 8 SDK.
-8. If `.codex/config.toml` already contains a standalone `[mcp_servers.unity_agent_bridge]` section, the Codex writer parses the file as TOML, updates only the `unity_agent_bridge` subtree, preserves sibling TOML sections and existing `unity_agent_bridge` child tables such as `tools.*`, and then runs a post-write validation step. If the resulting file still contains residual unmanaged `unity_agent_bridge` content, the write fails with `format_validation_failed`.
+9. If `.codex/config.toml` already contains a standalone `[mcp_servers.unity_agent_bridge]` section, the Codex writer parses the file as TOML, updates only the `unity_agent_bridge` subtree, preserves sibling TOML sections and existing `unity_agent_bridge` child tables such as `tools.*`, and then runs a post-write validation step. If the resulting file still contains residual unmanaged `unity_agent_bridge` content, the write fails with `format_validation_failed`.
+10. Grok uses `.grok/config.toml` with `enabled = true`, `startup_timeout_sec = 30`, `tool_timeout_sec = 300`, and `UNITY_AGENT_BRIDGE_PROJECT_PATH`. Its writer shares the managed TOML adoption, backup, preservation, validation, and removal path; Unity does not install, launch, or terminate Grok.
+
+For Grok, run `grok mcp doctor unity_agent_bridge` after applying config, then start a fresh Grok session and call `unity_bridge_health` followed by `unity_project_get_info`.
 
 This is a current architecture constraint, not a defect in Quick Diagnostics. The cost is session setup discipline when validating multiple Unity projects in the same repository.
 

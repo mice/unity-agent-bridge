@@ -168,7 +168,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
         {
             var section = new McpClientConfigSection(AgentBridgeMcpSetupWindow.DisabledActionTooltip);
 
-            Assert.DoesNotThrow(() => section.Draw(new StubWriter(), new StubWriter(), new StubWriter(), new StubWriter(), new McpEditorSettings()));
+            Assert.DoesNotThrow(() => section.Draw(new StubWriter(), new StubWriter(), new StubWriter(), new StubWriter(), new StubWriter(), new McpEditorSettings()));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_168.md
@@ -257,6 +257,24 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Contain(".vscode/mcp.json"));
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_231.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_231")]
+        public void ClientConfigSection_Source_ExposesGrokProjectTargetWithoutExtraPrimaryActions()
+        {
+            var content = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/UI/McpClientConfigSection.cs"));
+
+            Assert.That(content, Does.Contain("\"Grok\""));
+            Assert.That(content, Does.Contain(".grok/config.toml"));
+            Assert.That(content, Does.Contain("ClientConfigTarget.Grok"));
+            Assert.That(content, Does.Contain("Restart or refresh Grok's MCP session"));
+            Assert.That(content, Does.Contain("GUILayout.Button(\"Apply\""));
+            Assert.That(content, Does.Contain("GUILayout.Button(\"Remove\""));
+            Assert.That(content, Does.Not.Contain("GUILayout.Button(\"Copy\""));
+            Assert.That(content, Does.Not.Contain("GUILayout.Button(\"Reveal\""));
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_183.md
         [Test]
         [Category("AGBM_UI")]
@@ -268,8 +286,8 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Contain("AI Quick Connect"));
             Assert.That(content, Does.Contain("unity_agent_bridge"));
             Assert.That(content, Does.Contain("unity_bridge_health"));
-            Assert.That(content, Does.Contain("mcp__unity__get_editor_state"));
-            Assert.That(content, Does.Contain("mcp__unity__project_get_info"));
+            Assert.That(content, Does.Contain("unity_editor_get_state"));
+            Assert.That(content, Does.Contain("unity_project_get_info"));
             Assert.That(content, Does.Contain("Do not launch another AI client from Unity."));
             Assert.That(content, Does.Contain("Refresh All Client Configs"));
             Assert.That(content, Does.Contain("Copy AI Prompt"));
@@ -278,6 +296,24 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Contain("_claudeWriter"));
             Assert.That(content, Does.Contain("_cursorWriter"));
             Assert.That(content, Does.Contain("_copilotWriter"));
+            Assert.That(content, Does.Contain("_grokWriter"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_232.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_232")]
+        public void SetupWindow_Source_WiresGrokIntoFiveClientRefreshWithoutLaunchingIt()
+        {
+            var content = File.ReadAllText(GetPackageRelativePath("Editor/Mcp/UI/AgentBridgeMcpSetupWindow.cs"));
+
+            Assert.That(content, Does.Contain("new GrokProjectConfigWriter()"));
+            Assert.That(content, Does.Contain("Codex, Claude Code, Cursor, GitHub Copilot, and Grok"));
+            Assert.That(content, Does.Contain("Codex, Claude Code, Cursor, GitHub Copilot, Grok"));
+            Assert.That(content, Does.Contain("_grokWriter,"));
+            Assert.That(content, Does.Contain("Restart or refresh Grok's MCP session"));
+            Assert.That(content, Does.Not.Contain("Process.Start(\"grok"));
+            Assert.That(content, Does.Not.Contain("Process.Start(\"Grok"));
         }
 
         [Test]

@@ -24,6 +24,7 @@ namespace UnityMcp.AgentBridge.Mcp
             IMcpClientConfigWriter claudeWriter,
             IMcpClientConfigWriter cursorWriter,
             IMcpClientConfigWriter copilotWriter,
+            IMcpClientConfigWriter grokWriter,
             McpEditorSettings settings)
         {
             if (Event.current == null)
@@ -35,10 +36,10 @@ namespace UnityMcp.AgentBridge.Mcp
             {
                 EditorGUILayout.LabelField("Step 2: Apply MCP Client Config", EditorStyles.boldLabel);
 
-                var tabs = new[] { "Codex", "Claude Code", "Cursor", "GitHub Copilot" };
+                var tabs = new[] { "Codex", "Claude Code", "Cursor", "GitHub Copilot", "Grok" };
                 _selectedClient = (ClientConfigTarget)GUILayout.Toolbar((int)_selectedClient, tabs);
 
-                var activeWriter = GetActiveWriter(codexWriter, claudeWriter, cursorWriter, copilotWriter);
+                var activeWriter = GetActiveWriter(codexWriter, claudeWriter, cursorWriter, copilotWriter, grokWriter);
                 var scopeLabel = GetScopeLabel(_selectedClient);
 
                 EditorGUILayout.Space(6f);
@@ -50,6 +51,10 @@ namespace UnityMcp.AgentBridge.Mcp
                 else if (_selectedClient == ClientConfigTarget.GitHubCopilot)
                 {
                     EditorGUILayout.HelpBox("GitHub Copilot uses the VS Code project MCP file. Copilot Chat Agent mode has been confirmed to call the Unity Agent Bridge MCP server.", MessageType.Info);
+                }
+                else if (_selectedClient == ClientConfigTarget.Grok)
+                {
+                    EditorGUILayout.HelpBox("Grok reads project MCP configuration from .grok/config.toml. Restart or refresh Grok's MCP session after applying changes.", MessageType.Info);
                 }
                 EditorGUILayout.Space(4f);
 
@@ -71,7 +76,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 {
                     if (GUILayout.Button("Apply", GUILayout.Width(90f)))
                     {
-                        Apply(activeWriter, settings);
+                        Apply(activeWriter, settings, _selectedClient);
                     }
 
                     if (GUILayout.Button("Remove", GUILayout.Width(90f)))
@@ -88,7 +93,7 @@ namespace UnityMcp.AgentBridge.Mcp
             }
         }
 
-        private void Apply(IMcpClientConfigWriter writer, McpEditorSettings settings)
+        private void Apply(IMcpClientConfigWriter writer, McpEditorSettings settings, ClientConfigTarget selectedClient)
         {
             if (writer == null)
             {
@@ -102,7 +107,10 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var result = writer.Apply(settings);
-            HandleResult(result, "Configuration applied.");
+            var successMessage = selectedClient == ClientConfigTarget.Grok
+                ? "Configuration applied. Restart or refresh Grok's MCP session to load the new server process configuration."
+                : "Configuration applied.";
+            HandleResult(result, successMessage);
         }
 
         private void Remove(IMcpClientConfigWriter writer)
@@ -169,7 +177,8 @@ namespace UnityMcp.AgentBridge.Mcp
             IMcpClientConfigWriter codexWriter,
             IMcpClientConfigWriter claudeWriter,
             IMcpClientConfigWriter cursorWriter,
-            IMcpClientConfigWriter copilotWriter)
+            IMcpClientConfigWriter copilotWriter,
+            IMcpClientConfigWriter grokWriter)
         {
             switch (_selectedClient)
             {
@@ -179,6 +188,8 @@ namespace UnityMcp.AgentBridge.Mcp
                     return cursorWriter;
                 case ClientConfigTarget.GitHubCopilot:
                     return copilotWriter;
+                case ClientConfigTarget.Grok:
+                    return grokWriter;
                 case ClientConfigTarget.Codex:
                 default:
                     return codexWriter;
@@ -195,6 +206,8 @@ namespace UnityMcp.AgentBridge.Mcp
                     return "Project Scope (.cursor/mcp.json)";
                 case ClientConfigTarget.GitHubCopilot:
                     return "Project Scope (.vscode/mcp.json)";
+                case ClientConfigTarget.Grok:
+                    return "Project Scope (.grok/config.toml)";
                 case ClientConfigTarget.Codex:
                 default:
                     return "Project Scope (.codex/config.toml)";
@@ -207,6 +220,7 @@ namespace UnityMcp.AgentBridge.Mcp
             ClaudeCode,
             Cursor,
             GitHubCopilot,
+            Grok,
         }
     }
 }
