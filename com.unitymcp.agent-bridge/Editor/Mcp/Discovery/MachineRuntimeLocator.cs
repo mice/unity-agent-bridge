@@ -20,7 +20,7 @@ namespace UnityMcp.AgentBridge.Mcp
     {
         internal const string MachineMode = "machine";
         internal const string RuntimeSelectionFileName = "runtime-selection.json";
-        internal const string MinimumPublishedRuntimeVersion = "1.2.12-rc.3";
+        internal const string MinimumPublishedRuntimeVersion = "1.2.12-rc.2";
 
         public string ResolveRoot(McpEditorSettings settings)
         {

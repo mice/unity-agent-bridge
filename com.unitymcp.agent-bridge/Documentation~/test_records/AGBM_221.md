@@ -6,8 +6,8 @@ target: AgentBridgeMcpSetupWindow
 testFile: Packages/com.unitymcp.agent-bridge/Tests/Editor/Mcp/AgentBridgeMcpSetupWindowTests.cs
 testMethod: SourceOnlyPublishedRuntimeIsEligibleForDownloadAndInstall
 status: active
-lastRun: ""
-lastResult: unknown
+lastRun: "2026-08-21T12:01:45Z"
+lastResult: passed
 ---
 
 # AGBM_221

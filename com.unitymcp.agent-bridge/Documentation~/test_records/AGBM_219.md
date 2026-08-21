@@ -6,8 +6,8 @@ target: MachineRuntimeDownloader
 testFile: Packages/com.unitymcp.agent-bridge/Tests/Editor/Mcp/MachineRuntimeSelectionTests.cs
 testMethod: MachineRuntimeDownload_SourceOnlyReleaseBuildsFromTagWithoutBinaryRequest
 status: active
-lastRun: ""
-lastResult: unknown
+lastRun: "2026-08-21T12:01:32Z"
+lastResult: passed
 ---
 
 # AGBM_219

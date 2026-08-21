@@ -6,8 +6,8 @@ target: MachineRuntimeLocator
 testFile: Packages/com.unitymcp.agent-bridge/Tests/Editor/Mcp/MachineRuntimeSelectionTests.cs
 testMethod: MachineSelection_StaleSourceOnlyManifestUsesVerifiedPackagedCatalog
 status: active
-lastRun: ""
-lastResult: unknown
+lastRun: "2026-08-21T12:01:32Z"
+lastResult: passed
 ---
 
 # AGBM_220

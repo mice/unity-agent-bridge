@@ -6,8 +6,8 @@ target: MachineRuntimeDownloader
 testFile: Packages/com.unitymcp.agent-bridge/Tests/Editor/Mcp/MachineRuntimeSelectionTests.cs
 testMethod: MachineRuntimeDownload_DoesNotReuseCachedSourceForDifferentCommit
 status: active
-lastRun: "not run"
-lastResult: not_run
+lastRun: "2026-08-21T12:01:32Z"
+lastResult: passed
 ---
 
 # AGBM_222
