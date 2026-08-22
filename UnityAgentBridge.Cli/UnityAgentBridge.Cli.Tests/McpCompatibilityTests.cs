@@ -52,6 +52,10 @@ public sealed class McpCompatibilityTests
         var projectRoot = CreateUnityProject();
         await using var server = await McpServerSession.StartAsync(projectRoot);
 
+        var instructions = server.InitializeResult.Value<string>("instructions");
+        Assert.IsFalse(string.IsNullOrWhiteSpace(instructions), "initialize result instructions must be non-whitespace.");
+        Assert.AreEqual(McpServerInstructions.Value, instructions);
+
         var echoResponse = await server.CallToolAsync(
             "mcp_echo",
             new JObject
@@ -322,6 +326,8 @@ public sealed class McpCompatibilityTests
         private readonly StreamWriter _stdin;
         private int _nextRequestId = 1;
 
+        public JObject InitializeResult { get; private set; } = null!;
+
         private McpServerSession(Process process)
         {
             _process = process;
@@ -406,7 +412,7 @@ public sealed class McpCompatibilityTests
                     }
                 });
 
-            Assert.IsNotNull(response["result"], $"initialize did not return a result payload: {response}");
+            InitializeResult = (JObject?)response["result"] ?? throw new AssertFailedException($"initialize did not return a result payload: {response}");
             await SendNotificationAsync("notifications/initialized", new JObject());
         }
 
