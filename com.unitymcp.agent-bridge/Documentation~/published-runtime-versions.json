@@ -3,9 +3,9 @@
     {
       "version": "1.2.12-rc.4",
       "tag": "v1.2.12-rc.4",
-      "artifactUrl": "https://github.com/mice/unity-agent-bridge/releases/download/v1.2.12-rc.4/unity-agent-bridge-1.2.12-rc.4-win-x64.zip",
+      "artifactUrl": "",
       "sourceArchiveUrl": "https://github.com/mice/unity-agent-bridge/archive/refs/tags/v1.2.12-rc.4.zip",
-      "commitSha": ""
+      "commitSha": "2a6dc3aee6c74a7d84249df9cefd35c95d2a4667"
     },
     {
       "version": "1.2.12-rc.3",
