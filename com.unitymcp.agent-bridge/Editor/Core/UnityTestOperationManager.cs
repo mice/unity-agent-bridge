@@ -17,7 +17,7 @@ namespace UnityMcp.AgentBridge
     {
         private static readonly Dictionary<string, TestRunOperationState> OperationsById = new Dictionary<string, TestRunOperationState>(StringComparer.Ordinal);
         private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
-        private static readonly Regex TestIdRegex = new Regex(@"^AGB_\d{3}$", RegexOptions.Compiled);
+        private static readonly Regex TestIdRegex = new Regex(@"^AGB(?:M)?_\d{3}$", RegexOptions.Compiled);
         private static TestRunnerApi _api;
         private static UnityTestCallbacks _callbacks;
         private static bool _callbacksRegistered;

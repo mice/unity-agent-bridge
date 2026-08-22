@@ -224,7 +224,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
             Assert.That(Find(results, "MCP009").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
             Assert.That(Find(results, "MCP010").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
-            Assert.That(Find(results, "MCP009").Details, Is.EqualTo("17 frozen MCP tools listed"));
+            Assert.That(Find(results, "MCP009").Details, Is.EqualTo("16 frozen MCP tools listed"));
             Assert.That(Find(results, "MCP010").Details, Is.EqualTo("status=success"));
         }
 
@@ -428,6 +428,58 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(Find(results, "MCP011").Details, Does.Contain("prebuilt machine runtime"));
             Assert.That(Find(results, "MCP012").Severity, Is.EqualTo(McpDiagnosticSeverity.Info));
             Assert.That(Find(results, "MCP012").Details, Is.EqualTo(roslynPath));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_236.md
+        [Test]
+        [Category("AGBM_RuntimeSelection")]
+        [Category("AGBM_236")]
+        public void RunAsync_MachineRuntimeMissingRoslyn_ReportsModeVersionAndCanonicalPath()
+        {
+            const string version = "1.2.13";
+            var managerRoot = Path.Combine(_tempDirectory, "UnityAgentBridge");
+            var versionRoot = Path.Combine(managerRoot, "versions", version);
+            var runtimeRoot = Path.Combine(versionRoot, "runtime", "win-x64");
+            Directory.CreateDirectory(runtimeRoot);
+            File.WriteAllText(Path.Combine(versionRoot, "release-manifest.json"), "{\"version\":\"" + version + "\"}");
+            File.WriteAllText(Path.Combine(runtimeRoot, "unity-agent-bridge.exe"), string.Empty);
+
+            var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
+            Directory.CreateDirectory(projectRoot);
+            var settings = new McpEditorSettings
+            {
+                RuntimeMode = "machine",
+                RuntimeVersion = version,
+                MachineRuntimeRoot = managerRoot,
+            };
+            var fakeRunner = new FakeRunner
+            {
+                Handler = request =>
+                {
+                    if (request.Arguments.Count > 0 && request.Arguments[0] == "mcp-probe")
+                    {
+                        return new ProcessExecutionResult
+                        {
+                            Outcome = ProcessOutcome.Completed,
+                            ExitCode = 0,
+                            Stdout = HealthyProbeStdout,
+                        };
+                    }
+
+                    return VersionSuccess("8.0.422");
+                },
+            };
+            var resolver = new McpPathResolver(() => projectRoot);
+            var probe = new McpEnvironmentProbe(resolver, new ToolVersionParser(), fakeRunner);
+            var runner = new McpDiagnosticsRunner(probe, resolver, fakeRunner);
+
+            var results = runner.RunAsync(settings, CancellationToken.None).GetAwaiter().GetResult();
+            var roslynCheck = Find(results, "MCP012");
+
+            Assert.That(roslynCheck.Severity, Is.EqualTo(McpDiagnosticSeverity.Error));
+            Assert.That(roslynCheck.Details, Does.Contain("runtimeMode=machine"));
+            Assert.That(roslynCheck.Details, Does.Contain("runtimeVersion=" + version));
+            Assert.That(roslynCheck.Details, Does.Contain(Path.Combine(runtimeRoot, "unity-roslyn-compiler.exe")));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_099.md
@@ -1194,7 +1246,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                         return new ProcessExecutionResult
                         {
                             Outcome = ProcessOutcome.Completed,
-                            Stdout = "{\"listedToolCount\":17,\"toolNames\":[\"mcp_echo\",\"unity_bridge_health\",\"unity_bridge_submit_only\",\"unity_bridge_wait_result\",\"mcp__unity__ping\",\"mcp__unity__project_get_info\",\"mcp__unity__compile\",\"mcp__unity__get_console\",\"mcp__unity__assetdatabase_search\",\"mcp__unity__get_selection_info\",\"mcp__unity__get_gameobject_component_info\",\"mcp__unity__read_report\",\"mcp__unity__run_static_method\",\"mcp__unity__run_diagnostic\",\"mcp__unity__run_editmode_tests\",\"mcp__unity__run_playmode_tests\",\"mcp__unity__agent_bridge_self_test\"],\"pingResult\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"status\\\":\\\"success\\\"}\"}],\"structuredContent\":{\"status\":\"success\"},\"isError\":false}}",
+                            Stdout = "{" + ProbeToolListJson + ",\"pingResult\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"status\\\":\\\"success\\\"}\"}],\"structuredContent\":{\"status\":\"success\"},\"isError\":false}}",
                             Duration = TimeSpan.FromMilliseconds(17),
                         };
                     }
@@ -1233,7 +1285,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                         return new ProcessExecutionResult
                         {
                             Outcome = ProcessOutcome.Completed,
-                            Stdout = "{\"listedToolCount\":17,\"toolNames\":[\"mcp_echo\",\"unity_bridge_health\",\"unity_bridge_submit_only\",\"unity_bridge_wait_result\",\"mcp__unity__ping\",\"mcp__unity__project_get_info\",\"mcp__unity__compile\",\"mcp__unity__get_console\",\"mcp__unity__assetdatabase_search\",\"mcp__unity__get_selection_info\",\"mcp__unity__get_gameobject_component_info\",\"mcp__unity__read_report\",\"mcp__unity__run_static_method\",\"mcp__unity__run_diagnostic\",\"mcp__unity__run_editmode_tests\",\"mcp__unity__run_playmode_tests\",\"mcp__unity__agent_bridge_self_test\"],\"pingResult\":{\"isError\":true,\"structuredContent\":{\"status\":\"blocked\"}},\"healthResult\":{\"isError\":false,\"structuredContent\":{\"status\":\"success\",\"lifecycleState\":\"degraded\",\"healthReason\":\"ProjectMismatch\",\"recommendedActionCode\":\"UpdateConfig\",\"recommendedAction\":\"Update the configured Unity project binding.\",\"toolExecution\":\"BlockedBeforeDispatch\"}}}",
+                            Stdout = "{" + ProbeToolListJson + ",\"pingResult\":{\"isError\":true,\"structuredContent\":{\"status\":\"blocked\"}},\"healthResult\":{\"isError\":false,\"structuredContent\":{\"status\":\"success\",\"lifecycleState\":\"degraded\",\"healthReason\":\"ProjectMismatch\",\"recommendedActionCode\":\"UpdateConfig\",\"recommendedAction\":\"Update the configured Unity project binding.\",\"toolExecution\":\"BlockedBeforeDispatch\"}}}",
                             Duration = TimeSpan.FromMilliseconds(19),
                         };
                     }
@@ -1354,8 +1406,9 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             };
         }
 
-        private const string HealthyProbeStdout = "{\"listedToolCount\":17,\"toolNames\":[\"mcp_echo\",\"unity_bridge_health\",\"unity_bridge_submit_only\",\"unity_bridge_wait_result\",\"mcp__unity__ping\",\"mcp__unity__project_get_info\",\"mcp__unity__compile\",\"mcp__unity__get_console\",\"mcp__unity__assetdatabase_search\",\"mcp__unity__get_selection_info\",\"mcp__unity__get_gameobject_component_info\",\"mcp__unity__read_report\",\"mcp__unity__run_static_method\",\"mcp__unity__run_diagnostic\",\"mcp__unity__run_editmode_tests\",\"mcp__unity__run_playmode_tests\",\"mcp__unity__agent_bridge_self_test\"],\"pingResult\":{\"isError\":false,\"structuredContent\":{\"status\":\"success\"}}}";
-        private const string PingErrorProbeStdout = "{\"listedToolCount\":17,\"toolNames\":[\"mcp_echo\",\"unity_bridge_health\",\"unity_bridge_submit_only\",\"unity_bridge_wait_result\",\"mcp__unity__ping\",\"mcp__unity__project_get_info\",\"mcp__unity__compile\",\"mcp__unity__get_console\",\"mcp__unity__assetdatabase_search\",\"mcp__unity__get_selection_info\",\"mcp__unity__get_gameobject_component_info\",\"mcp__unity__read_report\",\"mcp__unity__run_static_method\",\"mcp__unity__run_diagnostic\",\"mcp__unity__run_editmode_tests\",\"mcp__unity__run_playmode_tests\",\"mcp__unity__agent_bridge_self_test\"],\"pingResult\":{\"isError\":true,\"structuredContent\":{\"status\":\"failed\"}}}";
+        private const string ProbeToolListJson = "\"listedToolCount\":16,\"toolNames\":[\"mcp_echo\",\"unity_bridge_health\",\"unity_bridge_submit_only\",\"unity_bridge_wait_result\",\"unity_editor_ping\",\"unity_project_get_info\",\"unity_project_compile\",\"unity_console_get\",\"unity_asset_database_search\",\"unity_selection_get_info\",\"unity_gameobject_component_get_info\",\"unity_static_method_run\",\"unity_diagnostic_run\",\"unity_tests_run_edit_mode\",\"unity_tests_run_play_mode\",\"unity_agent_bridge_run_self_test\"]";
+        private const string HealthyProbeStdout = "{" + ProbeToolListJson + ",\"pingResult\":{\"isError\":false,\"structuredContent\":{\"status\":\"success\"}}}";
+        private const string PingErrorProbeStdout = "{" + ProbeToolListJson + ",\"pingResult\":{\"isError\":true,\"structuredContent\":{\"status\":\"failed\"}}}";
 
         private sealed class FakeRunner : IAsyncProcessRunner
         {

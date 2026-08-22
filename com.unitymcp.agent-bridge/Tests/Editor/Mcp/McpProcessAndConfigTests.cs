@@ -774,7 +774,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var toolsRoot = Path.Combine(_tempDirectory, "empty-tools-root");
             Directory.CreateDirectory(toolsRoot);
             var resolver = new McpPathResolver(() => projectRoot);
-            var initializer = new McpRuntimeInitializer(new FakeProcessRunner(), resolver);
+            var initializer = CreateRuntimeInitializer(new FakeProcessRunner(), resolver);
 
             var result = initializer.InitializeRuntimeAsync(new McpEditorSettings
             {
@@ -802,7 +802,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
             Directory.CreateDirectory(projectRoot);
             var resolver = new McpPathResolver(() => projectRoot);
-            var initializer = new McpRuntimeInitializer(new FakeProcessRunner(), resolver);
+            var initializer = CreateRuntimeInitializer(new FakeProcessRunner(), resolver);
             var result = initializer.InitializeRuntimeAsync(new McpEditorSettings
             {
                 WorkspaceRoot = workspaceRoot,
@@ -843,7 +843,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
             Directory.CreateDirectory(projectRoot);
             var resolver = new McpPathResolver(() => projectRoot);
-            var initializer = new McpRuntimeInitializer(fakeRunner, resolver);
+            var initializer = CreateRuntimeInitializer(fakeRunner, resolver);
             var workspaceRoot = Path.Combine(_tempDirectory, "workspace");
 
             var result = initializer.InitializeRuntimeAsync(new McpEditorSettings
@@ -1042,6 +1042,30 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
         {
             Assert.That(content, Does.Contain("[mcp_servers.unity_agent_bridge.env]"));
             Assert.That(content, Does.Contain("UNITY_AGENT_BRIDGE_PROJECT_PATH = \"" + projectRoot.Replace("\\", "\\\\") + "\""));
+        }
+
+        private static McpRuntimeInitializer CreateRuntimeInitializer(IAsyncProcessRunner processRunner, McpPathResolver resolver)
+        {
+            var processProbe = new McpServerProcessProbe(
+                new EmptyMcpServerProcessProvider(),
+                resolver,
+                _ => resolver.GetProjectRoot(),
+                settings => resolver.ResolveWorkspaceRuntimeRoot(settings));
+            return new McpRuntimeInitializer(processRunner, resolver, processProbe);
+        }
+
+        private sealed class EmptyMcpServerProcessProvider : IMcpServerProcessProvider
+        {
+            public IReadOnlyList<McpProcessDescriptor> GetProcesses()
+            {
+                return Array.Empty<McpProcessDescriptor>();
+            }
+
+            public bool TryTerminate(int processId, out string error)
+            {
+                error = string.Empty;
+                return false;
+            }
         }
 
         private sealed class FakeProcessRunner : IAsyncProcessRunner

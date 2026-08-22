@@ -12,6 +12,13 @@ namespace UnityMcp.AgentBridge
 {
     public static class UnityMcpPluginRuntime
     {
+        private static Func<string, UnityMcpRoslynCompilerPayload> _roslynCompilerPayloadResolver;
+
+        public static void ConfigureRoslynCompilerPayloadResolver(Func<string, UnityMcpRoslynCompilerPayload> resolver)
+        {
+            _roslynCompilerPayloadResolver = resolver;
+        }
+
         public static UnityMcpPluginDiscoveryResult DiscoverAndRegister(
             AgentToolRegistry registry,
             AgentBridgeSettings settings,
@@ -46,6 +53,7 @@ namespace UnityMcp.AgentBridge
             hostServices.Queue ??= new AgentCommandQueue(paths.ProjectRoot, settings.tempRoot);
             hostServices.Registry ??= registry;
             hostServices.Logger ??= logger;
+            hostServices.RoslynCompilerPayload ??= ResolveRoslynCompilerPayload(paths);
             var registrations = settings.pluginRegistrations ?? new List<UnityMcpPluginRegistration>();
             var builtInNames = new HashSet<string>(registry.ListTools().Select(descriptor => descriptor.Name), StringComparer.Ordinal);
             var pluginNames = new HashSet<string>(StringComparer.Ordinal);
@@ -65,6 +73,62 @@ namespace UnityMcp.AgentBridge
 
             WriteCatalog(paths.PluginCatalogPath, result.Catalog, logger);
             return result;
+        }
+
+        private static UnityMcpRoslynCompilerPayload ResolveRoslynCompilerPayload(AgentBridgePaths paths)
+        {
+            var resolver = _roslynCompilerPayloadResolver;
+            if (resolver != null)
+            {
+                try
+                {
+                    var payload = resolver(paths.ProjectRoot);
+                    if (payload != null)
+                    {
+                        return payload;
+                    }
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning("Roslyn compiler payload resolution failed: " + exception.Message);
+                }
+            }
+
+            var runtimeMode = "project-local";
+            var runtimeVersion = string.Empty;
+            var settingsPath = Path.Combine(paths.ProjectRoot, "Library", "AgentBridge", "mcp-editor-settings.json");
+            if (File.Exists(settingsPath))
+            {
+                try
+                {
+                    var settings = JObject.Parse(File.ReadAllText(settingsPath));
+                    runtimeMode = string.Equals(settings.Value<string>("runtimeMode"), "machine", StringComparison.OrdinalIgnoreCase)
+                        ? "machine"
+                        : "project-local";
+                    runtimeVersion = settings.Value<string>("runtimeVersion") ?? string.Empty;
+                }
+                catch (Exception exception)
+                {
+                    Debug.LogWarning("Roslyn compiler payload fallback settings could not be read: " + exception.Message);
+                }
+            }
+
+            return new UnityMcpRoslynCompilerPayload
+            {
+                RuntimeMode = runtimeMode,
+                RuntimeVersion = runtimeVersion,
+                CompilerPath = string.Equals(runtimeMode, "machine", StringComparison.Ordinal)
+                    ? string.Empty
+                    : Path.Combine(
+                        paths.ProjectRoot,
+                        ".unitymcp",
+                        "runtime",
+                        "UnityAgentBridge",
+                        "roslyn-execution",
+                        "out",
+                        "win-x64",
+                        "unity-roslyn-compiler.exe")
+            };
         }
 
         private static void ProcessRegistration(
@@ -108,6 +172,7 @@ namespace UnityMcp.AgentBridge
                     {
                         ProjectRoot = paths.ProjectRoot,
                         AssemblyName = assembly.GetName().Name ?? string.Empty,
+                        RoslynCompilerPayload = hostServices.RoslynCompilerPayload,
                         HostServices = hostServices
                     };
 
@@ -304,6 +369,8 @@ namespace UnityMcp.AgentBridge
         public AgentToolRegistry Registry { get; set; }
 
         public FileAgentBridgeLogger Logger { get; set; }
+
+        public UnityMcpRoslynCompilerPayload RoslynCompilerPayload { get; set; }
     }
 
     internal sealed class UnityMcpPluginToolAdapter : IAgentTool

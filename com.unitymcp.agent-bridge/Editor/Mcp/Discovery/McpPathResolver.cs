@@ -253,6 +253,25 @@ namespace UnityMcp.AgentBridge.Mcp
             return _machineRuntimeLocator.ResolveVersion(settings);
         }
 
+        public string ResolveRoslynCompilerPath(McpEditorSettings settings)
+        {
+            var machineRuntimeRoot = _machineRuntimeLocator.ResolveRuntimeRoot(settings);
+            if (!string.IsNullOrWhiteSpace(machineRuntimeRoot))
+            {
+                return Path.Combine(machineRuntimeRoot, "win-x64", "unity-roslyn-compiler.exe");
+            }
+
+            if (IsMachineRuntimeRequested(settings))
+            {
+                return string.Empty;
+            }
+
+            var runtimeRoot = ResolveWorkspaceRuntimeRoot(settings);
+            return string.IsNullOrWhiteSpace(runtimeRoot)
+                ? string.Empty
+                : Path.Combine(runtimeRoot, "UnityAgentBridge", "roslyn-execution", "out", "win-x64", "unity-roslyn-compiler.exe");
+        }
+
         private static bool IsMachineRuntimeRequested(McpEditorSettings settings)
         {
             return settings != null &&

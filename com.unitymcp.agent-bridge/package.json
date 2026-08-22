@@ -1,6 +1,6 @@
 {
   "name": "com.unitymcp.agent-bridge",
-  "version": "1.2.12-rc.3",
+  "version": "1.2.12-rc.4",
   "displayName": "Unity Agent Bridge",
   "description": "Offline AI agent bridge for Unity 2022.3+. File-queue based, MCP-compatible, no cloud dependency.",
   "unity": "2022.3",
@@ -12,7 +12,7 @@
     "ci"
   ],
   "dependencies": {
-    "com.unitymcp.plugin-abstractions": "0.1.0",
+    "com.unitymcp.plugin-abstractions": "0.1.1",
     "com.unity.nuget.newtonsoft-json": "3.2.1",
     "com.unity.test-framework": "1.1.33"
   }

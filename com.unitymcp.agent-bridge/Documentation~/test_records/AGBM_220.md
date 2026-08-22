@@ -6,7 +6,7 @@ target: MachineRuntimeLocator
 testFile: Packages/com.unitymcp.agent-bridge/Tests/Editor/Mcp/MachineRuntimeSelectionTests.cs
 testMethod: MachineSelection_StaleSourceOnlyManifestUsesVerifiedPackagedCatalog
 status: active
-lastRun: "2026-08-21T12:01:32Z"
+lastRun: "2026-08-23"
 lastResult: passed
 ---
 
@@ -20,4 +20,4 @@ A stale machine-local source-only release manifest must not override the verifie
 
 - A source-built manifest is recognized as source-only, so it has no binary asset URL.
 - A missing local commit SHA is replaced by the packaged RC3 commit identity.
-- The current and previous RC choices remain available.
+- RC4 remains the newest choice while the verified RC3 and RC2 choices remain available.

@@ -78,12 +78,24 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
 
         public string CompilerPath { get; set; }
 
+        public string RuntimeMode { get; set; }
+
+        public string RuntimeVersion { get; set; }
+
         public string DefaultPolicy { get; set; }
     }
 
     internal static class RoslynExecutionRuntimeState
     {
         public static bool TryResolveToolAvailability(string projectRoot, out RoslynExecutionAvailability availability)
+        {
+            return TryResolveToolAvailability(projectRoot, null, out availability);
+        }
+
+        public static bool TryResolveToolAvailability(
+            string projectRoot,
+            UnityMcpRoslynCompilerPayload compilerPayload,
+            out RoslynExecutionAvailability availability)
         {
             availability = null;
 
@@ -98,10 +110,19 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                 return false;
             }
 
-            var compilerPath = GetCompilerPath(resolvedProjectRoot);
+            var compilerPath = compilerPayload != null
+                ? compilerPayload.CompilerPath
+                : GetCompilerPath(resolvedProjectRoot);
             if (!File.Exists(compilerPath))
             {
-                UnityEngine.Debug.LogWarning("Roslyn execution is enabled but the prepared runtime compiler proxy is missing.");
+                var runtimeMode = compilerPayload?.RuntimeMode ?? "project-local";
+                var runtimeVersion = compilerPayload?.RuntimeVersion ?? string.Empty;
+                var expectedPath = string.IsNullOrWhiteSpace(compilerPath) ? "<unresolved>" : compilerPath;
+                UnityEngine.Debug.LogWarning(
+                    "Roslyn execution is enabled but the compiler payload is missing. " +
+                    "runtimeMode=" + runtimeMode +
+                    " runtimeVersion=" + (string.IsNullOrWhiteSpace(runtimeVersion) ? "<none>" : runtimeVersion) +
+                    " expectedPath=" + expectedPath);
                 return false;
             }
 
@@ -109,6 +130,8 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
             {
                 ProjectRoot = Path.GetFullPath(resolvedProjectRoot),
                 CompilerPath = Path.GetFullPath(compilerPath),
+                RuntimeMode = compilerPayload?.RuntimeMode ?? "project-local",
+                RuntimeVersion = compilerPayload?.RuntimeVersion ?? string.Empty,
                 DefaultPolicy = ReadDefaultPolicy(resolvedProjectRoot)
             };
             return true;
@@ -621,8 +644,12 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
     {
         private readonly RoslynExecutionAvailability _availability;
         private readonly RoslynExecutionPolicyDecision _policy;
+        private readonly Func<string, string, string, int, CompilerProcessResult> _compilerProcessRunner;
 
-        public RoslynExecutionService(RoslynExecutionAvailability availability, RoslynExecutionPolicyDecision policy)
+        public RoslynExecutionService(
+            RoslynExecutionAvailability availability,
+            RoslynExecutionPolicyDecision policy,
+            Func<string, string, string, int, CompilerProcessResult> compilerProcessRunner = null)
         {
             _availability = availability ?? throw new ArgumentNullException(nameof(availability));
             _policy = policy ?? new RoslynExecutionPolicyDecision
@@ -631,22 +658,20 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
                 Source = "default",
                 Version = RoslynExecutionContracts.PolicyVersion
             };
+            _compilerProcessRunner = compilerProcessRunner ?? RoslynExecutionUtility.ExecuteCompilerProcess;
         }
 
         public UnityMcpToolResult Execute(UnityMcpToolContext context, ExecuteCSharpArgs args, IUnityMcpCancellation cancellation)
         {
             var invocationId = RoslynExecutionUtility.CreateInvocationId(context != null ? context.CommandId : null);
             var projectRoot = _availability.ProjectRoot;
-            var runtimeRoot = Path.Combine(projectRoot, ".unitymcp", "runtime", "UnityAgentBridge", "roslyn-execution");
-            var tempRoot = Path.Combine(projectRoot, "Temp", "AgentBridge", "RoslynExecution", invocationId);
-            var generatedRoot = Path.Combine(runtimeRoot, "generated", invocationId);
-            Directory.CreateDirectory(tempRoot);
-            Directory.CreateDirectory(generatedRoot);
+            var invocationRoot = RoslynExecutionUtility.GetInvocationRoot(projectRoot, invocationId);
+            Directory.CreateDirectory(invocationRoot);
 
             var wrappedSource = RoslynExecutionUtility.BuildWrappedSource(args.code);
             var sourceHash = RoslynExecutionUtility.ComputeSha256(wrappedSource);
-            var sourcePath = Path.Combine(tempRoot, RoslynExecutionContracts.EntrySourceFileName);
-            var outputDllPath = Path.Combine(generatedRoot, "RuntimeScript.dll");
+            var sourcePath = Path.Combine(invocationRoot, RoslynExecutionContracts.EntrySourceFileName);
+            var outputDllPath = Path.Combine(invocationRoot, "RuntimeScript.dll");
             File.WriteAllText(sourcePath, wrappedSource, new UTF8Encoding(false));
 
             var effectiveTimeoutMs = args.timeoutMs;
@@ -766,7 +791,7 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
             var requestPath = Path.Combine(Path.GetDirectoryName(sourcePath) ?? ".", invocationId + ".request.json");
             File.WriteAllText(requestPath, JsonConvert.SerializeObject(request, Formatting.None), new UTF8Encoding(false));
 
-            var processResult = RoslynExecutionUtility.ExecuteCompilerProcess(
+            var processResult = _compilerProcessRunner(
                 _availability.CompilerPath,
                 requestPath,
                 Path.GetDirectoryName(_availability.CompilerPath) ?? Path.GetDirectoryName(sourcePath) ?? ".",
@@ -1369,6 +1394,26 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
             }
 
             return "exec_" + DateTime.UtcNow.ToString("yyyyMMdd_HHmmss_fff");
+        }
+
+        public static string GetInvocationRoot(string projectRoot, string invocationId)
+        {
+            if (string.IsNullOrWhiteSpace(projectRoot))
+            {
+                throw new ArgumentException("projectRoot must not be empty.", nameof(projectRoot));
+            }
+
+            if (string.IsNullOrWhiteSpace(invocationId))
+            {
+                throw new ArgumentException("invocationId must not be empty.", nameof(invocationId));
+            }
+
+            return Path.Combine(
+                Path.GetFullPath(projectRoot),
+                "Temp",
+                "AgentBridge",
+                "RoslynExecution",
+                invocationId);
         }
 
         public static string BuildWrappedSource(string body)

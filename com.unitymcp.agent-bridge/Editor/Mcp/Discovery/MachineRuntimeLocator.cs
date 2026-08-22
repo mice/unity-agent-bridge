@@ -308,6 +308,7 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             var versions = new[]
             {
+                "1.2.12-rc.4",
                 "1.2.12-rc.3",
                 "1.2.12-rc.2",
             };
@@ -325,7 +326,9 @@ namespace UnityMcp.AgentBridge.Mcp
                         : CreateGitHubSourceArchiveUrl(tag),
                     CommitSha = version == "1.2.12-rc.3"
                         ? "956f695ade6ab73c947bad9b78a01fc4fc2a154a"
-                        : "fa667ca009bab9e5621e16751ab86d014e4ee80b",
+                        : version == "1.2.12-rc.2"
+                            ? "fa667ca009bab9e5621e16751ab86d014e4ee80b"
+                            : string.Empty,
                     IsInstalled = IsUsableInstalledVersion(Path.Combine(managerRoot, "versions", version), version),
                 });
             }

@@ -70,6 +70,28 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(recordPath, Is.EqualTo("Documentation~/AgentBridge/test_records/AGB_147.md"));
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_202.md
+        [Test]
+        [Category("AGB_TestTools")]
+        [Category("AGB_202")]
+        public void TestRunMetrics_GovernedTestIdRecognition_AcceptsAgbmRecords()
+        {
+            var regexField = typeof(UnityTestOperationManager).GetField("TestIdRegex", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.That(regexField, Is.Not.Null);
+
+            var testIdRegex = regexField.GetValue(null) as System.Text.RegularExpressions.Regex;
+            Assert.That(testIdRegex, Is.Not.Null);
+            Assert.That(testIdRegex.IsMatch("AGB_201"), Is.True);
+            Assert.That(testIdRegex.IsMatch("AGBM_234"), Is.True);
+            Assert.That(testIdRegex.IsMatch("AGBM_23"), Is.False);
+
+            var resolveRecordPath = typeof(UnityTestOperationManager).GetMethod("ResolveRecordPath", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.That(resolveRecordPath, Is.Not.Null);
+
+            var recordPath = (string)resolveRecordPath.Invoke(null, new object[] { "AGBM_234" });
+            Assert.That(recordPath, Is.EqualTo("Documentation~/AgentBridge/test_records/AGBM_234.md"));
+        }
+
         private static string GetAbsolutePath(string relativePath)
         {
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName ?? string.Empty;

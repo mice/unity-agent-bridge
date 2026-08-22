@@ -6,7 +6,7 @@ target: MachineRuntimeLocator
 testFile: Packages/com.unitymcp.agent-bridge/Tests/Editor/Mcp/MachineRuntimeSelectionTests.cs
 testMethod: MachineSelection_MissingDefaultReleasesDirectoryUsesPublishedCatalog
 status: active
-lastRun: "2026-08-15"
+lastRun: "2026-08-23"
 lastResult: passed
 ---
 
@@ -19,5 +19,5 @@ The public version-enumeration entry point must use the packaged catalog when th
 ## Assertions
 
 - No local `releases` directory exists.
-- `ListPublishedVersions` returns the RC3 and RC2 release targets, ordered newest first.
+- `ListPublishedVersions` returns the RC4, RC3, and RC2 release targets, ordered newest first.
 - Older removed runtime tags are absent.

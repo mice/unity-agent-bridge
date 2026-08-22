@@ -6,6 +6,14 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.12-rc.4] - 2026-08-23
+
+### Fixed
+
+- Resolve the Roslyn compiler from the effective project-local or selected machine runtime without falling back across runtime modes.
+- Keep Roslyn invocation source, assemblies, reports, and temporary output under the invoking Unity project's `Temp/AgentBridge` tree.
+- Require and diagnose the canonical machine-runtime Roslyn compiler payload at `runtime/win-x64/unity-roslyn-compiler.exe`.
+
 ## [1.2.12-rc.3] - 2026-08-18
 
 ### Fixed

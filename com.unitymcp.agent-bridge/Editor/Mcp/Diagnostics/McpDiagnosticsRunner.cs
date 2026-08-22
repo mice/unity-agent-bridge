@@ -345,6 +345,9 @@ namespace UnityMcp.AgentBridge.Mcp
                 var runtimePayloadPath = ResolveRoslynPreparedRuntimePath(settings);
                 var exists = !string.IsNullOrWhiteSpace(runtimePayloadPath) && File.Exists(runtimePayloadPath);
                 var machineRuntime = IsMachineRuntime(settings);
+                var runtimeMode = _pathResolver.ResolveRuntimeMode(settings);
+                var runtimeVersion = _pathResolver.ResolveRuntimeVersion(settings);
+                var expectedPath = string.IsNullOrWhiteSpace(runtimePayloadPath) ? "<unresolved>" : runtimePayloadPath;
                 return new McpDiagnosticCheck
                 {
                     Code = "MCP012",
@@ -352,7 +355,9 @@ namespace UnityMcp.AgentBridge.Mcp
                     Summary = "Roslyn Prepared Runtime",
                     Details = exists
                         ? runtimePayloadPath
-                        : "Missing prepared runtime payload: " + (string.IsNullOrWhiteSpace(runtimePayloadPath) ? "<unresolved>" : runtimePayloadPath),
+                        : "Missing prepared runtime payload. runtimeMode=" + runtimeMode +
+                          " runtimeVersion=" + (string.IsNullOrWhiteSpace(runtimeVersion) ? "<none>" : runtimeVersion) +
+                          " expectedPath=" + expectedPath,
                     Remediation = machineRuntime
                         ? "Install or reselect the published machine runtime in Step 1."
                         : "Run Build Local Runtime, then Prepare Runtime.",
@@ -571,43 +576,7 @@ namespace UnityMcp.AgentBridge.Mcp
 
         private string ResolveRoslynPreparedRuntimePath(McpEditorSettings settings)
         {
-            if (IsMachineRuntime(settings))
-            {
-                var machineServerRoot = _pathResolver.ResolveMcpServerRoot(settings);
-                if (string.IsNullOrWhiteSpace(machineServerRoot))
-                {
-                    return string.Empty;
-                }
-
-                var machineCandidates = new[]
-                {
-                    Path.Combine(machineServerRoot, "win-x64", "unity-roslyn-compiler.exe"),
-                    Path.Combine(machineServerRoot, "roslyn-execution", "out", "win-x64", "unity-roslyn-compiler.exe"),
-                };
-                for (var index = 0; index < machineCandidates.Length; index++)
-                {
-                    if (File.Exists(machineCandidates[index]))
-                    {
-                        return machineCandidates[index];
-                    }
-                }
-
-                return machineCandidates[0];
-            }
-
-            var runtimeRoot = _pathResolver.ResolveWorkspaceRuntimeRoot(settings);
-            if (string.IsNullOrWhiteSpace(runtimeRoot))
-            {
-                return string.Empty;
-            }
-
-            return Path.Combine(
-                runtimeRoot,
-                "UnityAgentBridge",
-                "roslyn-execution",
-                "out",
-                "win-x64",
-                "unity-roslyn-compiler.exe");
+            return _pathResolver.ResolveRoslynCompilerPath(settings);
         }
 
         private sealed class ProbeRunResult

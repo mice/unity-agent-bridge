@@ -216,6 +216,64 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(resolver.ResolveLauncherPath(settings), Is.Empty);
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_234.md
+        [Test]
+        [Category("AGBM_Discovery")]
+        [Category("AGBM_234")]
+        public void ResolveRoslynCompilerPath_MachineModeUsesCanonicalInstalledPayload()
+        {
+            var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
+            var managerRoot = Path.Combine(_tempDirectory, "UnityAgentBridge");
+            var versionRoot = Path.Combine(managerRoot, "versions", "1.2.13");
+            var compilerPath = Path.Combine(versionRoot, "runtime", "win-x64", "unity-roslyn-compiler.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(compilerPath) ?? versionRoot);
+            File.WriteAllText(Path.Combine(versionRoot, "release-manifest.json"), "{\"version\":\"1.2.13\"}");
+            File.WriteAllText(compilerPath, "stub");
+            var settings = new McpEditorSettings
+            {
+                RuntimeMode = "machine",
+                RuntimeVersion = "1.2.13",
+                MachineRuntimeRoot = managerRoot,
+            };
+            var resolver = new McpPathResolver(() => projectRoot);
+
+            var resolved = resolver.ResolveRoslynCompilerPath(settings);
+
+            Assert.That(resolved, Is.EqualTo(Path.GetFullPath(compilerPath)));
+            Assert.That(resolver.ResolveRuntimeMode(settings), Is.EqualTo("machine"));
+            Assert.That(resolver.ResolveRuntimeVersion(settings), Is.EqualTo("1.2.13"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_235.md
+        [Test]
+        [Category("AGBM_Discovery")]
+        [Category("AGBM_235")]
+        public void ResolveRoslynCompilerPath_MachineModeMissingPayload_DoesNotFallbackToProjectRuntime()
+        {
+            var projectRoot = Path.Combine(_tempDirectory, "UnityProject");
+            var projectCompilerPath = Path.Combine(projectRoot, ".unitymcp", "runtime", "UnityAgentBridge", "roslyn-execution", "out", "win-x64", "unity-roslyn-compiler.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(projectCompilerPath) ?? projectRoot);
+            File.WriteAllText(projectCompilerPath, "project-local");
+            var managerRoot = Path.Combine(_tempDirectory, "UnityAgentBridge");
+            var versionRoot = Path.Combine(managerRoot, "versions", "1.2.13");
+            Directory.CreateDirectory(versionRoot);
+            File.WriteAllText(Path.Combine(versionRoot, "release-manifest.json"), "{\"version\":\"1.2.13\"}");
+            var settings = new McpEditorSettings
+            {
+                RuntimeMode = "machine",
+                RuntimeVersion = "1.2.13",
+                MachineRuntimeRoot = managerRoot,
+            };
+            var resolver = new McpPathResolver(() => projectRoot);
+            var expectedMachinePath = Path.Combine(versionRoot, "runtime", "win-x64", "unity-roslyn-compiler.exe");
+
+            var resolved = resolver.ResolveRoslynCompilerPath(settings);
+
+            Assert.That(resolved, Is.EqualTo(Path.GetFullPath(expectedMachinePath)));
+            Assert.That(resolved, Is.Not.EqualTo(Path.GetFullPath(projectCompilerPath)));
+            Assert.That(File.Exists(resolved), Is.False);
+        }
+
         [Test]
         [Timeout(5000)]
         [Category("AGBM_Discovery")]

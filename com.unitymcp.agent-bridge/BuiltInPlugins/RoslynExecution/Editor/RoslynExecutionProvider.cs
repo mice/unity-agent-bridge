@@ -8,7 +8,10 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
     {
         public IEnumerable<IUnityMcpTool> GetTools(UnityMcpPluginContext context)
         {
-            if (!RoslynExecutionRuntimeState.TryResolveToolAvailability(context?.ProjectRoot, out var availability))
+            if (!RoslynExecutionRuntimeState.TryResolveToolAvailability(
+                    context?.ProjectRoot,
+                    context?.RoslynCompilerPayload,
+                    out var availability))
             {
                 return new IUnityMcpTool[0];
             }

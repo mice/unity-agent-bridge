@@ -111,7 +111,7 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(allowed, Is.False);
             Assert.That(denial.DenialCategory, Is.EqualTo("project_write"));
             Assert.That(denial.MatchedOperation, Is.EqualTo("AssetDatabase.SaveAssets"));
-            Assert.That(denial.Message, Does.Contain("query_only"));
+            Assert.That(denial.Message, Does.Contain("Query-only policy denied"));
         }
 
         [Test]
@@ -299,6 +299,73 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(wrapped, Does.Contain("private static object __Run()"));
             Assert.That(wrapped, Does.Contain(body));
             Assert.That(wrapped, Does.Contain("RoslynExecutionRuntimeSerializer.SerializeSuccess"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_201.md
+        [Test]
+        [Category("AGB_Core")]
+        [Category("AGB_201")]
+        public void MachineRuntimeInvocation_WritesProjectTempWithoutWritingMachineVersion()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "RoslynExecutionTests", Guid.NewGuid().ToString("N"));
+            var projectRoot = Path.Combine(root, "UnityProject");
+            var machineCompilerPath = Path.Combine(root, "MachineRuntime", "versions", "1.2.13", "runtime", "win-x64", "unity-roslyn-compiler.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(machineCompilerPath) ?? root);
+            File.WriteAllText(machineCompilerPath, "immutable-machine-payload");
+
+            try
+            {
+                var invocationRoot = RoslynExecutionUtility.GetInvocationRoot(projectRoot, "machine-invocation");
+                var compilerWorkingDirectory = string.Empty;
+                var requestPath = string.Empty;
+                var service = new RoslynExecutionService(
+                    new RoslynExecutionAvailability
+                    {
+                        ProjectRoot = projectRoot,
+                        CompilerPath = machineCompilerPath,
+                        RuntimeMode = "machine",
+                        RuntimeVersion = "1.2.13"
+                    },
+                    null,
+                    (compilerPath, request, workingDirectory, timeoutMs) =>
+                    {
+                        requestPath = request;
+                        compilerWorkingDirectory = workingDirectory;
+                        return new CompilerProcessResult
+                        {
+                            ExitCode = 1,
+                            Stderr = "deliberate test compiler failure"
+                        };
+                    });
+
+                var result = service.Execute(
+                    new UnityMcpToolContext
+                    {
+                        CommandId = "machine-invocation",
+                        ProjectRoot = projectRoot,
+                        TempRoot = "Temp/AgentBridge",
+                        TimeoutMs = RoslynExecutionContracts.DefaultTimeoutMs
+                    },
+                    new ExecuteCSharpArgs
+                    {
+                        code = "return 42;",
+                        timeoutMs = RoslynExecutionContracts.DefaultTimeoutMs
+                    },
+                    null);
+
+                Assert.That(invocationRoot, Is.EqualTo(Path.Combine(projectRoot, "Temp", "AgentBridge", "RoslynExecution", "machine-invocation")));
+                Assert.That(result.Status, Is.EqualTo(RoslynExecutionContracts.PhaseProxyFailed));
+                Assert.That(File.Exists(Path.Combine(invocationRoot, RoslynExecutionContracts.EntrySourceFileName)), Is.True);
+                Assert.That(File.Exists(requestPath), Is.True);
+                Assert.That(File.ReadAllText(requestPath), Does.Contain(Path.Combine(invocationRoot, "RuntimeScript.dll").Replace("\\", "\\\\")));
+                Assert.That(compilerWorkingDirectory, Is.EqualTo(Path.GetDirectoryName(machineCompilerPath)));
+                Assert.That(File.ReadAllText(machineCompilerPath), Is.EqualTo("immutable-machine-payload"));
+                Assert.That(Directory.GetFiles(Path.GetDirectoryName(machineCompilerPath) ?? root, "*", SearchOption.AllDirectories), Is.EqualTo(new[] { machineCompilerPath }));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
         }
 
         [Test]

@@ -498,6 +498,73 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(policyDenied.errors[0].code, Is.EqualTo("ROSLYN_POLICY_DENIED"));
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_199.md
+        [Test]
+        [Category("AGB_Core")]
+        [Category("AGB_199")]
+        public void Discovery_RoslynExecution_MachinePayload_RegistersWithoutProjectRuntime()
+        {
+            var settings = CreatePluginOnlySettings();
+            settings.pluginRegistrations.Add(CreateRoslynExecutionRegistration());
+            WriteRoslynSettingsAsset(true);
+            var machineRoot = Path.Combine(_projectRoot, "MachineRuntime");
+            var compilerPath = CreateMachineRoslynCompilerPayload(machineRoot, "1.2.13");
+
+            var paths = new AgentBridgePaths(_projectRoot, settings);
+            paths.EnsureDirectories();
+            var registry = new AgentToolRegistry();
+            registry.Discover();
+            var result = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, new FileAgentBridgeLogger(paths.BridgeLogPath), new UnityMcpPluginHostServices
+            {
+                RoslynCompilerPayload = new UnityMcpRoslynCompilerPayload
+                {
+                    CompilerPath = compilerPath,
+                    RuntimeMode = "machine",
+                    RuntimeVersion = "1.2.13"
+                }
+            });
+
+            Assert.That(File.Exists(RoslynExecutionProjectCompilerPath()), Is.False);
+            Assert.That(registry.TryGetTool("unity.execute_csharp", out _), Is.True);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.execute_csharp"), Is.True);
+            Assert.That(File.Exists(compilerPath), Is.True);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_200.md
+        [Test]
+        [Category("AGB_Core")]
+        [Category("AGB_200")]
+        public void Discovery_RoslynExecution_MissingMachinePayload_DoesNotFallbackToProjectRuntime()
+        {
+            var settings = CreatePluginOnlySettings();
+            settings.pluginRegistrations.Add(CreateRoslynExecutionRegistration());
+            WriteRoslynSettingsAsset(true);
+            CreatePreparedRoslynCompilerPayload();
+            var machineRoot = Path.Combine(_projectRoot, "MachineRuntime");
+            var versionRoot = Path.Combine(machineRoot, "versions", "1.2.13");
+            Directory.CreateDirectory(versionRoot);
+            File.WriteAllText(Path.Combine(versionRoot, "release-manifest.json"), "{\"version\":\"1.2.13\"}");
+            var missingMachineCompilerPath = Path.Combine(versionRoot, "runtime", "win-x64", "unity-roslyn-compiler.exe");
+
+            var paths = new AgentBridgePaths(_projectRoot, settings);
+            paths.EnsureDirectories();
+            var registry = new AgentToolRegistry();
+            registry.Discover();
+            var result = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, new FileAgentBridgeLogger(paths.BridgeLogPath), new UnityMcpPluginHostServices
+            {
+                RoslynCompilerPayload = new UnityMcpRoslynCompilerPayload
+                {
+                    CompilerPath = missingMachineCompilerPath,
+                    RuntimeMode = "machine",
+                    RuntimeVersion = "1.2.13"
+                }
+            });
+
+            Assert.That(File.Exists(RoslynExecutionProjectCompilerPath()), Is.True);
+            Assert.That(registry.TryGetTool("unity.execute_csharp", out _), Is.False);
+            Assert.That(result.Catalog.tools.Any(item => item.bridgeTool == "unity.execute_csharp"), Is.False);
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_161.md
         [Test]
         [Category("AGB_Core")]
@@ -601,7 +668,14 @@ namespace UnityMcp.AgentBridge.Tests
 
         private void CreatePreparedRoslynCompilerPayload()
         {
-            var compilerPath = Path.Combine(
+            var compilerPath = RoslynExecutionProjectCompilerPath();
+            Directory.CreateDirectory(Path.GetDirectoryName(compilerPath) ?? _projectRoot);
+            File.WriteAllText(compilerPath, "stub");
+        }
+
+        private string RoslynExecutionProjectCompilerPath()
+        {
+            return Path.Combine(
                 _projectRoot,
                 ".unitymcp",
                 "runtime",
@@ -610,8 +684,16 @@ namespace UnityMcp.AgentBridge.Tests
                 "out",
                 "win-x64",
                 "unity-roslyn-compiler.exe");
-            Directory.CreateDirectory(Path.GetDirectoryName(compilerPath) ?? _projectRoot);
+        }
+
+        private string CreateMachineRoslynCompilerPayload(string managerRoot, string version)
+        {
+            var versionRoot = Path.Combine(managerRoot, "versions", version);
+            var compilerPath = Path.Combine(versionRoot, "runtime", "win-x64", "unity-roslyn-compiler.exe");
+            Directory.CreateDirectory(Path.GetDirectoryName(compilerPath) ?? versionRoot);
+            File.WriteAllText(Path.Combine(versionRoot, "release-manifest.json"), "{\"version\":\"" + version + "\"}");
             File.WriteAllText(compilerPath, "stub");
+            return compilerPath;
         }
 
         [UnityMcpPlugin("Test.ProjectProfile", "1.0.0")]

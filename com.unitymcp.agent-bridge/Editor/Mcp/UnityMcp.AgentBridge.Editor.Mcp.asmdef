@@ -3,7 +3,8 @@
   "rootNamespace": "UnityMcp.AgentBridge.Mcp",
   "references": [
     "UnityMcp.AgentBridge.SharedProtocolCore",
-    "UnityMcp.AgentBridge.Editor"
+    "UnityMcp.AgentBridge.Editor",
+    "UnityMcp.Plugin.Abstractions"
   ],
   "includePlatforms": [
     "Editor"
