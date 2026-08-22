@@ -198,8 +198,8 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.4"));
             Assert.That(versions[0].IsInstalled, Is.False);
             Assert.That(versions[0].ArtifactUrl, Is.Empty);
-            Assert.That(versions[0].SourceArchiveUrl, Is.EqualTo("https://github.com/mice/unity-agent-bridge/archive/refs/tags/v1.2.12-rc.4.zip"));
-            Assert.That(versions[0].CommitSha, Is.EqualTo("2a6dc3aee6c74a7d84249df9cefd35c95d2a4667"));
+            Assert.That(versions[0].SourceArchiveUrl, Is.EqualTo("https://github.com/mice/unity-agent-bridge/archive/ad401b934af78167697c6894fd217fb44c5e71fb.zip"));
+            Assert.That(versions[0].CommitSha, Is.EqualTo("ad401b934af78167697c6894fd217fb44c5e71fb"));
             Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.3"));
             Assert.That(versions[1].ArtifactUrl, Is.Empty);
             Assert.That(versions[1].CommitSha, Is.EqualTo("956f695ade6ab73c947bad9b78a01fc4fc2a154a"));

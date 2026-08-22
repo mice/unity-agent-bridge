@@ -323,11 +323,13 @@ namespace UnityMcp.AgentBridge.Mcp
                     ArtifactUrl = version == "1.2.12-rc.4" || version == "1.2.12-rc.3"
                         ? string.Empty
                         : CreateGitHubArtifactUrl(version),
-                    SourceArchiveUrl = version == "1.2.12-rc.3"
-                        ? "https://github.com/mice/unity-agent-bridge/archive/956f695ade6ab73c947bad9b78a01fc4fc2a154a.zip"
-                        : CreateGitHubSourceArchiveUrl(tag),
+                    SourceArchiveUrl = version == "1.2.12-rc.4"
+                        ? "https://github.com/mice/unity-agent-bridge/archive/ad401b934af78167697c6894fd217fb44c5e71fb.zip"
+                        : version == "1.2.12-rc.3"
+                            ? "https://github.com/mice/unity-agent-bridge/archive/956f695ade6ab73c947bad9b78a01fc4fc2a154a.zip"
+                            : CreateGitHubSourceArchiveUrl(tag),
                     CommitSha = version == "1.2.12-rc.4"
-                        ? "2a6dc3aee6c74a7d84249df9cefd35c95d2a4667"
+                        ? "ad401b934af78167697c6894fd217fb44c5e71fb"
                         : version == "1.2.12-rc.3"
                             ? "956f695ade6ab73c947bad9b78a01fc4fc2a154a"
                             : version == "1.2.12-rc.2"
