@@ -10,6 +10,43 @@ namespace UnityMcp.AgentBridge.Tests
 {
     public sealed class RoslynExecutionTests
     {
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_237.md
+        [Test]
+        [Category("AGBM_237")]
+        public void TimeoutContract_DefaultAllowsColdStartAndSchemaStaysAligned()
+        {
+            var args = new ExecuteCSharpArgs();
+            var tool = new UnityExecuteCSharpTool(new RoslynExecutionAvailability());
+            var schema = JsonUtility.FromJson<RoslynArgsSchema>(RoslynExecutionContracts.ArgsSchemaJson);
+            var timeoutSchema = schema?.properties?.timeoutMs;
+
+            Assert.That(RoslynExecutionContracts.DefaultTimeoutMs, Is.EqualTo(10000));
+            Assert.That(RoslynExecutionContracts.MaximumTimeoutMs, Is.EqualTo(60000));
+            Assert.That(args.timeoutMs, Is.EqualTo(RoslynExecutionContracts.DefaultTimeoutMs));
+            Assert.That(tool.Descriptor.DefaultTimeoutMs, Is.EqualTo(RoslynExecutionContracts.DefaultTimeoutMs));
+            Assert.That(timeoutSchema?.@default, Is.EqualTo(RoslynExecutionContracts.DefaultTimeoutMs));
+            Assert.That(timeoutSchema?.maximum, Is.EqualTo(RoslynExecutionContracts.MaximumTimeoutMs));
+        }
+
+        [Serializable]
+        private sealed class RoslynArgsSchema
+        {
+            public RoslynSchemaProperties properties;
+        }
+
+        [Serializable]
+        private sealed class RoslynSchemaProperties
+        {
+            public RoslynTimeoutSchema timeoutMs;
+        }
+
+        [Serializable]
+        private sealed class RoslynTimeoutSchema
+        {
+            public int maximum;
+            public int @default;
+        }
+
         [Test]
         [Category("AGB_Core")]
         public void Validation_BlockedApi_ReturnsFalseWithBlockedToken()
@@ -199,11 +236,11 @@ namespace UnityMcp.AgentBridge.Tests
             {
                 CommandId = commandId,
                 ToolName = "unity.execute_csharp",
-                TimeoutMs = RoslynExecutionContracts.MaximumTimeoutMs,
+                TimeoutMs = RoslynExecutionContracts.DefaultTimeoutMs,
                 RawArgsJson = JsonUtility.ToJson(new ExecuteCSharpArgs
                 {
                     code = code,
-                    timeoutMs = RoslynExecutionContracts.MaximumTimeoutMs,
+                    timeoutMs = RoslynExecutionContracts.DefaultTimeoutMs,
                     executionPolicy = RoslynExecutionContracts.PolicyQueryOnly
                 }),
                 ProjectRoot = projectRoot,

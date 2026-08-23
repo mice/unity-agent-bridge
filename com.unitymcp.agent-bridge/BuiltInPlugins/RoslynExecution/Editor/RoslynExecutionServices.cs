@@ -30,9 +30,9 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
         public const string PhaseExecuted = "executed";
         public const string PhaseTimeout = "timeout";
         public const string SerializationFailurePrefix = "serialization_failed:";
-        public const int DefaultTimeoutMs = 2000;
+        public const int DefaultTimeoutMs = 10000;
         public const int MinimumTimeoutMs = 100;
-        public const int MaximumTimeoutMs = 10000;
+        public const int MaximumTimeoutMs = 60000;
         public const int MaxBytes = 65536;
         public const int MaxCollectionLength = 200;
         public const int MaxDepth = 6;
@@ -44,7 +44,7 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
         public const string PolicyVersion = "query-only.v1";
         public const string PolicyDeniedCode = "ROSLYN_POLICY_DENIED";
         public const string ArgsSchemaJson =
-            "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"unity.execute_csharp args\",\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":65536,\"description\":\"AI-generated C# body for private static object __Run(). The Unity tool wraps this body in the fixed Entry.Run JSON wrapper.\"},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":10000,\"default\":2000},\"executionPolicy\":{\"type\":\"string\",\"enum\":[\"trusted\",\"query_only\"],\"default\":\"trusted\",\"description\":\"Execution guardrail policy. query_only rejects known project mutations and escape hatches but is not a sandbox.\"}}}";
+            "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"unity.execute_csharp args\",\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"code\"],\"properties\":{\"code\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":65536,\"description\":\"AI-generated C# body for private static object __Run(). The Unity tool wraps this body in the fixed Entry.Run JSON wrapper.\"},\"timeoutMs\":{\"type\":\"integer\",\"minimum\":100,\"maximum\":60000,\"default\":10000},\"executionPolicy\":{\"type\":\"string\",\"enum\":[\"trusted\",\"query_only\"],\"default\":\"trusted\",\"description\":\"Execution guardrail policy. query_only rejects known project mutations and escape hatches but is not a sandbox.\"}}}";
 
         public static RoslynExecutionLimit CreateLimit()
         {
@@ -364,7 +364,7 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
 
             if (args.timeoutMs < RoslynExecutionContracts.MinimumTimeoutMs || args.timeoutMs > RoslynExecutionContracts.MaximumTimeoutMs)
             {
-                validationMessage = "timeoutMs must be in the range 100..10000.";
+                validationMessage = $"timeoutMs must be in the range {RoslynExecutionContracts.MinimumTimeoutMs}..{RoslynExecutionContracts.MaximumTimeoutMs}.";
                 return false;
             }
 

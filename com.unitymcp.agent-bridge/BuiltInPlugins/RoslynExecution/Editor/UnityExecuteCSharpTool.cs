@@ -20,7 +20,7 @@ namespace UnityMcp.BuiltInPlugins.RoslynExecution
             Name = "unity.execute_csharp",
             Title = "Unity Execute CSharp",
             Description = "Run trusted or query-only local Unity Editor automation from a __Run() method body. query_only rejects known project mutations and escape hatches but is not a security sandbox. Code runs inside the Unity Editor process, and synchronous execution may not interrupt dead loops or blocking calls.",
-            DefaultTimeoutMs = 2000,
+            DefaultTimeoutMs = RoslynExecutionContracts.DefaultTimeoutMs,
             AllowedRuntimeModes = UnityMcpToolRuntimeModes.Edit,
             SideEffect = UnityMcpToolSideEffect.RunsUserCode,
             MayTriggerDomainReload = false
