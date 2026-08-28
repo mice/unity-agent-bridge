@@ -71,8 +71,31 @@ namespace UnityMcp.AgentBridge
                 }
             }
 
+            var installedPlugins = UnityMcpPluginManifestDiscovery.Discover(settings);
+            result.InstalledPlugins.AddRange(installedPlugins);
+            foreach (var plugin in installedPlugins.Where(item => item.Enabled && item.Ready))
+            {
+                try
+                {
+                    ProcessManifestPlugin(plugin, registry, paths, logger, result, builtInNames, pluginNames, pluginMcpNames, hostServices);
+                }
+                catch (Exception exception)
+                {
+                    plugin.Ready = false;
+                    plugin.Exposed = false;
+                    plugin.DiagnosticCode = UnityMcpPluginDiagnosticCodes.ProviderInvalid;
+                    plugin.DiagnosticMessage = exception.Message;
+                    logger?.Exception("plugin_manifest_provider_failed", exception);
+                }
+            }
+
             WriteCatalog(paths.PluginCatalogPath, result.Catalog, logger);
             return result;
+        }
+
+        public static IReadOnlyList<UnityMcpInstalledPlugin> DiscoverInstalledPlugins(AgentBridgeSettings settings)
+        {
+            return UnityMcpPluginManifestDiscovery.Discover(settings);
         }
 
         private static UnityMcpRoslynCompilerPayload ResolveRoslynCompilerPayload(AgentBridgePaths paths)
@@ -186,6 +209,57 @@ namespace UnityMcp.AgentBridge
                 {
                     logger?.Exception("plugin_provider_discover_failed", exception);
                 }
+            }
+        }
+
+        private static void ProcessManifestPlugin(
+            UnityMcpInstalledPlugin plugin,
+            AgentToolRegistry registry,
+            AgentBridgePaths paths,
+            FileAgentBridgeLogger logger,
+            UnityMcpPluginDiscoveryResult result,
+            ISet<string> builtInNames,
+            ISet<string> pluginNames,
+            ISet<string> pluginMcpNames,
+            UnityMcpPluginHostServices hostServices)
+        {
+            var provider = Activator.CreateInstance(plugin.ProviderType) as IUnityMcpToolProvider;
+            if (provider == null)
+            {
+                throw new InvalidOperationException($"Provider '{plugin.ProviderType?.FullName}' could not be instantiated.");
+            }
+
+            var attribute = plugin.ProviderType.GetCustomAttribute<UnityMcpPluginAttribute>();
+            if (attribute == null)
+            {
+                throw new InvalidOperationException($"Provider '{plugin.ProviderType.FullName}' is missing UnityMcpPluginAttribute.");
+            }
+
+            var pluginContext = new UnityMcpPluginContext
+            {
+                ProjectRoot = paths.ProjectRoot,
+                AssemblyName = plugin.Assembly.GetName().Name ?? string.Empty,
+                PluginId = plugin.PluginId,
+                PluginVersion = plugin.Version,
+                PluginRoot = plugin.PackageRoot,
+                Payloads = plugin.Payloads,
+                RoslynCompilerPayload = hostServices.RoslynCompilerPayload,
+                HostServices = hostServices
+            };
+            UnityMcpPluginContractValidator.ValidatePluginContext(pluginContext);
+
+            var catalogCount = result.Catalog.tools.Count;
+            var tools = provider.GetTools(pluginContext) ?? Array.Empty<IUnityMcpTool>();
+            foreach (var tool in tools)
+            {
+                RegisterPluginTool(tool, attribute, plugin.Assembly, registry, paths, logger, result, builtInNames, pluginNames, pluginMcpNames);
+            }
+
+            plugin.Exposed = result.Catalog.tools.Count > catalogCount;
+            if (!plugin.Exposed)
+            {
+                plugin.DiagnosticCode = UnityMcpPluginDiagnosticCodes.ProviderInvalid;
+                plugin.DiagnosticMessage = "Provider returned no valid tools.";
             }
         }
 
@@ -358,6 +432,8 @@ namespace UnityMcp.AgentBridge
     public sealed class UnityMcpPluginDiscoveryResult
     {
         public UnityMcpPluginCatalog Catalog { get; } = new UnityMcpPluginCatalog();
+
+        public List<UnityMcpInstalledPlugin> InstalledPlugins { get; } = new List<UnityMcpInstalledPlugin>();
     }
 
     public sealed class UnityMcpPluginHostServices

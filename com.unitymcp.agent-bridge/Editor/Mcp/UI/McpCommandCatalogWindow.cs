@@ -39,6 +39,16 @@ namespace UnityMcp.AgentBridge.Mcp
             Repaint();
         }
 
+        internal int DescriptorCount => _descriptors.Count;
+
+        internal static void RefreshOpenWindows(IReadOnlyList<ToolDescriptor> descriptors)
+        {
+            foreach (var window in Resources.FindObjectsOfTypeAll<McpCommandCatalogWindow>())
+            {
+                window.SetDescriptors(descriptors);
+            }
+        }
+
         private void OnGUI()
         {
             EditorGUILayout.Space(8f);

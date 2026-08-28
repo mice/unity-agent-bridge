@@ -6,6 +6,11 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Changed
+
+- Breaking: extracted Lua lint and compile tools into the explicitly enabled `com.unitymcp.lua-gc-lint` package while preserving their bridge and MCP names.
+- Removed the built-in LuaTools source, Agent Bridge Lua source-root setting, packaged linter payload, and project-local runtime copy step.
+
 ## [1.2.12-rc.4] - 2026-08-23
 
 ### Fixed

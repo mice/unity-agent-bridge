@@ -378,7 +378,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Test]
         [Category("AGB_ReadOnly")]
         [Category("AGB_048")]
-        public void ReadOnlyToolSchemas_Exist()
+        public void ReadOnlyToolSchemas_Exist_AndExternalLuaSchemasAreNotOwnedByAgentBridge()
         {
             Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.ping.args.schema.json")), Is.True);
             Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.get_console.args.schema.json")), Is.True);
@@ -393,12 +393,12 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.open_scene.args.schema.json")), Is.True);
             Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.open_scene.metrics.schema.json")), Is.True);
             Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.open_scene.payload.schema.json")), Is.True);
-            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.lint.args.schema.json")), Is.True);
-            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.lint.metrics.schema.json")), Is.True);
-            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.lint.payload.schema.json")), Is.True);
-            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.compile.args.schema.json")), Is.True);
-            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.compile.metrics.schema.json")), Is.True);
-            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.compile.payload.schema.json")), Is.True);
+            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.lint.args.schema.json")), Is.False);
+            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.lint.metrics.schema.json")), Is.False);
+            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.lint.payload.schema.json")), Is.False);
+            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.compile.args.schema.json")), Is.False);
+            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.compile.metrics.schema.json")), Is.False);
+            Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.lua.compile.payload.schema.json")), Is.False);
             Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.get_hierarchy.args.schema.json")), Is.True);
             Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.get_hierarchy.metrics.schema.json")), Is.True);
             Assert.That(File.Exists(GetPackageRelativePath("Documentation~/schemas/unity.get_hierarchy.payload.schema.json")), Is.True);

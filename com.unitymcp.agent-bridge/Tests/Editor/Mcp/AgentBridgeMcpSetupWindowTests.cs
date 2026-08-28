@@ -1,5 +1,6 @@
 using NUnit.Framework;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityMcp.AgentBridge;
@@ -37,6 +38,125 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                 AgentBridgeMcpSetupWindow.IsRuntimeCompatibilityBlocking("blocking: prerelease package/runtime exact-match required"),
                 Is.True);
             Assert.That(AgentBridgeMcpSetupWindow.EvaluateRuntimeCompatibility("1.2.12", "1.2.13"), Is.EqualTo("warning: patch/prerelease difference"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_238.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_238")]
+        public void PluginSection_StateSummary_DistinguishesInstalledEnabledReadyAndExposed()
+        {
+            var plugin = new UnityMcpInstalledPlugin
+            {
+                Installed = true,
+                Enabled = false,
+                Ready = true,
+                Exposed = false
+            };
+
+            Assert.That(
+                UnityMcpPluginSection.GetStateSummary(plugin),
+                Is.EqualTo("Installed: Yes | Enabled: No | Ready: Yes | Exposed: No"));
+
+            plugin.Enabled = true;
+            plugin.Exposed = true;
+            Assert.That(
+                UnityMcpPluginSection.GetStateSummary(plugin),
+                Is.EqualTo("Installed: Yes | Enabled: Yes | Ready: Yes | Exposed: Yes"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_239.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_239")]
+        public void PluginSection_EnableRefreshUpgradeAndRemoval_ReconcilesCurrentCandidates()
+        {
+            var candidates = new System.Collections.Generic.List<UnityMcpInstalledPlugin>
+            {
+                new UnityMcpInstalledPlugin
+                {
+                    PluginId = "com.example.plugin",
+                    DisplayName = "Example",
+                    Version = "0.1.0",
+                    Installed = true,
+                    Ready = true
+                }
+            };
+            string changedId = null;
+            var changedEnabled = false;
+            var refreshCount = 0;
+            var section = new UnityMcpPluginSection(
+                () => candidates.ToArray(),
+                (id, enabled) =>
+                {
+                    changedId = id;
+                    changedEnabled = enabled;
+                    candidates[0].Enabled = enabled;
+                    candidates[0].Exposed = enabled;
+                },
+                () => refreshCount++);
+
+            section.Refresh();
+            section.SetEnabled("com.example.plugin", true);
+            Assert.That(changedId, Is.EqualTo("com.example.plugin"));
+            Assert.That(changedEnabled, Is.True);
+            Assert.That(section.Plugins.Single().Exposed, Is.True);
+
+            candidates[0].Version = "0.2.0";
+            section.RefreshRuntime();
+            Assert.That(refreshCount, Is.EqualTo(1));
+            Assert.That(section.Plugins.Single().Version, Is.EqualTo("0.2.0"));
+
+            candidates.Clear();
+            section.RefreshRuntime();
+            Assert.That(section.Plugins, Is.Empty);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_240.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_240")]
+        public void PluginSection_InvalidCandidate_RemainsVisibleWithDiagnostic()
+        {
+            var invalid = new UnityMcpInstalledPlugin
+            {
+                PluginId = "com.example.invalid",
+                Installed = true,
+                Enabled = true,
+                Ready = false,
+                Exposed = false,
+                DiagnosticCode = UnityMcpPluginDiagnosticCodes.PayloadHashMismatch,
+                DiagnosticMessage = "Payload hash mismatch."
+            };
+            var section = new UnityMcpPluginSection(
+                () => new[] { invalid },
+                (id, enabled) => { },
+                () => { });
+
+            section.Refresh();
+
+            Assert.That(section.Plugins.Single(), Is.SameAs(invalid));
+            Assert.That(section.Plugins.Single().DiagnosticCode, Is.EqualTo("UNITYMCP_PLUGIN_PAYLOAD_HASH_MISMATCH"));
+            Assert.That(UnityMcpPluginSection.GetStateSummary(invalid), Does.Contain("Ready: No"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_241.md
+        [Test]
+        [Category("AGBM_UI")]
+        [Category("AGBM_241")]
+        public void CommandCatalogWindow_RefreshOpenWindows_ReplacesStaleDescriptors()
+        {
+            var window = ScriptableObject.CreateInstance<McpCommandCatalogWindow>();
+            window.Show();
+            var registry = new AgentToolRegistry();
+            registry.Discover();
+            window.SetDescriptors(registry.ListTools());
+            Assert.That(window.DescriptorCount, Is.GreaterThan(0));
+
+            McpCommandCatalogWindow.RefreshOpenWindows(new ToolDescriptor[0]);
+
+            Assert.That(window.DescriptorCount, Is.Zero);
+            window.Close();
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_221.md

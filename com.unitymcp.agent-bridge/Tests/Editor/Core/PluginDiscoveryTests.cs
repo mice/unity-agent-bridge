@@ -58,8 +58,7 @@ namespace UnityMcp.AgentBridge.Tests
             var settings = AgentBridgeSettingsLoader.CreateDefaultSettings();
             settings.pluginRegistrations.RemoveAll(registration =>
                 registration != null &&
-                registration.assemblyName != "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics" &&
-                registration.assemblyName != "UnityMcp.BuiltInPlugins.LuaTools");
+                registration.assemblyName != "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics");
 
             InvokeDefaultPluginMigration(settings);
 
@@ -69,7 +68,7 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.TestRunner"), Is.True);
             Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.RoslynExecution"), Is.True);
             Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics"), Is.True);
-            Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.LuaTools"), Is.True);
+            Assert.That(settings.pluginRegistrations.Any(registration => registration.assemblyName == "UnityMcp.BuiltInPlugins.LuaTools"), Is.False);
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_157.md

@@ -24,6 +24,7 @@ namespace UnityMcp.AgentBridge.Mcp
         private McpStatusSection _statusSection;
         private McpClientConfigSection _clientConfigSection;
         private McpDiagnosticsSection _diagnosticsSection;
+        private UnityMcpPluginSection _pluginSection;
         private McpEditorSettings _settings;
         private McpEnvironmentSnapshot _snapshot;
         private IMcpClientConfigWriter _codexWriter;
@@ -87,6 +88,10 @@ namespace UnityMcp.AgentBridge.Mcp
             _statusSection = new McpStatusSection();
             _clientConfigSection = new McpClientConfigSection(DisabledActionTooltip);
             _diagnosticsSection = new McpDiagnosticsSection(DisabledActionTooltip);
+            _pluginSection = new UnityMcpPluginSection(
+                DiscoverInstalledPlugins,
+                SetExternalPluginEnabled,
+                RefreshExternalPlugins);
             _settingsStore = new McpEditorSettingsStore();
             _environmentProbe = new McpEnvironmentProbe(new McpPathResolver(), new ToolVersionParser(), null);
             _pathResolver = new McpPathResolver();
@@ -120,6 +125,7 @@ namespace UnityMcp.AgentBridge.Mcp
             _aiQuickConnectMessage = string.Empty;
             _aiQuickConnectMessageType = MessageType.None;
             _toolFacade = CreateToolFacade();
+            _pluginSection.Refresh();
         }
 
         private void OnGUI()
@@ -151,6 +157,8 @@ namespace UnityMcp.AgentBridge.Mcp
                 ClearDiagnostics);
 
             EditorGUILayout.Space(12f);
+            _pluginSection.Draw();
+            EditorGUILayout.Space(12f);
             DrawCommandListEntryPoint();
             EditorGUILayout.Space(12f);
             _showAdvancedDetails = EditorGUILayout.Foldout(_showAdvancedDetails, "Advanced Details", true);
@@ -164,10 +172,34 @@ namespace UnityMcp.AgentBridge.Mcp
 
         private void EnsureInitialized()
         {
-            if (_statusSection == null || _clientConfigSection == null || _diagnosticsSection == null)
+            if (_statusSection == null || _clientConfigSection == null || _diagnosticsSection == null || _pluginSection == null)
             {
                 OnEnable();
             }
+        }
+
+        private static System.Collections.Generic.IReadOnlyList<UnityMcpInstalledPlugin> DiscoverInstalledPlugins()
+        {
+            return UnityMcpPluginRuntime.DiscoverInstalledPlugins(AgentBridgeSettingsLoader.Load().Settings);
+        }
+
+        private void SetExternalPluginEnabled(string pluginId, bool enabled)
+        {
+            UnityMcpExternalPluginLifecycle.PersistEnabled(pluginId, enabled);
+            RefreshPluginPresentation();
+        }
+
+        private void RefreshExternalPlugins()
+        {
+            UnityMcpExternalPluginLifecycle.Refresh();
+            RefreshPluginPresentation();
+        }
+
+        private void RefreshPluginPresentation()
+        {
+            _toolFacade = CreateToolFacade();
+            McpCommandCatalogWindow.RefreshOpenWindows(_toolFacade?.ListTools());
+            Repaint();
         }
 
         private void QueueInitialDiagnosticsIfNeeded()

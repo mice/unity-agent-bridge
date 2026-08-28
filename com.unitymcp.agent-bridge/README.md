@@ -8,7 +8,7 @@
 - Declared package compatibility: `2022.3+`
 - Runtime support: none; this package is Editor-only
 - External requirements for MCP workflows: a supported MCP client such as Codex, Claude Code, Cursor, GitHub Copilot, or Grok, plus .NET 8 SDK for building the project-local MCP runtime from the Setup window.
-- Lua tooling MVP scope: Windows x64 `lua-gc-lint.exe` payload only.
+- External package plugins can carry platform-specific payloads without copying them into the Agent Bridge runtime.
 
 ## Install
 
@@ -95,7 +95,7 @@ Project metadata is plugin-owned. Keep `UnityMcp.BuiltInPlugins.ProjectInfo` ena
 
 Roslyn execution is available only on Unity `2022.3.x` for this release line. The package ships compiler proxy source and runtime build wrappers, and `unity_csharp_execute` stays hidden until the project explicitly enables Roslyn execution and the local runtime build creates `.unitymcp/runtime/UnityAgentBridge/roslyn-execution/out/win-x64/unity-roslyn-compiler.exe`.
 
-Lua tools are provided by `UnityMcp.BuiltInPlugins.LuaTools` and expose bridge commands `unity.lua.lint` / `unity.lua.compile` as MCP tools `unity_lua_lint` / `unity_lua_compile` when the prepared runtime contains `.unitymcp/runtime/UnityAgentBridge/lua-gc-lint/out/win-x64/lua-gc-lint.exe`. The MVP package payload is Windows x64 only and is copied from `Tools~/UnityAgentBridge/lua-gc-lint/out/win-x64/lua-gc-lint.exe` during runtime preparation. Scans are limited to project-relative `Assets/` and `Packages/` paths, plus optional `AgentBridgeSettings.luaSourceRoots` entries for no-argument compile.
+Lua tools are delivered separately by `com.unitymcp.lua-gc-lint`. Install that UPM package, then explicitly enable `com.unitymcp.lua-gc-lint` in MCP Setup & Diagnostics. The external provider preserves bridge commands `unity.lua.lint` / `unity.lua.compile` and MCP names `unity_lua_lint` / `unity_lua_compile`, while executing its Windows x64 payload directly from the resolved package root. Agent Bridge does not copy or prepare `lua-gc-lint.exe`. Configure no-argument compile roots in `ProjectSettings/UnityMcpLuaGcLintSettings.json` as plugin-owned `luaSourceRoots`.
 
 ## Documentation Index
 
