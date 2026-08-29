@@ -308,6 +308,7 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             var versions = new[]
             {
+                "1.2.12-rc.5",
                 "1.2.12-rc.4",
                 "1.2.12-rc.3",
                 "1.2.12-rc.2",
@@ -320,21 +321,25 @@ namespace UnityMcp.AgentBridge.Mcp
                 {
                     Version = version,
                     Tag = tag,
-                    ArtifactUrl = version == "1.2.12-rc.4" || version == "1.2.12-rc.3"
+                    ArtifactUrl = version == "1.2.12-rc.5" || version == "1.2.12-rc.4" || version == "1.2.12-rc.3"
                         ? string.Empty
                         : CreateGitHubArtifactUrl(version),
-                    SourceArchiveUrl = version == "1.2.12-rc.4"
-                        ? "https://github.com/mice/unity-agent-bridge/archive/ad401b9c529f8f540213f81cf3a77c5b009bf711.zip"
-                        : version == "1.2.12-rc.3"
-                            ? "https://github.com/mice/unity-agent-bridge/archive/956f695ade6ab73c947bad9b78a01fc4fc2a154a.zip"
-                            : CreateGitHubSourceArchiveUrl(tag),
-                    CommitSha = version == "1.2.12-rc.4"
-                        ? "ad401b9c529f8f540213f81cf3a77c5b009bf711"
-                        : version == "1.2.12-rc.3"
-                            ? "956f695ade6ab73c947bad9b78a01fc4fc2a154a"
-                            : version == "1.2.12-rc.2"
-                                ? "fa667ca009bab9e5621e16751ab86d014e4ee80b"
-                                : string.Empty,
+                    SourceArchiveUrl = version == "1.2.12-rc.5"
+                        ? "https://github.com/mice/unity-agent-bridge/archive/94d0fe04fa3cdf50cc94d7eb4b3378d781bf3839.zip"
+                        : version == "1.2.12-rc.4"
+                            ? "https://github.com/mice/unity-agent-bridge/archive/ad401b9c529f8f540213f81cf3a77c5b009bf711.zip"
+                            : version == "1.2.12-rc.3"
+                                ? "https://github.com/mice/unity-agent-bridge/archive/956f695ade6ab73c947bad9b78a01fc4fc2a154a.zip"
+                                : CreateGitHubSourceArchiveUrl(tag),
+                    CommitSha = version == "1.2.12-rc.5"
+                        ? "94d0fe04fa3cdf50cc94d7eb4b3378d781bf3839"
+                        : version == "1.2.12-rc.4"
+                            ? "ad401b9c529f8f540213f81cf3a77c5b009bf711"
+                            : version == "1.2.12-rc.3"
+                                ? "956f695ade6ab73c947bad9b78a01fc4fc2a154a"
+                                : version == "1.2.12-rc.2"
+                                    ? "fa667ca009bab9e5621e16751ab86d014e4ee80b"
+                                    : string.Empty,
                     IsInstalled = IsUsableInstalledVersion(Path.Combine(managerRoot, "versions", version), version),
                 });
             }

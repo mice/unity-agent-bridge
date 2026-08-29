@@ -193,18 +193,20 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
             var versions = MachineRuntimeLocator.CreateBuiltInPublishedVersions(managerRoot);
 
-            Assert.That(versions.Count, Is.EqualTo(3));
-            Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.4"));
-            Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.4"));
+            Assert.That(versions.Count, Is.EqualTo(4));
+            Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.5"));
+            Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.5"));
             Assert.That(versions[0].IsInstalled, Is.False);
             Assert.That(versions[0].ArtifactUrl, Is.Empty);
-            Assert.That(versions[0].SourceArchiveUrl, Is.EqualTo("https://github.com/mice/unity-agent-bridge/archive/ad401b9c529f8f540213f81cf3a77c5b009bf711.zip"));
-            Assert.That(versions[0].CommitSha, Is.EqualTo("ad401b9c529f8f540213f81cf3a77c5b009bf711"));
-            Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.3"));
+            Assert.That(versions[0].SourceArchiveUrl, Is.EqualTo("https://github.com/mice/unity-agent-bridge/archive/94d0fe04fa3cdf50cc94d7eb4b3378d781bf3839.zip"));
+            Assert.That(versions[0].CommitSha, Is.EqualTo("94d0fe04fa3cdf50cc94d7eb4b3378d781bf3839"));
+            Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.4"));
             Assert.That(versions[1].ArtifactUrl, Is.Empty);
-            Assert.That(versions[1].CommitSha, Is.EqualTo("956f695ade6ab73c947bad9b78a01fc4fc2a154a"));
-            Assert.That(versions[2].Version, Is.EqualTo("1.2.12-rc.2"));
-            Assert.That(versions[2].CommitSha, Is.EqualTo("fa667ca009bab9e5621e16751ab86d014e4ee80b"));
+            Assert.That(versions[1].CommitSha, Is.EqualTo("ad401b9c529f8f540213f81cf3a77c5b009bf711"));
+            Assert.That(versions[2].Version, Is.EqualTo("1.2.12-rc.3"));
+            Assert.That(versions[2].CommitSha, Is.EqualTo("956f695ade6ab73c947bad9b78a01fc4fc2a154a"));
+            Assert.That(versions[3].Version, Is.EqualTo("1.2.12-rc.2"));
+            Assert.That(versions[3].CommitSha, Is.EqualTo("fa667ca009bab9e5621e16751ab86d014e4ee80b"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_209.md
@@ -225,10 +227,11 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                 });
 
                 Assert.That(Directory.Exists(Path.Combine(managerRoot, "releases")), Is.False);
-                Assert.That(versions.Count, Is.EqualTo(3));
-                Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.4"));
-                Assert.That(versions[1].Tag, Is.EqualTo("v1.2.12-rc.3"));
-                Assert.That(versions[2].Tag, Is.EqualTo("v1.2.12-rc.2"));
+                Assert.That(versions.Count, Is.EqualTo(4));
+                Assert.That(versions[0].Tag, Is.EqualTo("v1.2.12-rc.5"));
+                Assert.That(versions[1].Tag, Is.EqualTo("v1.2.12-rc.4"));
+                Assert.That(versions[2].Tag, Is.EqualTo("v1.2.12-rc.3"));
+                Assert.That(versions[3].Tag, Is.EqualTo("v1.2.12-rc.2"));
             }
             finally
             {
@@ -260,12 +263,13 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                     RuntimeMode = "machine",
                 });
 
-                Assert.That(versions.Count, Is.EqualTo(3));
-                Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.4"));
-                Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.3"));
-                Assert.That(versions[1].ArtifactUrl, Is.Empty);
-                Assert.That(versions[1].CommitSha, Is.EqualTo("956f695ade6ab73c947bad9b78a01fc4fc2a154a"));
-                Assert.That(versions[2].Version, Is.EqualTo("1.2.12-rc.2"));
+                Assert.That(versions.Count, Is.EqualTo(4));
+                Assert.That(versions[0].Version, Is.EqualTo("1.2.12-rc.5"));
+                Assert.That(versions[1].Version, Is.EqualTo("1.2.12-rc.4"));
+                Assert.That(versions[2].Version, Is.EqualTo("1.2.12-rc.3"));
+                Assert.That(versions[2].ArtifactUrl, Is.Empty);
+                Assert.That(versions[2].CommitSha, Is.EqualTo("956f695ade6ab73c947bad9b78a01fc4fc2a154a"));
+                Assert.That(versions[3].Version, Is.EqualTo("1.2.12-rc.2"));
             }
             finally
             {
