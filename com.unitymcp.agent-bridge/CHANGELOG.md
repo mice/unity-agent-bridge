@@ -6,6 +6,8 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.12-rc.5] - 2026-08-29
+
 ### Changed
 
 - Breaking: extracted Lua lint and compile tools into the explicitly enabled `com.unitymcp.lua-gc-lint` package while preserving their bridge and MCP names.
