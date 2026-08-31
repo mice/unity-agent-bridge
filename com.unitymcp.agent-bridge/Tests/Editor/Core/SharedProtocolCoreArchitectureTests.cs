@@ -33,6 +33,32 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(references, Does.Not.Contain("UnityEditor"));
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_213.md
+        [Test]
+        [Category("AGB_Core")]
+        [Category("AGB_213")]
+        public void McpToolNameMapper_MapsAllFrozenAndroidDebuggingTools()
+        {
+            var pairs = new[]
+            {
+                new[] { "unity.android.debug.status", "unity_android_debug_status" },
+                new[] { "unity.android.targets.list", "unity_android_targets_list" },
+                new[] { "unity.android.devices.list", "unity_android_devices_list" },
+                new[] { "unity.android.app.status.get", "unity_android_app_status_get" },
+                new[] { "unity.android.app.start", "unity_android_app_start" },
+                new[] { "unity.android.app.stop", "unity_android_app_stop" },
+                new[] { "unity.android.screenshot.capture", "unity_android_screenshot_capture" },
+                new[] { "unity.android.logcat.get", "unity_android_logcat_get" }
+            };
+
+            foreach (var pair in pairs)
+            {
+                Assert.That(McpToolNameMapper.ToCanonicalMcpName(pair[0]), Is.EqualTo(pair[1]), pair[0]);
+            }
+
+            Assert.That(McpToolNameMapper.TryToCanonicalMcpName("unity.android.status", out _), Is.False);
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_163.md
         [Test]
         [Category("AGB_Core")]

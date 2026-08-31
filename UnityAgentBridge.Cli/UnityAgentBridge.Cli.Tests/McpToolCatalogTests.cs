@@ -278,6 +278,29 @@ public sealed class McpToolCatalogTests
     }
 
     [TestMethod]
+    public void CanonicalNameMapper_MapsAllFrozenAndroidDebuggingTools()
+    {
+        var pairs = new[]
+        {
+            (Bridge: "unity.android.debug.status", Mcp: "unity_android_debug_status"),
+            (Bridge: "unity.android.targets.list", Mcp: "unity_android_targets_list"),
+            (Bridge: "unity.android.devices.list", Mcp: "unity_android_devices_list"),
+            (Bridge: "unity.android.app.status.get", Mcp: "unity_android_app_status_get"),
+            (Bridge: "unity.android.app.start", Mcp: "unity_android_app_start"),
+            (Bridge: "unity.android.app.stop", Mcp: "unity_android_app_stop"),
+            (Bridge: "unity.android.screenshot.capture", Mcp: "unity_android_screenshot_capture"),
+            (Bridge: "unity.android.logcat.get", Mcp: "unity_android_logcat_get")
+        };
+
+        foreach (var pair in pairs)
+        {
+            Assert.AreEqual(pair.Mcp, McpToolNameMapper.ToCanonicalMcpName(pair.Bridge), pair.Bridge);
+        }
+
+        Assert.IsFalse(McpToolNameMapper.TryToCanonicalMcpName("unity.android.status", out _));
+    }
+
+    [TestMethod]
     public void ToolResultAdaptationMapsContentStructuredContentAndIsError()
     {
         var rawJson = """{"schemaVersion":"1.0","status":"timeout","success":false,"summary":"Timed out waiting."}""";

@@ -6,6 +6,13 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.12-rc.6] - 2026-09-01
+
+### Fixed
+
+- Map all eight frozen Android Debugging external-plugin bridge names to their canonical MCP names in both the Unity catalog producer and package-contained MCP runtime.
+- Keep the two shared mapper source copies identical and preserve the conservative generic future-tool grammar.
+
 ## [1.2.12-rc.5] - 2026-08-29
 
 ### Changed
