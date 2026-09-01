@@ -1,5 +1,7 @@
 using ModelContextProtocol.Protocol;
+using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using UnityMcp.AgentBridge;
 using UnityAgentBridge.ExternalBridgeClientCore;
 
@@ -7,7 +9,23 @@ namespace UnityAgentBridge.Mcp;
 
 public static class McpToolCatalog
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private const int PluginCatalogVersion = 1;
+    private const int PluginCatalogMaxTools = 64;
+    private const int PluginCatalogMaxUtf8Bytes = 65536;
+    private const int PluginSchemaMaxUtf8Bytes = 1048576;
+    private static readonly Regex PluginIdPattern = new("^[a-z0-9][a-z0-9-]*(?:\\.[a-z0-9][a-z0-9-]*)+$", RegexOptions.CultureInvariant);
+    private static readonly Regex PluginVersionPattern = new("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$", RegexOptions.CultureInvariant);
+    private static readonly Regex AssemblyNamePattern = new("^[A-Za-z_][A-Za-z0-9_.-]*$", RegexOptions.CultureInvariant);
+    private static readonly Regex BridgeToolPattern = new("^unity(?:\\.[a-z0-9_]+)+$", RegexOptions.CultureInvariant);
+    private static readonly Regex McpNamePattern = new("^unity_[a-z0-9]+(?:_[a-z0-9]+)*$", RegexOptions.CultureInvariant);
+    private static readonly HashSet<string> RootProperties = new(StringComparer.Ordinal) { "version", "tools" };
+    private static readonly HashSet<string> ToolProperties = new(StringComparer.Ordinal)
+    {
+        "pluginId", "pluginVersion", "assemblyName", "bridgeTool", "mcpName", "title", "description",
+        "defaultTimeoutMs", "allowedRuntimeModes", "sideEffect", "mayTriggerDomainReload", "inputSchemaJson"
+    };
+    private static readonly HashSet<string> RuntimeModes = new(StringComparer.Ordinal) { "Edit", "Play", "EditAndPlay" };
+    private static readonly HashSet<string> SideEffects = new(StringComparer.Ordinal) { "None", "ReadsProject", "MutatesProject", "RunsUserCode" };
     private static readonly IReadOnlyDictionary<string, ToolMetadata> BuiltInMetadataByName = CreateBuiltInMetadata().ToDictionary(
         metadata => metadata.Name,
         StringComparer.Ordinal);
@@ -138,31 +156,126 @@ public static class McpToolCatalog
 
         try
         {
-            var rawJson = File.ReadAllText(catalogPath);
-            var catalog = JsonSerializer.Deserialize<McpPluginCatalog>(rawJson, JsonOptions);
-            if (catalog?.Tools == null)
+            var catalogBytes = File.ReadAllBytes(catalogPath);
+            if (catalogBytes.Length > PluginCatalogMaxUtf8Bytes)
             {
+                Console.Error.WriteLine($"Plugin catalog exceeds the {PluginCatalogMaxUtf8Bytes}-byte Catalog V1 limit.");
                 return Array.Empty<ToolMetadata>();
             }
 
-            return catalog.Tools
-                .Where(tool => !string.IsNullOrWhiteSpace(tool.BridgeTool) &&
-                               !string.IsNullOrWhiteSpace(tool.Title) &&
-                               !string.IsNullOrWhiteSpace(tool.Description) &&
-                               !string.IsNullOrWhiteSpace(tool.InputSchemaJson) &&
-                               tool.DefaultTimeoutMs > 0 &&
-                               McpToolNameMapper.TryToCanonicalMcpName(tool.BridgeTool, out _))
-                .Select(tool => CreateForwardedToolMetadata(
-                    tool.Title,
-                    tool.Description,
-                    tool.InputSchemaJson,
-                    tool.BridgeTool,
-                    tool.DefaultTimeoutMs))
-                .ToArray();
+            using var document = JsonDocument.Parse(catalogBytes);
+            var root = document.RootElement;
+            if (!HasExactProperties(root, RootProperties) ||
+                !root.TryGetProperty("version", out var version) ||
+                !version.TryGetInt32(out var versionValue) ||
+                versionValue != PluginCatalogVersion ||
+                !root.TryGetProperty("tools", out var tools) ||
+                tools.ValueKind != JsonValueKind.Array ||
+                tools.GetArrayLength() > PluginCatalogMaxTools)
+            {
+                Console.Error.WriteLine("Plugin catalog does not conform to the Catalog V1 envelope.");
+                return Array.Empty<ToolMetadata>();
+            }
+
+            var accepted = new List<ToolMetadata>();
+            var bridgeNames = new HashSet<string>(StringComparer.Ordinal);
+            var mcpNames = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var tool in tools.EnumerateArray())
+            {
+                if (!TryReadCatalogTool(tool, out var metadata, out var reason) ||
+                    bridgeNames.Contains(metadata!.BridgeTool) ||
+                    mcpNames.Contains(metadata.Name))
+                {
+                    Console.Error.WriteLine($"Plugin catalog entry rejected: {reason ?? "duplicate bridge or MCP name"}.");
+                    continue;
+                }
+
+                accepted.Add(metadata);
+                bridgeNames.Add(metadata.BridgeTool);
+                mcpNames.Add(metadata.Name);
+            }
+
+            return accepted;
         }
-        catch
+        catch (Exception exception)
         {
+            Console.Error.WriteLine($"Plugin catalog could not be read: {exception.Message}");
             return Array.Empty<ToolMetadata>();
+        }
+    }
+
+    private static bool TryReadCatalogTool(JsonElement tool, out ToolMetadata? metadata, out string? reason)
+    {
+        metadata = null;
+        reason = null;
+        if (!HasExactProperties(tool, ToolProperties) ||
+            !TryGetBoundedString(tool, "pluginId", 3, 255, PluginIdPattern, out _) ||
+            !TryGetBoundedString(tool, "pluginVersion", 5, 64, PluginVersionPattern, out _) ||
+            !TryGetBoundedString(tool, "assemblyName", 1, 255, AssemblyNamePattern, out _) ||
+            !TryGetBoundedString(tool, "bridgeTool", 7, 255, BridgeToolPattern, out var bridgeTool) ||
+            !TryGetBoundedString(tool, "mcpName", 7, 255, McpNamePattern, out var mcpName) ||
+            !TryGetBoundedString(tool, "title", 1, 256, null, out var title) ||
+            !TryGetBoundedString(tool, "description", 1, 4096, null, out var description) ||
+            !tool.TryGetProperty("defaultTimeoutMs", out var timeout) ||
+            !timeout.TryGetInt32(out var defaultTimeoutMs) ||
+            defaultTimeoutMs <= 0 ||
+            !TryGetEnum(tool, "allowedRuntimeModes", RuntimeModes) ||
+            !TryGetEnum(tool, "sideEffect", SideEffects) ||
+            !tool.TryGetProperty("mayTriggerDomainReload", out var reload) ||
+            (reload.ValueKind != JsonValueKind.True && reload.ValueKind != JsonValueKind.False) ||
+            !TryGetBoundedString(tool, "inputSchemaJson", 2, int.MaxValue, null, out var schemaJson) ||
+            Encoding.UTF8.GetByteCount(schemaJson) > PluginSchemaMaxUtf8Bytes ||
+            !IsJsonObject(schemaJson))
+        {
+            reason = "field shape or value violates Catalog V1";
+            return false;
+        }
+
+        metadata = CreateForwardedToolMetadata(mcpName, title, description, schemaJson, bridgeTool, defaultTimeoutMs);
+        return true;
+    }
+
+    private static bool HasExactProperties(JsonElement element, ISet<string> expected)
+    {
+        if (element.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        var properties = element.EnumerateObject().ToArray();
+        var actual = new HashSet<string>(properties.Select(property => property.Name), StringComparer.Ordinal);
+        return properties.Length == expected.Count && actual.SetEquals(expected);
+    }
+
+    private static bool TryGetBoundedString(JsonElement element, string propertyName, int minLength, int maxLength, Regex? pattern, out string value)
+    {
+        value = string.Empty;
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        value = property.GetString() ?? string.Empty;
+        return value.Length >= minLength && value.Length <= maxLength && (pattern == null || pattern.IsMatch(value));
+    }
+
+    private static bool TryGetEnum(JsonElement element, string propertyName, ISet<string> values)
+    {
+        return element.TryGetProperty(propertyName, out var property) &&
+               property.ValueKind == JsonValueKind.String &&
+               values.Contains(property.GetString() ?? string.Empty);
+    }
+
+    private static bool IsJsonObject(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return document.RootElement.ValueKind == JsonValueKind.Object;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 
@@ -181,6 +294,11 @@ public static class McpToolCatalog
     private static ToolMetadata CreateForwardedToolMetadata(string title, string description, string schemaJson, string bridgeTool, int defaultTimeoutMs)
     {
         return CreateToolMetadata(McpToolNameMapper.ToCanonicalMcpName(bridgeTool), title, description, schemaJson, bridgeTool, defaultTimeoutMs, true);
+    }
+
+    private static ToolMetadata CreateForwardedToolMetadata(string mcpName, string title, string description, string schemaJson, string bridgeTool, int defaultTimeoutMs)
+    {
+        return CreateToolMetadata(mcpName, title, description, schemaJson, bridgeTool, defaultTimeoutMs, true);
     }
 
     private static McpToolDefinition CreateDefinition(ToolMetadata metadata)

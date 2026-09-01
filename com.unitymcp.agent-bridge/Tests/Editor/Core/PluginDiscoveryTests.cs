@@ -102,6 +102,38 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(catalogJson, Does.Contain("\"mcpName\":\"unity_project_get_profile\""));
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_213.md
+        [Test]
+        [Category("AGB_213")]
+        [Category("AGB_Core")]
+        public void Discovery_UsesPluginOwnedProtocolNameWithoutMapperEntry()
+        {
+            var settings = CreatePluginOnlySettings();
+            settings.pluginRegistrations.Add(new UnityMcpPluginRegistration
+            {
+                enabled = true,
+                kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
+                assemblyName = typeof(ProtocolMetadataProvider).Assembly.GetName().Name,
+                providerTypeName = typeof(ProtocolMetadataProvider).FullName
+            });
+
+            var paths = new AgentBridgePaths(_projectRoot, settings);
+            paths.EnsureDirectories();
+            var registry = new AgentToolRegistry();
+            registry.Discover();
+            var result = UnityMcpPluginRuntime.DiscoverAndRegister(
+                registry,
+                settings,
+                paths,
+                new FileAgentBridgeLogger(paths.BridgeLogPath));
+
+            Assert.That(McpToolNameMapper.TryToCanonicalMcpName("unity.fixture.protocol.identity", out _), Is.False);
+            Assert.That(registry.TryGetTool("unity.fixture.protocol.identity", out _), Is.True);
+            Assert.That(result.Catalog.tools.Any(item =>
+                item.bridgeTool == "unity.fixture.protocol.identity" &&
+                item.mcpName == "unity_fixture_custom_identity"), Is.True);
+        }
+
         [Test]
         [Category("AGB_Core")]
         public void Discovery_DisabledRegistrationRefresh_RemovesToolAndWritesEmptyCatalog()
@@ -369,6 +401,35 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(((UnityMcpPluginToolAdapter)tool).Descriptor.Description, Is.EqualTo("First duplicate provider tool."));
             Assert.That(result.Catalog.tools.Count(item => item.bridgeTool == "unity.test.get.duplicate"), Is.EqualTo(1));
             Assert.That(File.ReadAllText(paths.BridgeLogPath), Does.Contain("plugin_tool_conflict_plugin"));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_214.md
+        [Test]
+        [Category("AGB_214")]
+        [Category("AGB_Core")]
+        public void Discovery_RejectedMcpConflict_DoesNotReserveBridgeName()
+        {
+            var settings = CreatePluginOnlySettings();
+            settings.pluginRegistrations.Add(new UnityMcpPluginRegistration
+            {
+                enabled = true,
+                kind = UnityMcpPluginRegistrationKind.AsmdefAssembly,
+                assemblyName = typeof(RecoveringMcpConflictProvider).Assembly.GetName().Name,
+                providerTypeName = typeof(RecoveringMcpConflictProvider).FullName
+            });
+
+            var paths = new AgentBridgePaths(_projectRoot, settings);
+            paths.EnsureDirectories();
+            var registry = new AgentToolRegistry();
+            registry.Discover();
+            var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
+
+            var result = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, logger);
+
+            Assert.That(registry.TryGetTool("unity.fixture.recovered", out _), Is.True);
+            Assert.That(result.Catalog.tools.Count(item => item.bridgeTool == "unity.fixture.recovered"), Is.EqualTo(1));
+            Assert.That(result.Catalog.tools.Single(item => item.bridgeTool == "unity.fixture.recovered").mcpName, Is.EqualTo("unity_fixture_recovered"));
+            Assert.That(File.ReadAllText(paths.BridgeLogPath), Does.Contain("plugin_mcp_name_conflict"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_160.md
@@ -695,7 +756,7 @@ namespace UnityMcp.AgentBridge.Tests
             return compilerPath;
         }
 
-        [UnityMcpPlugin("Test.ProjectProfile", "1.0.0")]
+        [UnityMcpPlugin("com.example.test-project-profile", "1.0.0")]
         private sealed class TestProjectProfileProvider : IUnityMcpToolProvider
         {
             public System.Collections.Generic.IEnumerable<IUnityMcpTool> GetTools(UnityMcpPluginContext context)
@@ -707,7 +768,22 @@ namespace UnityMcp.AgentBridge.Tests
             }
         }
 
-        [UnityMcpPlugin("Test.BuiltInConflict", "1.0.0")]
+        [UnityMcpPlugin("com.example.test-protocol-metadata", "1.0.0")]
+        private sealed class ProtocolMetadataProvider : IUnityMcpToolProvider
+        {
+            public System.Collections.Generic.IEnumerable<IUnityMcpTool> GetTools(UnityMcpPluginContext context)
+            {
+                return new IUnityMcpTool[]
+                {
+                    new ProtocolMetadataTool(
+                        "unity.fixture.protocol.identity",
+                        "unity_fixture_custom_identity",
+                        "Plugin-owned protocol identity.")
+                };
+            }
+        }
+
+        [UnityMcpPlugin("com.example.test-builtin-conflict", "1.0.0")]
         private sealed class BuiltInConflictProvider : IUnityMcpToolProvider
         {
             public System.Collections.Generic.IEnumerable<IUnityMcpTool> GetTools(UnityMcpPluginContext context)
@@ -719,7 +795,7 @@ namespace UnityMcp.AgentBridge.Tests
             }
         }
 
-        [UnityMcpPlugin("Test.Duplicate.First", "1.0.0")]
+        [UnityMcpPlugin("com.example.test-duplicate-first", "1.0.0")]
         private sealed class FirstDuplicateProvider : IUnityMcpToolProvider
         {
             public System.Collections.Generic.IEnumerable<IUnityMcpTool> GetTools(UnityMcpPluginContext context)
@@ -731,7 +807,7 @@ namespace UnityMcp.AgentBridge.Tests
             }
         }
 
-        [UnityMcpPlugin("Test.Duplicate.Second", "1.0.0")]
+        [UnityMcpPlugin("com.example.test-duplicate-second", "1.0.0")]
         private sealed class SecondDuplicateProvider : IUnityMcpToolProvider
         {
             public System.Collections.Generic.IEnumerable<IUnityMcpTool> GetTools(UnityMcpPluginContext context)
@@ -743,7 +819,21 @@ namespace UnityMcp.AgentBridge.Tests
             }
         }
 
-        [UnityMcpPlugin("Test.PathSchemas", "1.0.0")]
+        [UnityMcpPlugin("com.example.test-recovering-mcp-conflict", "1.0.0")]
+        private sealed class RecoveringMcpConflictProvider : IUnityMcpToolProvider
+        {
+            public System.Collections.Generic.IEnumerable<IUnityMcpTool> GetTools(UnityMcpPluginContext context)
+            {
+                return new IUnityMcpTool[]
+                {
+                    new ProtocolMetadataTool("unity.fixture.owner", "unity_fixture_shared", "Owns the shared MCP name."),
+                    new ProtocolMetadataTool("unity.fixture.recovered", "unity_fixture_shared", "Conflicts with another plugin MCP name."),
+                    new ProtocolMetadataTool("unity.fixture.recovered", "unity_fixture_recovered", "Valid tool after rejected conflict.")
+                };
+            }
+        }
+
+        [UnityMcpPlugin("com.example.test-path-schemas", "1.0.0")]
         private sealed class PathSchemaProvider : IUnityMcpToolProvider
         {
             public System.Collections.Generic.IEnumerable<IUnityMcpTool> GetTools(UnityMcpPluginContext context)
@@ -770,7 +860,7 @@ namespace UnityMcp.AgentBridge.Tests
             }
         }
 
-        private sealed class InlineSchemaTool : IUnityMcpTool
+        private class InlineSchemaTool : IUnityMcpTool
         {
             public InlineSchemaTool(string name, string description)
             {
@@ -803,6 +893,17 @@ namespace UnityMcp.AgentBridge.Tests
                     Summary = "ok"
                 };
             }
+        }
+
+        private sealed class ProtocolMetadataTool : InlineSchemaTool, IUnityMcpToolProtocolMetadata
+        {
+            public ProtocolMetadataTool(string name, string mcpName, string description)
+                : base(name, description)
+            {
+                McpName = mcpName;
+            }
+
+            public string McpName { get; }
         }
 
         private sealed class SchemaPathTool : IUnityMcpTool

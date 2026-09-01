@@ -1,0 +1,116 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://unitymcp.dev/schemas/plugin-catalog.v1.schema.json",
+  "title": "UnityMCP generated plugin catalog V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "tools"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "tools": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/tool"
+      }
+    }
+  },
+  "$defs": {
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pluginId",
+        "pluginVersion",
+        "assemblyName",
+        "bridgeTool",
+        "mcpName",
+        "title",
+        "description",
+        "defaultTimeoutMs",
+        "allowedRuntimeModes",
+        "sideEffect",
+        "mayTriggerDomainReload",
+        "inputSchemaJson"
+      ],
+      "properties": {
+        "pluginId": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9][a-z0-9-]*(?:\\.[a-z0-9][a-z0-9-]*)+$"
+        },
+        "pluginVersion": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 64,
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "assemblyName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255,
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$"
+        },
+        "bridgeTool": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 255,
+          "pattern": "^unity(?:\\.[a-z0-9_]+)+$"
+        },
+        "mcpName": {
+          "type": "string",
+          "minLength": 7,
+          "maxLength": 255,
+          "pattern": "^unity_[a-z0-9]+(?:_[a-z0-9]+)*$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "defaultTimeoutMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "allowedRuntimeModes": {
+          "type": "string",
+          "enum": [
+            "Edit",
+            "Play",
+            "EditAndPlay"
+          ]
+        },
+        "sideEffect": {
+          "type": "string",
+          "enum": [
+            "None",
+            "ReadsProject",
+            "MutatesProject",
+            "RunsUserCode"
+          ]
+        },
+        "mayTriggerDomainReload": {
+          "type": "boolean"
+        },
+        "inputSchemaJson": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 1048576
+        }
+      }
+    }
+  }
+}

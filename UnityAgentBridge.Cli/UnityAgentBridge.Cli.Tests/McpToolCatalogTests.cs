@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ModelContextProtocol.Protocol;
+using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.Json;
 using UnityMcp.AgentBridge;
@@ -81,13 +82,29 @@ public sealed class McpToolCatalogTests
         File.WriteAllText(
             Path.Combine(catalogDirectory, "plugin-catalog.json"),
             """
-            {"version":1,"tools":[{"pluginId":"UnityMcp.Sample","pluginVersion":"1.0.0","assemblyName":"UnityMcp.Sample","bridgeTool":"unity.fbx.scan.import_issues","mcpName":"unity_fbx_scan_import_issues","title":"Unity FBX Scan Import Issues","description":"Plugin tool.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}]}
+            {"version":1,"tools":[{"pluginId":"com.example.sample","pluginVersion":"1.0.0","assemblyName":"UnityMcp.Sample","bridgeTool":"unity.fixture.protocol.identity","mcpName":"unity_fixture_custom_identity","title":"Fixture Protocol Identity","description":"Plugin-owned non-derivable protocol identity.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}]}
             """);
 
         var diagnostics = CreateDiagnostics(projectRoot);
-        var toolNames = McpToolCatalog.GetTools(diagnostics).Select(tool => tool.ProtocolTool.Name).ToArray();
+        using var errors = new StringWriter();
+        var originalError = Console.Error;
+        Console.SetError(errors);
+        string[] toolNames;
+        try
+        {
+            toolNames = McpToolCatalog.GetTools(diagnostics).Select(tool => tool.ProtocolTool.Name).ToArray();
+        }
+        finally
+        {
+            Console.SetError(originalError);
+        }
 
-        CollectionAssert.Contains(toolNames, "unity_fbx_scan_import_issues");
+        if (!toolNames.Contains("unity_fixture_custom_identity", StringComparer.Ordinal))
+        {
+            Assert.Fail("Declared plugin tool was not loaded. tools=" + string.Join(",", toolNames) + " diagnostics=" + errors);
+        }
+        Assert.IsFalse(McpToolNameMapper.TryToCanonicalMcpName("unity.fixture.protocol.identity", out _));
+        Assert.AreEqual("unity.fixture.protocol.identity", McpToolCatalog.TryGet("unity_fixture_custom_identity", diagnostics)!.BridgeTool);
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_info");
         CollectionAssert.DoesNotContain(toolNames, "mcp__unity__project_get_info");
     }
@@ -101,7 +118,7 @@ public sealed class McpToolCatalogTests
         File.WriteAllText(
             Path.Combine(catalogDirectory, "plugin-catalog.json"),
             """
-            {"version":1,"tools":[{"pluginId":"com.unitymcp.builtin.project-info","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.ProjectInfo","bridgeTool":"unity.project.get_info","mcpName":"mcp__unity__project_get_info","title":"Unity Project Info","description":"Report Unity project, scene, and editor state.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}]}
+            {"version":1,"tools":[{"pluginId":"com.unitymcp.builtin.project-info","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.ProjectInfo","bridgeTool":"unity.project.get_info","mcpName":"unity_project_get_info","title":"Unity Project Info","description":"Report Unity project, scene, and editor state.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}]}
             """);
 
         var diagnostics = CreateDiagnostics(projectRoot);
@@ -125,11 +142,11 @@ public sealed class McpToolCatalogTests
             Path.Combine(catalogDirectory, "plugin-catalog.json"),
             """
             {"version":1,"tools":[
-            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.assetdatabase_search","mcpName":"mcp__unity__assetdatabase_search","title":"Unity AssetDatabase Search","description":"Search assets.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}},\"required\":[\"query\"],\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
-            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.get_hierarchy","mcpName":"mcp__unity__get_hierarchy","title":"Unity Get Hierarchy","description":"Read hierarchy.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
-            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.get_gameobject_component_info","mcpName":"mcp__unity__get_gameobject_component_info","title":"Unity GameObject Component Info","description":"Read component info.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
-            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.get_selection_info","mcpName":"mcp__unity__get_selection_info","title":"Unity Selection Info","description":"Read selection.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
-            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.read_report","mcpName":"mcp__unity__read_report","title":"Unity Read Report","description":"Read report.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"reportPath\":{\"type\":\"string\"}},\"required\":[\"reportPath\"],\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.assetdatabase_search","mcpName":"unity_asset_database_search","title":"Unity AssetDatabase Search","description":"Search assets.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}},\"required\":[\"query\"],\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.get_hierarchy","mcpName":"unity_hierarchy_get","title":"Unity Get Hierarchy","description":"Read hierarchy.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.get_gameobject_component_info","mcpName":"unity_gameobject_component_get_info","title":"Unity GameObject Component Info","description":"Read component info.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.get_selection_info","mcpName":"unity_selection_get_info","title":"Unity Selection Info","description":"Read selection.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.unity-queries","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.UnityQueries","bridgeTool":"unity.read_report","mcpName":"unity_report_read","title":"Unity Read Report","description":"Read report.","defaultTimeoutMs":10000,"allowedRuntimeModes":"EditAndPlay","sideEffect":"ReadsProject","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"reportPath\":{\"type\":\"string\"}},\"required\":[\"reportPath\"],\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}
             ]}
             """);
 
@@ -208,9 +225,9 @@ public sealed class McpToolCatalogTests
             Path.Combine(catalogDirectory, "plugin-catalog.json"),
             """
             {"version":1,"tools":[
-            {"pluginId":"com.unitymcp.builtin.test-runner","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.TestRunner","bridgeTool":"unity.run_editmode_tests","mcpName":"mcp__unity__run_editmode_tests","title":"Unity Run EditMode Tests","description":"Call unity.run_editmode_tests through the Unity Agent Bridge CLI.","defaultTimeoutMs":120000,"allowedRuntimeModes":"Edit","sideEffect":"RunsUserCode","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"filter\":{\"type\":\"string\",\"minLength\":1}},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
-            {"pluginId":"com.unitymcp.builtin.test-runner","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.TestRunner","bridgeTool":"unity.run_playmode_tests","mcpName":"mcp__unity__run_playmode_tests","title":"Unity Run PlayMode Tests","description":"Call unity.run_playmode_tests through the Unity Agent Bridge CLI.","defaultTimeoutMs":180000,"allowedRuntimeModes":"Edit","sideEffect":"RunsUserCode","mayTriggerDomainReload":true,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"filter\":{\"type\":\"string\",\"minLength\":1}},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
-            {"pluginId":"com.unitymcp.builtin.test-runner","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.TestRunner","bridgeTool":"unity.agent_bridge_self_test","mcpName":"mcp__unity__agent_bridge_self_test","title":"Unity Agent Bridge Self-Test","description":"Run the Agent Bridge self-test suite through the Unity Agent Bridge CLI.","defaultTimeoutMs":120000,"allowedRuntimeModes":"Edit","sideEffect":"RunsUserCode","mayTriggerDomainReload":true,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"continueOnFailure\":{\"type\":\"boolean\"}},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}
+            {"pluginId":"com.unitymcp.builtin.test-runner","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.TestRunner","bridgeTool":"unity.run_editmode_tests","mcpName":"unity_tests_run_edit_mode","title":"Unity Run EditMode Tests","description":"Call unity.run_editmode_tests through the Unity Agent Bridge CLI.","defaultTimeoutMs":120000,"allowedRuntimeModes":"Edit","sideEffect":"RunsUserCode","mayTriggerDomainReload":false,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"filter\":{\"type\":\"string\",\"minLength\":1}},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.test-runner","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.TestRunner","bridgeTool":"unity.run_playmode_tests","mcpName":"unity_tests_run_play_mode","title":"Unity Run PlayMode Tests","description":"Call unity.run_playmode_tests through the Unity Agent Bridge CLI.","defaultTimeoutMs":180000,"allowedRuntimeModes":"Edit","sideEffect":"RunsUserCode","mayTriggerDomainReload":true,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"filter\":{\"type\":\"string\",\"minLength\":1}},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"},
+            {"pluginId":"com.unitymcp.builtin.test-runner","pluginVersion":"1.0.0","assemblyName":"UnityMcp.BuiltInPlugins.TestRunner","bridgeTool":"unity.agent_bridge_self_test","mcpName":"unity_agent_bridge_run_self_test","title":"Unity Agent Bridge Self-Test","description":"Run the Agent Bridge self-test suite through the Unity Agent Bridge CLI.","defaultTimeoutMs":120000,"allowedRuntimeModes":"Edit","sideEffect":"RunsUserCode","mayTriggerDomainReload":true,"inputSchemaJson":"{\"type\":\"object\",\"properties\":{\"continueOnFailure\":{\"type\":\"boolean\"}},\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"additionalProperties\":false}"}
             ]}
             """);
 
@@ -268,6 +285,169 @@ public sealed class McpToolCatalogTests
     }
 
     [TestMethod]
+    public void CatalogRejectsInvalidV1EnvelopesAndPreservesBuiltIns()
+    {
+        var invalidCatalogs = new[]
+        {
+            """{"tools":[]}""",
+            """{"version":2,"tools":[]}""",
+            """{"version":1,"tools":[],"unknown":true}""",
+            """{"version":1,"tools":{}}"""
+        };
+
+        foreach (var catalogJson in invalidCatalogs)
+        {
+            var projectRoot = CreateUnityProject();
+            WritePluginCatalog(projectRoot, catalogJson);
+
+            var toolNames = McpToolCatalog.GetTools(CreateDiagnostics(projectRoot))
+                .Select(tool => tool.ProtocolTool.Name)
+                .ToArray();
+
+            CollectionAssert.Contains(toolNames, "unity_editor_ping");
+            CollectionAssert.DoesNotContain(toolNames, "unity_fixture_valid");
+        }
+    }
+
+    [TestMethod]
+    public void CatalogRejectsDuplicateJsonProperties()
+    {
+        var validTool = CreateCatalogTool("unity.fixture.duplicate", "unity_fixture_duplicate").ToJsonString();
+        var duplicateRoot = "{\"version\":1,\"version\":1,\"tools\":[]}";
+        var duplicateTool = validTool.Replace(
+            "\"mcpName\":\"unity_fixture_duplicate\"",
+            "\"mcpName\":\"unity_fixture_duplicate\",\"mcpName\":\"unity_fixture_duplicate\"",
+            StringComparison.Ordinal);
+        var invalidCatalogs = new[] { duplicateRoot, "{\"version\":1,\"tools\":[" + duplicateTool + "]}" };
+
+        foreach (var catalogJson in invalidCatalogs)
+        {
+            var projectRoot = CreateUnityProject();
+            WritePluginCatalog(projectRoot, catalogJson);
+            var toolNames = McpToolCatalog.GetTools(CreateDiagnostics(projectRoot))
+                .Select(tool => tool.ProtocolTool.Name)
+                .ToArray();
+
+            CollectionAssert.Contains(toolNames, "unity_editor_ping");
+            CollectionAssert.DoesNotContain(toolNames, "unity_fixture_duplicate");
+        }
+    }
+
+    [TestMethod]
+    public void CatalogRejectsInvalidEntriesIndependently()
+    {
+        var missingMcpName = CreateCatalogTool("unity.fixture.missing", "unity_fixture_missing");
+        missingMcpName.Remove("mcpName");
+        var unknownField = CreateCatalogTool("unity.fixture.unknown", "unity_fixture_unknown");
+        unknownField["unknown"] = true;
+        var malformedMcpName = CreateCatalogTool("unity.fixture.malformed", "unity__fixture_malformed");
+        var invalidSchema = CreateCatalogTool("unity.fixture.schema", "unity_fixture_schema");
+        invalidSchema["inputSchemaJson"] = "[]";
+        var valid = CreateCatalogTool("unity.fixture.valid", "unity_fixture_valid");
+        var catalog = new JsonObject
+        {
+            ["version"] = 1,
+            ["tools"] = new JsonArray(missingMcpName, unknownField, malformedMcpName, invalidSchema, valid)
+        };
+        var projectRoot = CreateUnityProject();
+        WritePluginCatalog(projectRoot, catalog.ToJsonString());
+
+        var dynamicNames = McpToolCatalog.GetTools(CreateDiagnostics(projectRoot))
+            .Select(tool => tool.ProtocolTool.Name)
+            .Where(name => name.StartsWith("unity_fixture_", StringComparison.Ordinal))
+            .ToArray();
+
+        CollectionAssert.AreEqual(new[] { "unity_fixture_valid" }, dynamicNames);
+    }
+
+    [TestMethod]
+    public void CatalogRejectedCollision_DoesNotReserveOtherIdentity()
+    {
+        var catalog = new JsonObject
+        {
+            ["version"] = 1,
+            ["tools"] = new JsonArray(
+                CreateCatalogTool("unity.fixture.first", "unity_fixture_shared"),
+                CreateCatalogTool("unity.fixture.recovered", "unity_fixture_shared"),
+                CreateCatalogTool("unity.fixture.recovered", "unity_fixture_recovered"))
+        };
+        var projectRoot = CreateUnityProject();
+        WritePluginCatalog(projectRoot, catalog.ToJsonString());
+
+        var toolNames = McpToolCatalog.GetTools(CreateDiagnostics(projectRoot))
+            .Select(tool => tool.ProtocolTool.Name)
+            .ToArray();
+
+        CollectionAssert.Contains(toolNames, "unity_fixture_shared");
+        CollectionAssert.Contains(toolNames, "unity_fixture_recovered");
+    }
+
+    [TestMethod]
+    public void CatalogMcpNameCollisionWithLocalTool_PreservesLocalAndUnrelatedPluginTools()
+    {
+        var catalog = new JsonObject
+        {
+            ["version"] = 1,
+            ["tools"] = new JsonArray(
+                CreateCatalogTool("unity.fixture.local_conflict", "unity_editor_ping"),
+                CreateCatalogTool("unity.fixture.unrelated", "unity_fixture_unrelated"))
+        };
+        var projectRoot = CreateUnityProject();
+        WritePluginCatalog(projectRoot, catalog.ToJsonString());
+        var diagnostics = CreateDiagnostics(projectRoot);
+
+        var localTool = McpToolCatalog.TryGet("unity_editor_ping", diagnostics);
+        var unrelatedTool = McpToolCatalog.TryGet("unity_fixture_unrelated", diagnostics);
+
+        Assert.IsNotNull(localTool);
+        Assert.AreEqual("unity.ping", localTool.BridgeTool);
+        Assert.IsNotNull(unrelatedTool);
+        Assert.AreEqual("unity.fixture.unrelated", unrelatedTool.BridgeTool);
+    }
+
+    [TestMethod]
+    public void CatalogRejectsMoreThan64Tools()
+    {
+        var tools = new JsonArray();
+        for (var index = 0; index < 65; index++)
+        {
+            tools.Add(CreateCatalogTool($"unity.fixture.tool_{index}", $"unity_fixture_tool_{index}"));
+        }
+
+        var projectRoot = CreateUnityProject();
+        WritePluginCatalog(projectRoot, new JsonObject { ["version"] = 1, ["tools"] = tools }.ToJsonString());
+
+        var toolNames = McpToolCatalog.GetTools(CreateDiagnostics(projectRoot))
+            .Select(tool => tool.ProtocolTool.Name)
+            .ToArray();
+
+        Assert.IsFalse(toolNames.Any(name => name.StartsWith("unity_fixture_tool_", StringComparison.Ordinal)));
+        CollectionAssert.Contains(toolNames, "unity_editor_ping");
+    }
+
+    [TestMethod]
+    public void CatalogRejectsFilesLargerThan64KiB()
+    {
+        var catalog = new JsonObject
+        {
+            ["version"] = 1,
+            ["tools"] = new JsonArray(CreateCatalogTool("unity.fixture.oversized", "unity_fixture_oversized")),
+            ["padding"] = new string('x', 65536)
+        };
+        var projectRoot = CreateUnityProject();
+        var catalogJson = catalog.ToJsonString();
+        Assert.IsTrue(Encoding.UTF8.GetByteCount(catalogJson) > 65536);
+        WritePluginCatalog(projectRoot, catalogJson);
+
+        var toolNames = McpToolCatalog.GetTools(CreateDiagnostics(projectRoot))
+            .Select(tool => tool.ProtocolTool.Name)
+            .ToArray();
+
+        CollectionAssert.DoesNotContain(toolNames, "unity_fixture_oversized");
+        CollectionAssert.Contains(toolNames, "unity_editor_ping");
+    }
+
+    [TestMethod]
     public void CanonicalNameMapper_UsesShippedMappingsAndValidatesFutureTools()
     {
         Assert.AreEqual("unity_editor_ping", McpToolNameMapper.ToCanonicalMcpName("unity.ping"));
@@ -278,26 +458,10 @@ public sealed class McpToolCatalogTests
     }
 
     [TestMethod]
-    public void CanonicalNameMapper_MapsAllFrozenAndroidDebuggingTools()
+    public void CanonicalNameMapper_DoesNotOwnAndroidDebuggingPluginNames()
     {
-        var pairs = new[]
-        {
-            (Bridge: "unity.android.debug.status", Mcp: "unity_android_debug_status"),
-            (Bridge: "unity.android.targets.list", Mcp: "unity_android_targets_list"),
-            (Bridge: "unity.android.devices.list", Mcp: "unity_android_devices_list"),
-            (Bridge: "unity.android.app.status.get", Mcp: "unity_android_app_status_get"),
-            (Bridge: "unity.android.app.start", Mcp: "unity_android_app_start"),
-            (Bridge: "unity.android.app.stop", Mcp: "unity_android_app_stop"),
-            (Bridge: "unity.android.screenshot.capture", Mcp: "unity_android_screenshot_capture"),
-            (Bridge: "unity.android.logcat.get", Mcp: "unity_android_logcat_get")
-        };
-
-        foreach (var pair in pairs)
-        {
-            Assert.AreEqual(pair.Mcp, McpToolNameMapper.ToCanonicalMcpName(pair.Bridge), pair.Bridge);
-        }
-
-        Assert.IsFalse(McpToolNameMapper.TryToCanonicalMcpName("unity.android.status", out _));
+        Assert.IsFalse(McpToolNameMapper.TryToCanonicalMcpName("unity.android.debug.status", out _));
+        Assert.IsFalse(McpToolNameMapper.TryToCanonicalMcpName("unity.android.app.start", out _));
     }
 
     [TestMethod]
@@ -452,6 +616,32 @@ public sealed class McpToolCatalogTests
                 property => property.Value.Clone(),
                 StringComparer.Ordinal)
         };
+    }
+
+    private static JsonObject CreateCatalogTool(string bridgeTool, string mcpName)
+    {
+        return new JsonObject
+        {
+            ["pluginId"] = "com.example.fixture",
+            ["pluginVersion"] = "1.0.0",
+            ["assemblyName"] = "UnityMcp.Fixture",
+            ["bridgeTool"] = bridgeTool,
+            ["mcpName"] = mcpName,
+            ["title"] = "Fixture Tool",
+            ["description"] = "Catalog validation fixture.",
+            ["defaultTimeoutMs"] = 10000,
+            ["allowedRuntimeModes"] = "EditAndPlay",
+            ["sideEffect"] = "ReadsProject",
+            ["mayTriggerDomainReload"] = false,
+            ["inputSchemaJson"] = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}"
+        };
+    }
+
+    private static void WritePluginCatalog(string projectRoot, string catalogJson)
+    {
+        var catalogDirectory = Path.Combine(projectRoot, "Library", "AgentBridge");
+        Directory.CreateDirectory(catalogDirectory);
+        File.WriteAllText(Path.Combine(catalogDirectory, "plugin-catalog.json"), catalogJson, new UTF8Encoding(false));
     }
 
     private static string CreateUnityProject()

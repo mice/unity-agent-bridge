@@ -28,14 +28,6 @@ namespace UnityMcp.AgentBridge
                 ["unity.mono.find_script_guid_usages"] = "unity_monobehaviour_find_script_guid_usages",
                 ["unity.lua.lint"] = "unity_lua_lint",
                 ["unity.lua.compile"] = "unity_lua_compile",
-                ["unity.android.debug.status"] = "unity_android_debug_status",
-                ["unity.android.targets.list"] = "unity_android_targets_list",
-                ["unity.android.devices.list"] = "unity_android_devices_list",
-                ["unity.android.app.status.get"] = "unity_android_app_status_get",
-                ["unity.android.app.start"] = "unity_android_app_start",
-                ["unity.android.app.stop"] = "unity_android_app_stop",
-                ["unity.android.screenshot.capture"] = "unity_android_screenshot_capture",
-                ["unity.android.logcat.get"] = "unity_android_logcat_get",
                 ["unity.aig.scan_fbx_import_issues"] = "unity_fbx_scan_import_issues"
             };
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
@@ -57,7 +58,11 @@ namespace UnityMcp.AgentBridge
             var registrations = settings.pluginRegistrations ?? new List<UnityMcpPluginRegistration>();
             var builtInNames = new HashSet<string>(registry.ListTools().Select(descriptor => descriptor.Name), StringComparer.Ordinal);
             var pluginNames = new HashSet<string>(StringComparer.Ordinal);
-            var pluginMcpNames = new HashSet<string>(StringComparer.Ordinal);
+            var pluginMcpNames = new HashSet<string>(
+                registry.ListTools()
+                    .Select(descriptor => McpToolNameMapper.TryToCanonicalMcpName(descriptor.Name, out var name) ? name : null)
+                    .Where(name => !string.IsNullOrWhiteSpace(name)),
+                StringComparer.Ordinal);
 
             foreach (var registration in registrations.Where(static item => item != null && item.enabled))
             {
@@ -285,24 +290,24 @@ namespace UnityMcp.AgentBridge
                     return;
                 }
 
-                if (!pluginNames.Add(bridgeToolName))
+                if (pluginNames.Contains(bridgeToolName))
                 {
                     logger?.Warning("plugin_tool_conflict_plugin", $"Plugin tool '{bridgeToolName}' conflicts with another plugin tool and was rejected.");
                     return;
                 }
 
-                var mcpToolName = McpToolNameMapper.ToCanonicalMcpName(bridgeToolName);
-                if (!pluginMcpNames.Add(mcpToolName))
+                var protocolMetadata = tool as IUnityMcpToolProtocolMetadata;
+                var mcpToolName = protocolMetadata != null
+                    ? protocolMetadata.McpName
+                    : McpToolNameMapper.ToCanonicalMcpName(bridgeToolName);
+                if (pluginMcpNames.Contains(mcpToolName))
                 {
-                    logger?.Warning("plugin_mcp_name_conflict", $"Plugin tool '{bridgeToolName}' maps to MCP tool '{mcpToolName}', which conflicts with another plugin tool and was rejected.");
+                    logger?.Warning("plugin_mcp_name_conflict", $"Plugin tool '{bridgeToolName}' declares MCP tool '{mcpToolName}', which conflicts with an existing tool and was rejected.");
                     return;
                 }
 
                 var resolvedSchema = ResolveSchema(tool.InputSchema, assembly, paths.ProjectRoot);
-                var adapted = new UnityMcpPluginToolAdapter(tool, paths.ProjectRoot, paths.TempRoot);
-                registry.Register(adapted);
-
-                result.Catalog.tools.Add(new UnityMcpPluginCatalogTool
+                var catalogTool = new UnityMcpPluginCatalogTool
                 {
                     pluginId = attribute.PluginId,
                     pluginVersion = attribute.PluginVersion,
@@ -316,7 +321,28 @@ namespace UnityMcp.AgentBridge
                     sideEffect = tool.Descriptor.SideEffect.ToString(),
                     mayTriggerDomainReload = tool.Descriptor.MayTriggerDomainReload,
                     inputSchemaJson = resolvedSchema
-                });
+                };
+                UnityMcpPluginCatalogV1Validator.ValidateTool(catalogTool);
+                if (result.Catalog.tools.Count >= UnityMcpPluginCatalog.MaxTools)
+                {
+                    logger?.Warning("plugin_catalog_tool_limit", $"Plugin tool '{bridgeToolName}' exceeds the {UnityMcpPluginCatalog.MaxTools}-tool catalog limit and was rejected.");
+                    return;
+                }
+
+                result.Catalog.tools.Add(catalogTool);
+                var catalogJson = JsonUtil.SerializeObject(result.Catalog);
+                result.Catalog.tools.RemoveAt(result.Catalog.tools.Count - 1);
+                if (Encoding.UTF8.GetByteCount(catalogJson) > UnityMcpPluginCatalog.MaxUtf8Bytes)
+                {
+                    logger?.Warning("plugin_catalog_size_limit", $"Plugin tool '{bridgeToolName}' exceeds the {UnityMcpPluginCatalog.MaxUtf8Bytes}-byte catalog limit and was rejected.");
+                    return;
+                }
+
+                var adapted = new UnityMcpPluginToolAdapter(tool, paths.ProjectRoot, paths.TempRoot);
+                registry.Register(adapted);
+                result.Catalog.tools.Add(catalogTool);
+                pluginNames.Add(bridgeToolName);
+                pluginMcpNames.Add(mcpToolName);
             }
             catch (Exception exception)
             {
@@ -420,7 +446,41 @@ namespace UnityMcp.AgentBridge
                     Directory.CreateDirectory(directory);
                 }
 
-                File.WriteAllText(outputPath, JsonUtil.SerializeObject(catalog));
+                var json = JsonUtil.SerializeObject(catalog);
+                if (catalog.version != UnityMcpPluginCatalog.CurrentVersion ||
+                    catalog.tools == null ||
+                    catalog.tools.Count > UnityMcpPluginCatalog.MaxTools ||
+                    Encoding.UTF8.GetByteCount(json) > UnityMcpPluginCatalog.MaxUtf8Bytes)
+                {
+                    throw new InvalidOperationException("Plugin catalog violates the frozen Catalog V1 envelope limits.");
+                }
+
+                var tempPath = outputPath + ".tmp";
+                var backupPath = outputPath + ".bak";
+                try
+                {
+                    File.WriteAllText(tempPath, json, new UTF8Encoding(false));
+                    if (File.Exists(outputPath))
+                    {
+                        File.Replace(tempPath, outputPath, backupPath);
+                    }
+                    else
+                    {
+                        File.Move(tempPath, outputPath);
+                    }
+                }
+                finally
+                {
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
+
+                    if (File.Exists(backupPath))
+                    {
+                        File.Delete(backupPath);
+                    }
+                }
             }
             catch (Exception exception)
             {
