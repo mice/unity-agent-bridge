@@ -12,6 +12,8 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 - Map all eight frozen Android Debugging external-plugin bridge names to their canonical MCP names in both the Unity catalog producer and package-contained MCP runtime.
 - Keep the two shared mapper source copies identical and preserve the conservative generic future-tool grammar.
+- Resolve PowerShell and .NET executables from the Unity process environment when building a machine runtime from tag source.
+- Fall back to standard Windows installation paths so source-only runtime installation does not depend on Unity inheriting the interactive shell PATH.
 
 ## [1.2.12-rc.5] - 2026-08-29
 

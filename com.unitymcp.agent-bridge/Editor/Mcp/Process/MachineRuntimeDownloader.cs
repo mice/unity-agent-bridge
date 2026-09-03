@@ -234,9 +234,10 @@ namespace UnityMcp.AgentBridge.Mcp
                 }
 
                 var managerRoot = MachineRuntimeLocator.ResolveDefaultManagerRoot();
+                var powerShell = ResolvePowerShellExecutable();
                 var request = new ProcessExecutionRequest
                 {
-                    FilePath = "pwsh",
+                    FilePath = powerShell,
                     Arguments = new[]
                     {
                         "-NoProfile",
@@ -374,10 +375,11 @@ namespace UnityMcp.AgentBridge.Mcp
                 progress?.Report(MachineRuntimeDownloadProgress.Stage("Building runtime from tag source", 0.90f));
                 var dotnetPath = settings != null && !string.IsNullOrWhiteSpace(settings.DotnetPath)
                     ? settings.DotnetPath.Trim()
-                    : "dotnet";
+                    : ResolveDotnetExecutable();
+                var powerShell = ResolvePowerShellExecutable();
                 var request = new ProcessExecutionRequest
                 {
-                    FilePath = "pwsh",
+                    FilePath = powerShell,
                     Arguments = new[]
                     {
                         "-NoProfile",
@@ -474,6 +476,74 @@ namespace UnityMcp.AgentBridge.Mcp
             catch
             {
             }
+        }
+
+        private static string ResolvePowerShellExecutable()
+        {
+            var pathExecutable = ResolvePathExecutable(new[] { "pwsh.exe", "pwsh", "powershell.exe", "powershell" });
+            if (!string.IsNullOrWhiteSpace(pathExecutable))
+            {
+                return pathExecutable;
+            }
+
+            var windowsPowerShell = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System),
+                "WindowsPowerShell",
+                "v1.0",
+                "powershell.exe");
+            if (File.Exists(windowsPowerShell))
+            {
+                return windowsPowerShell;
+            }
+
+            return "pwsh";
+        }
+
+        private static string ResolveDotnetExecutable()
+        {
+            var pathExecutable = ResolvePathExecutable(new[] { "dotnet.exe", "dotnet" });
+            if (!string.IsNullOrWhiteSpace(pathExecutable))
+            {
+                return pathExecutable;
+            }
+
+            foreach (var programFiles in new[]
+            {
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),
+                Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+            })
+            {
+                if (string.IsNullOrWhiteSpace(programFiles))
+                {
+                    continue;
+                }
+
+                var candidate = Path.Combine(programFiles, "dotnet", "dotnet.exe");
+                if (File.Exists(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return "dotnet";
+        }
+
+        private static string ResolvePathExecutable(IReadOnlyList<string> executableNames)
+        {
+            var pathValue = Environment.GetEnvironmentVariable("PATH") ?? string.Empty;
+            foreach (var directory in pathValue.Split(new[] { Path.PathSeparator }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                foreach (var executableName in executableNames)
+                {
+                    var candidate = Path.Combine(directory.Trim(), executableName);
+                    if (File.Exists(candidate))
+                    {
+                        return candidate;
+                    }
+                }
+            }
+
+            return string.Empty;
         }
 
         internal static string ParseSha256(string value)
