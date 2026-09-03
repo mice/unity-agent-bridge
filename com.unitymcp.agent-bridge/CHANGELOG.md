@@ -6,6 +6,13 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.12-rc.7] - 2026-09-03
+
+### Fixed
+
+- Make source-only machine runtime installation resolve PowerShell and .NET executables from Unity's process environment and standard Windows installation paths.
+- Align the source runtime catalog with the immutable rc.7 source commit.
+
 ## [1.2.12-rc.6] - 2026-09-01
 
 ### Fixed
