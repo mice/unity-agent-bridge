@@ -52,6 +52,8 @@ New-Item -ItemType Directory -Path $outputPath -Force | Out-Null
   -p:PublishAot=false `
   -p:DebugSymbols=false `
   -p:DebugType=None `
+  -p:ImportDirectoryBuildProps=false `
+  -p:ImportDirectoryBuildTargets=false `
   --output $outputPath
 
 if ($LASTEXITCODE -ne 0) {
