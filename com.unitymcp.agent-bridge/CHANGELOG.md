@@ -6,6 +6,12 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.12-rc.10] - 2026-09-13
+
+### Fixed
+
+- Resolve the machine runtime Roslyn compiler payload from the selected runtime version during fallback initialization.
+
 ## [1.2.12-rc.8] - 2026-09-13
 
 ### Added
