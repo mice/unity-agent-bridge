@@ -25,6 +25,9 @@ namespace UnityMcp.AgentBridge
                 var response = string.Equals(request?.TaskType, "compile", StringComparison.Ordinal)
                     || (request?.Operation != AgentTaskControlProtocol.Create && request?.AgentTaskId != null && request.AgentTaskId.StartsWith("compile-", StringComparison.Ordinal))
                     ? AgentTaskCompileExecutionService.Control(request)
+                    : string.Equals(request?.TaskType, "run_playmode_tests", StringComparison.Ordinal)
+                    || (request?.Operation != AgentTaskControlProtocol.Create && request?.AgentTaskId != null && request.AgentTaskId.StartsWith("playmode-", StringComparison.Ordinal))
+                    ? AgentTaskPlayModeExecutionService.Control(request)
                     : AgentTaskEditModeExecutionService.Control(request);
                 var raw = new AgentTaskControlCodec().SerializeResponse(response);
                 return new ToolResult
