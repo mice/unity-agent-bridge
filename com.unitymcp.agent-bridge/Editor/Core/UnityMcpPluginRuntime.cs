@@ -124,6 +124,7 @@ namespace UnityMcp.AgentBridge
 
             var runtimeMode = "project-local";
             var runtimeVersion = string.Empty;
+            var machineRuntimeRoot = string.Empty;
             var settingsPath = Path.Combine(paths.ProjectRoot, "Library", "AgentBridge", "mcp-editor-settings.json");
             if (File.Exists(settingsPath))
             {
@@ -134,6 +135,7 @@ namespace UnityMcp.AgentBridge
                         ? "machine"
                         : "project-local";
                     runtimeVersion = settings.Value<string>("runtimeVersion") ?? string.Empty;
+                    machineRuntimeRoot = settings.Value<string>("machineRuntimeRoot") ?? string.Empty;
                 }
                 catch (Exception exception)
                 {
@@ -146,7 +148,7 @@ namespace UnityMcp.AgentBridge
                 RuntimeMode = runtimeMode,
                 RuntimeVersion = runtimeVersion,
                 CompilerPath = string.Equals(runtimeMode, "machine", StringComparison.Ordinal)
-                    ? string.Empty
+                    ? ResolveMachineRoslynCompilerPath(machineRuntimeRoot, runtimeVersion)
                     : Path.Combine(
                         paths.ProjectRoot,
                         ".unitymcp",
@@ -157,6 +159,22 @@ namespace UnityMcp.AgentBridge
                         "win-x64",
                         "unity-roslyn-compiler.exe")
             };
+        }
+
+        private static string ResolveMachineRoslynCompilerPath(string machineRuntimeRoot, string runtimeVersion)
+        {
+            if (string.IsNullOrWhiteSpace(machineRuntimeRoot) || string.IsNullOrWhiteSpace(runtimeVersion))
+            {
+                return string.Empty;
+            }
+
+            return Path.Combine(
+                machineRuntimeRoot.Trim(),
+                "versions",
+                runtimeVersion.Trim(),
+                "runtime",
+                "win-x64",
+                "unity-roslyn-compiler.exe");
         }
 
         private static void ProcessRegistration(
