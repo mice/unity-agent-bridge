@@ -6,6 +6,25 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.12-rc.11] - 2026-09-13
+
+### Fixed
+
+- Align published runtime catalog entries with immutable RC tags for setup panel selection.
+
+## [1.2.12-rc.10] - 2026-09-13
+
+### Fixed
+
+- Resolve the machine runtime Roslyn compiler payload from the selected runtime version during fallback initialization.
+
+## [1.2.12-rc.8] - 2026-09-13
+
+### Added
+
+- Introduce the AgentTask core, Unity Editor task execution service, MCP task control tools, and task-backed EditMode test execution.
+- Preserve legacy EditMode test filters and result projections while exposing task lifecycle, recovery, timeout, and domain-failure evidence.
+
 ## [1.2.12-rc.7] - 2026-09-03
 
 ### Fixed

@@ -1,6 +1,7 @@
 using ModelContextProtocol.Protocol;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using UnityMcp.AgentBridge;
 using UnityAgentBridge.ExternalBridgeClientCore;
@@ -279,7 +280,7 @@ public static class McpToolCatalog
         }
     }
 
-    private static ToolMetadata CreateToolMetadata(string name, string title, string description, string schemaJson, string bridgeTool, int defaultTimeoutMs, bool isForwardedToUnityQueue)
+    private static ToolMetadata CreateToolMetadata(string name, string title, string description, string schemaJson, string bridgeTool, int defaultTimeoutMs, bool isForwardedToUnityQueue, bool supportsTaskExecution = false)
     {
         return new ToolMetadata(
             name,
@@ -288,17 +289,18 @@ public static class McpToolCatalog
             schemaJson,
             bridgeTool,
             defaultTimeoutMs,
-            isForwardedToUnityQueue);
+            isForwardedToUnityQueue,
+            supportsTaskExecution);
     }
 
     private static ToolMetadata CreateForwardedToolMetadata(string title, string description, string schemaJson, string bridgeTool, int defaultTimeoutMs)
     {
-        return CreateToolMetadata(McpToolNameMapper.ToCanonicalMcpName(bridgeTool), title, description, schemaJson, bridgeTool, defaultTimeoutMs, true);
+        return CreateToolMetadata(McpToolNameMapper.ToCanonicalMcpName(bridgeTool), title, description, schemaJson, bridgeTool, defaultTimeoutMs, true, true);
     }
 
     private static ToolMetadata CreateForwardedToolMetadata(string mcpName, string title, string description, string schemaJson, string bridgeTool, int defaultTimeoutMs)
     {
-        return CreateToolMetadata(mcpName, title, description, schemaJson, bridgeTool, defaultTimeoutMs, true);
+        return CreateToolMetadata(mcpName, title, description, schemaJson, bridgeTool, defaultTimeoutMs, true, true);
     }
 
     private static McpToolDefinition CreateDefinition(ToolMetadata metadata)
@@ -310,11 +312,15 @@ public static class McpToolCatalog
                 Name = metadata.Name,
                 Title = metadata.Title,
                 Description = metadata.Description,
-                InputSchema = JsonDocument.Parse(metadata.SchemaJson).RootElement.Clone()
+                InputSchema = JsonDocument.Parse(metadata.SchemaJson).RootElement.Clone(),
+                Meta = metadata.SupportsTaskExecution
+                    ? new JsonObject { ["execution"] = new JsonObject { ["taskSupport"] = "optional" } }
+                    : null
             },
             SchemaJson = metadata.SchemaJson,
             BridgeTool = metadata.BridgeTool,
             IsForwardedToUnityQueue = metadata.IsForwardedToUnityQueue,
+            SupportsTaskExecution = metadata.SupportsTaskExecution,
             InvokeAsync = async (argumentsJson, cancellationToken) =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -334,5 +340,6 @@ public static class McpToolCatalog
         string SchemaJson,
         string BridgeTool,
         int DefaultTimeoutMs,
-        bool IsForwardedToUnityQueue);
+        bool IsForwardedToUnityQueue,
+        bool SupportsTaskExecution);
 }

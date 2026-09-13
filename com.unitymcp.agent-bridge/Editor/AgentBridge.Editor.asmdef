@@ -3,6 +3,8 @@
   "rootNamespace": "UnityMcp.AgentBridge",
   "references": [
     "UnityMcp.AgentBridge.SharedProtocolCore",
+    "UnityMcp.AgentTaskCore",
+    "UnityMcp.AgentTaskEditor",
     "UnityMcp.Plugin.Abstractions",
     "UnityEditor.TestRunner",
     "UnityEngine.TestRunner",

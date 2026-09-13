@@ -24,7 +24,7 @@ namespace UnityMcp.BuiltInPlugins.TestRunner
                 return failure;
             }
 
-            return UnityTestOperationManager.StartOrResume(context.Command, context.Settings, TestMode.EditMode, args);
+            return AgentTaskEditModeExecutionService.StartOrResume(context.Command, context.Settings, args);
         }
     }
 }

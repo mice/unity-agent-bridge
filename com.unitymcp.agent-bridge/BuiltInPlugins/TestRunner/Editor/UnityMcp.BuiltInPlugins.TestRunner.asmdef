@@ -4,7 +4,8 @@
   "references": [
     "UnityMcp.AgentBridge.SharedProtocolCore",
     "UnityMcp.Plugin.Abstractions",
-    "UnityMcp.AgentBridge.Editor"
+    "UnityMcp.AgentBridge.Editor",
+    "UnityMcp.AgentTaskEditor"
   ],
   "includePlatforms": [
     "Editor"

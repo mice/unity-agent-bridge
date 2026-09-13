@@ -171,6 +171,11 @@ namespace UnityMcp.AgentBridge
             _testRunActiveProvider = provider ?? IsUnityTestRunActive;
         }
 
+        internal static bool IsTestRunActive()
+        {
+            return _testRunActiveProvider();
+        }
+
         internal static Filter CreateRunnerFilter(TestMode testMode, UnityTestRunArgs args)
         {
             var runnerFilter = new Filter

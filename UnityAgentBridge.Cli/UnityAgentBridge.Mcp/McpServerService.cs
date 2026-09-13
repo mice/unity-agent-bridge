@@ -11,13 +11,31 @@ public sealed class McpServerService
     private readonly ExternalBridgeClient _client;
     private readonly McpHostDiagnostics _diagnostics;
     private readonly McpStageLogger _stageLogger;
+    private readonly McpTaskAdapter _taskAdapter;
+    private readonly McpTaskExecutionCoordinator? _taskCoordinator;
 
-    public McpServerService(ExternalBridgeClient client, McpHostDiagnostics diagnostics, McpStageLogger stageLogger)
+    public McpServerService(ExternalBridgeClient client, McpHostDiagnostics diagnostics, McpStageLogger stageLogger, McpTaskAdapter? taskAdapter = null, McpTaskExecutionCoordinator? taskCoordinator = null)
     {
         _client = client;
         _diagnostics = diagnostics;
         _stageLogger = stageLogger;
+        var queuePaths = McpToolRuntimeContext.QueuePaths ?? new QueuePaths(diagnostics.ProjectPath, diagnostics.QueueRoot);
+        _taskAdapter = taskAdapter ?? new McpTaskAdapter(client, queuePaths, diagnostics.ProjectPath);
+        _taskCoordinator = taskCoordinator;
     }
+
+    public bool SupportsTasks(JsonElement? clientCapabilities) => _taskAdapter.Supports(clientCapabilities);
+
+    public Task<JsonObject> CreateTaskAsync(string taskType, string payload, JsonElement? clientCapabilities, CancellationToken cancellationToken)
+    {
+        if (!SupportsTasks(clientCapabilities))
+            return Task.FromResult(new JsonObject { ["success"] = false, ["errorCode"] = "TASK_CAPABILITY_REQUIRED", ["errorMessage"] = "The client did not advertise MCP task support." });
+        return _taskAdapter.CreateAsync(taskType, payload, cancellationToken);
+    }
+
+    public Task<JsonObject> GetTaskAsync(string taskId, CancellationToken cancellationToken) => _taskAdapter.GetAsync(taskId, cancellationToken);
+    public Task<JsonObject> GetTaskResultAsync(string taskId, CancellationToken cancellationToken) => _taskAdapter.ResultAsync(taskId, cancellationToken);
+    public Task<JsonObject> CancelTaskAsync(string taskId, CancellationToken cancellationToken) => _taskAdapter.CancelAsync(taskId, cancellationToken);
 
     public ListToolsResult ListTools(CancellationToken cancellationToken)
     {
@@ -50,7 +68,10 @@ public sealed class McpServerService
             McpArgumentValidator.ValidateOrThrow(toolName, definition.SchemaJson, argumentsJson);
             _stageLogger.Write("mcp.validate", commandId, toolName, "ok", "Arguments accepted.");
             _stageLogger.Write("mcp.invoke_core", commandId, toolName, "started", "Invoking ExternalBridgeClientCore.");
-            var resultJson = await definition.InvokeAsync(argumentsJson, cancellationToken);
+            var mappedTaskId = McpTaskExecutionContext.CurrentTaskId;
+            var resultJson = mappedTaskId is not null && _taskCoordinator is not null && _taskCoordinator.IsMapped(mappedTaskId)
+                ? (await _taskCoordinator.WaitForTerminalAsync(mappedTaskId, cancellationToken)).ToJsonString()
+                : await definition.InvokeAsync(argumentsJson, cancellationToken);
             var status = ReadStatus(resultJson);
             if (RequiresWaitStage(definition, toolName))
             {
@@ -102,6 +123,11 @@ public sealed class McpServerService
             _stageLogger.Write("mcp.return_response", commandId, toolName, "exception", exception.Message);
             Console.Error.WriteLine($"[unity-agent-bridge:mcp] {toolName}: {exception.Message}");
             return CreateErrorResult(commandId, toolName, "exception", exception.Message);
+        }
+        finally
+        {
+            if (McpTaskExecutionContext.CurrentTaskId is not null)
+                McpTaskExecutionContext.Clear();
         }
     }
 
