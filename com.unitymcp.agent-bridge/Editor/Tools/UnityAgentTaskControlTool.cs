@@ -22,7 +22,10 @@ namespace UnityMcp.AgentBridge
             {
                 cancellation?.ThrowIfCancellationRequested();
                 var request = new AgentTaskControlCodec().DeserializeRequest(context?.RawArgsJson ?? "{}");
-                var response = AgentTaskEditModeExecutionService.Control(request);
+                var response = string.Equals(request?.TaskType, "compile", StringComparison.Ordinal)
+                    || (request?.Operation != AgentTaskControlProtocol.Create && request?.AgentTaskId != null && request.AgentTaskId.StartsWith("compile-", StringComparison.Ordinal))
+                    ? AgentTaskCompileExecutionService.Control(request)
+                    : AgentTaskEditModeExecutionService.Control(request);
                 var raw = new AgentTaskControlCodec().SerializeResponse(response);
                 return new ToolResult
                 {
