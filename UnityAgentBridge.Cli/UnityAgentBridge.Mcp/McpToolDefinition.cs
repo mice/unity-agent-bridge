@@ -12,5 +12,7 @@ public sealed class McpToolDefinition
 
     public bool IsForwardedToUnityQueue { get; init; }
 
+    public bool SupportsTaskExecution { get; init; }
+
     public required Func<string, CancellationToken, Task<string>> InvokeAsync { get; init; }
 }

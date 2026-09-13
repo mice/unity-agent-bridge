@@ -232,6 +232,17 @@ namespace UnityMcp.AgentBridge.Tests
             }
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_218.md
+        [Test]
+        [Category("AGB_TestTools")]
+        [Category("AGB_218")]
+        public void TaskBackedLegacyFilter_PreservesRunnerFilterSelection()
+        {
+            var filter = UnityTestOperationManager.CreateRunnerFilter(TestMode.EditMode, new UnityTestRunArgs { filter = DemoFullName });
+            Assert.That(filter.testMode, Is.EqualTo(TestMode.EditMode));
+            Assert.That(filter.testNames, Is.EqualTo(new[] { DemoFullName }));
+        }
+
         private void AssertWildcardInvalidArgs(string rawArgsJson)
         {
             var tool = new UnityEditModeTestTool();

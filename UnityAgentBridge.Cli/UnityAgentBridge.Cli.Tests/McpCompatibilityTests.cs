@@ -157,6 +157,73 @@ public sealed class McpCompatibilityTests
     }
 
     [TestMethod]
+    public async Task TaskExtensionIsAdvertisedWithStandardSdkOperations()
+    {
+        var projectRoot = CreateUnityProject();
+        await using var server = await McpServerSession.StartAsync(projectRoot, includeTaskCapability: true);
+
+        var extensions = (JObject?)server.InitializeResult["capabilities"]?["extensions"];
+        Assert.IsNotNull(extensions);
+        Assert.IsNotNull(extensions![McpTaskAdapter.ExtensionId]);
+        var operations = (JArray?)extensions[McpTaskAdapter.ExtensionId]?["operations"];
+        CollectionAssert.AreEquivalent(new[] { "tasks/get", "tasks/update", "tasks/cancel" }, operations!.Values<string>().ToArray());
+        var legacyOperations = (JArray?)extensions[McpTaskAdapter.ExtensionId]?["legacyOperations"];
+        CollectionAssert.AreEquivalent(new[] { "tasks/create", "tasks/result" }, legacyOperations!.Values<string>().ToArray());
+
+        Assert.AreEqual("2025-11-25", server.InitializeResult.Value<string>("protocolVersion"));
+    }
+
+    [TestMethod]
+    public async Task StandardTaskAugmentedToolCallSupportsGetAndCancel()
+    {
+        var projectRoot = CreateUnityProject();
+        await using var server = await McpServerSession.StartAsync(projectRoot, initialize: false);
+
+        var taskMeta = new JObject
+        {
+            ["io.modelcontextprotocol/protocolVersion"] = "2026-07-28",
+            ["io.modelcontextprotocol/clientCapabilities"] = new JObject
+            {
+                ["extensions"] = new JObject { [McpTaskAdapter.ExtensionId] = new JObject() }
+            }
+        };
+        var call = await server.SendRequestAsync("tools/call", new JObject
+        {
+            ["name"] = "unity_editor_ping",
+            ["arguments"] = new JObject(),
+            ["_meta"] = taskMeta
+        });
+        var created = (JObject?)call["result"] ?? throw new AssertFailedException($"Task call did not return a result: {call}");
+        StringAssert.StartsWith(created.Value<string>("taskId") ?? string.Empty, "mcp-");
+        Assert.AreEqual("task", created.Value<string>("resultType"));
+
+        var taskId = created.Value<string>("taskId")!;
+        var get = await server.SendRequestAsync("tasks/get", new JObject { ["taskId"] = taskId, ["_meta"] = taskMeta });
+        Assert.AreEqual("working", ((JObject?)get["result"])!.Value<string>("status"));
+
+        var cancel = await server.SendRequestAsync("tasks/cancel", new JObject { ["taskId"] = taskId, ["_meta"] = taskMeta });
+        Assert.IsNotNull(cancel["result"]);
+    }
+
+    [TestMethod]
+    public async Task NonTaskClientCannotCreateAnMcpTask()
+    {
+        var projectRoot = CreateUnityProject();
+        await using var server = await McpServerSession.StartAsync(projectRoot);
+
+        var response = await server.SendRequestAsync(
+            "tasks/create",
+            new JObject
+            {
+                ["taskType"] = "run_editmode_tests",
+                ["payload"] = "AgentTaskCore"
+            });
+
+        var payload = (JObject?)response["result"] ?? throw new AssertFailedException($"tasks/create did not return a result payload: {response}");
+        Assert.AreEqual("TASK_CAPABILITY_REQUIRED", payload.Value<string>("errorCode"));
+    }
+
+    [TestMethod]
     public void CliAndMcpBothDependOnExternalBridgeClientCore()
     {
         var cliAssembly = typeof(AgentBridgeCli).Assembly.GetReferencedAssemblies().Select(name => name.Name).ToArray();
@@ -335,7 +402,7 @@ public sealed class McpCompatibilityTests
             _stdin = process.StandardInput;
         }
 
-        public static async Task<McpServerSession> StartAsync(string projectRoot)
+        public static async Task<McpServerSession> StartAsync(string projectRoot, bool includeTaskCapability = false, bool initialize = true)
         {
             var assemblyPath = Path.GetFullPath(Path.Combine(
                 AppContext.BaseDirectory,
@@ -363,7 +430,10 @@ public sealed class McpCompatibilityTests
             process.Start();
 
             var session = new McpServerSession(process);
-            await session.InitializeAsync();
+            if (initialize)
+            {
+                await session.InitializeAsync(includeTaskCapability);
+            }
             return session;
         }
 
@@ -397,14 +467,22 @@ public sealed class McpCompatibilityTests
             }
         }
 
-        private async Task InitializeAsync()
+        private async Task InitializeAsync(bool includeTaskCapability = false)
         {
+            var capabilities = new JObject();
+            if (includeTaskCapability)
+            {
+                capabilities["extensions"] = new JObject
+                {
+                    [McpTaskAdapter.ExtensionId] = new JObject()
+                };
+            }
             var response = await SendRequestAsync(
                 "initialize",
                 new JObject
                 {
-                    ["protocolVersion"] = "2024-11-05",
-                    ["capabilities"] = new JObject(),
+                    ["protocolVersion"] = includeTaskCapability ? "2025-11-25" : "2024-11-05",
+                    ["capabilities"] = capabilities,
                     ["clientInfo"] = new JObject
                     {
                         ["name"] = "mcp-compatibility-tests",
@@ -416,7 +494,12 @@ public sealed class McpCompatibilityTests
             await SendNotificationAsync("notifications/initialized", new JObject());
         }
 
-        private async Task<JObject> SendRequestAsync(string method, JObject parameters)
+        public Task<JObject> SendRequestAsync(string method, JObject parameters)
+        {
+            return SendRequestCoreAsync(method, parameters);
+        }
+
+        private async Task<JObject> SendRequestCoreAsync(string method, JObject parameters)
         {
             var requestId = _nextRequestId++;
             await WriteMessageAsync(new JObject
