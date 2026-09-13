@@ -1,6 +1,20 @@
 {
   "versions": [
     {
+      "version": "1.2.12-rc.11",
+      "tag": "v1.2.12-rc.11",
+      "artifactUrl": "",
+      "sourceArchiveUrl": "https://github.com/mice/unity-agent-bridge/archive/refs/tags/v1.2.12-rc.11.zip",
+      "commitSha": ""
+    },
+    {
+      "version": "1.2.12-rc.9",
+      "tag": "v1.2.12-rc.9",
+      "artifactUrl": "",
+      "sourceArchiveUrl": "https://github.com/mice/unity-agent-bridge/archive/refs/tags/v1.2.12-rc.9.zip",
+      "commitSha": "1ba2cdf987eb1476be16d52a243475835b9892f8"
+    },
+    {
       "version": "1.2.12-rc.10",
       "tag": "v1.2.12-rc.10",
       "artifactUrl": "",

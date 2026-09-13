@@ -6,6 +6,12 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.2.12-rc.11] - 2026-09-13
+
+### Fixed
+
+- Align published runtime catalog entries with immutable RC tags for setup panel selection.
+
 ## [1.2.12-rc.10] - 2026-09-13
 
 ### Fixed
