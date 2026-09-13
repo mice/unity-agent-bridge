@@ -558,7 +558,17 @@ namespace UnityMcp.AgentBridge.Mcp
             var rightHasPrerelease = rightParts.Length == 2;
             if (leftHasPrerelease != rightHasPrerelease) return leftHasPrerelease ? 1 : -1;
 
-            return string.Compare(right, left, StringComparison.Ordinal);
+            if (!leftHasPrerelease) return 0;
+
+            var leftPrerelease = ParsePrereleaseOrdinal(leftParts[1]);
+            var rightPrerelease = ParsePrereleaseOrdinal(rightParts[1]);
+            return rightPrerelease.CompareTo(leftPrerelease);
+        }
+
+        private static int ParsePrereleaseOrdinal(string value)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(value ?? string.Empty, "(?:rc|preview|alpha|beta|nightly)[.-]?(\\d+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return match.Success && int.TryParse(match.Groups[1].Value, out var ordinal) ? ordinal : 0;
         }
 
         private static string ReadChannelVersion(string managerRoot, string channel)
