@@ -1,0 +1,42 @@
+using NUnit.Framework;
+using UnityEditor.TestTools.TestRunner.Api;
+using UnityEngine;
+using UnityMcp.AgentTaskEditor;
+
+namespace UnityMcp.AgentBridge.Tests
+{
+    public sealed class RunPlayModeTestsTaskContractTests
+    {
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_234.md
+        [Test]
+        [Category("AGB_234")]
+        public void Constructor_RejectsEditModeFilter()
+        {
+            var filter = new Filter { testMode = TestMode.EditMode };
+            Assert.Throws<System.ArgumentException>(() =>
+                new RunPlayModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), filter));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_235.md
+        [Test]
+        [Category("AGB_235")]
+        public void AdvanceBeforeStart_RejectsInvalidLifecycle()
+        {
+            var task = new RunPlayModeTestsTask(
+                ScriptableObject.CreateInstance<TestRunnerApi>(),
+                new Filter { testMode = TestMode.PlayMode });
+            Assert.Throws<System.InvalidOperationException>(() => task.Advance(null));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_236.md
+        [Test]
+        [Category("AGB_236")]
+        public void Cancellation_IsExplicitlyUnsupported()
+        {
+            var task = new RunPlayModeTestsTask(
+                ScriptableObject.CreateInstance<TestRunnerApi>(),
+                new Filter { testMode = TestMode.PlayMode });
+            Assert.Throws<System.NotSupportedException>(() => task.RequestCancellation(null));
+        }
+    }
+}
