@@ -6,6 +6,12 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.3.0-rc.2] - 2026-09-14
+
+### Fixed
+
+- Align RC release identity with the immutable product commit and manifest.
+
 ## [1.3.0-rc.1] - 2026-09-14
 
 ### Added
