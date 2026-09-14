@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
+using UnityEngine;
 using UnityMcp.AgentTaskCore;
 using UnityMcp.AgentTaskEditor;
 
@@ -12,7 +13,7 @@ namespace UnityMcp.AgentBridge
     public static class AgentTaskPlayModeExecutionService
     {
         private static readonly AgentTaskManager Manager = new AgentTaskManager(idFactory: () => new AgentTaskId("playmode-" + Guid.NewGuid().ToString("N")));
-        private static readonly Dictionary<AgentTaskId, AgentTask> Tasks = new Dictionary<AgentTaskId, AgentTask>();
+        private static readonly Dictionary<AgentTaskId, IAgentTask> Tasks = new Dictionary<AgentTaskId, IAgentTask>();
 
         static AgentTaskPlayModeExecutionService() => EditorApplication.update += AdvanceTasks;
 

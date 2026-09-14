@@ -11,6 +11,7 @@
     "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics",
     "UnityMcp.BuiltInPlugins.RoslynExecution",
     "UnityMcp.AgentTaskCore",
+    "UnityMcp.AgentTaskEditor",
     "UnityMcp.Plugin.Abstractions"
   ],
   "includePlatforms": [

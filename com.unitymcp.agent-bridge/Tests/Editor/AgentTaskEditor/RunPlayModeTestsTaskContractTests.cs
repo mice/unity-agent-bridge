@@ -7,6 +7,14 @@ namespace UnityMcp.AgentBridge.Tests
 {
     public sealed class RunPlayModeTestsTaskContractTests
     {
+        private TestRunnerApi api;
+
+        [SetUp]
+        public void SetUp() => api = ScriptableObject.CreateInstance<TestRunnerApi>();
+
+        [TearDown]
+        public void TearDown() => Object.DestroyImmediate(api);
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_234.md
         [Test]
         [Category("AGB_234")]
@@ -14,7 +22,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var filter = new Filter { testMode = TestMode.EditMode };
             Assert.Throws<System.ArgumentException>(() =>
-                new RunPlayModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), filter));
+                new RunPlayModeTestsTask(api, filter));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_235.md
@@ -23,7 +31,7 @@ namespace UnityMcp.AgentBridge.Tests
         public void AdvanceBeforeStart_RejectsInvalidLifecycle()
         {
             var task = new RunPlayModeTestsTask(
-                ScriptableObject.CreateInstance<TestRunnerApi>(),
+                api,
                 new Filter { testMode = TestMode.PlayMode });
             Assert.Throws<System.InvalidOperationException>(() => task.Advance(null));
         }
@@ -34,7 +42,7 @@ namespace UnityMcp.AgentBridge.Tests
         public void Cancellation_IsExplicitlyUnsupported()
         {
             var task = new RunPlayModeTestsTask(
-                ScriptableObject.CreateInstance<TestRunnerApi>(),
+                api,
                 new Filter { testMode = TestMode.PlayMode });
             Assert.Throws<System.NotSupportedException>(() => task.RequestCancellation(null));
         }
