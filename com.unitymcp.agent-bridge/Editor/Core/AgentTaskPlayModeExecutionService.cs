@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
+using Newtonsoft.Json;
 using UnityEditor;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
@@ -15,7 +17,11 @@ namespace UnityMcp.AgentBridge
         private static readonly AgentTaskManager Manager = new AgentTaskManager(idFactory: () => new AgentTaskId("playmode-" + Guid.NewGuid().ToString("N")));
         private static readonly Dictionary<AgentTaskId, IAgentTask> Tasks = new Dictionary<AgentTaskId, IAgentTask>();
 
-        static AgentTaskPlayModeExecutionService() => EditorApplication.update += AdvanceTasks;
+        static AgentTaskPlayModeExecutionService()
+        {
+            RestorePersistedTasks();
+            EditorApplication.update += AdvanceTasks;
+        }
 
         public static AgentTaskControlResponse Control(AgentTaskControlRequest request)
         {
@@ -43,6 +49,7 @@ namespace UnityMcp.AgentBridge
             var id = Manager.Register(task);
             Tasks[id] = task;
             Manager.Start(id);
+                Persist(id, request.Payload ?? "{}");
             return Project(Manager.Get(id), id.Value);
         }
 
@@ -53,10 +60,64 @@ namespace UnityMcp.AgentBridge
                 var snapshot = Manager.Get(id);
                 if (snapshot != null && snapshot.State == AgentTaskState.Running) Manager.Advance(id);
                 if (snapshot != null && snapshot.IsTerminal) Tasks.Remove(id);
+                if (snapshot != null && snapshot.IsTerminal) DeletePersisted(id);
             }
         }
 
         private static AgentTaskControlResponse Project(AgentTaskSnapshot snapshot, string id) => new AgentTaskControlResponse { Success = true, Snapshot = snapshot, AgentTaskId = id, ResultPayloadJson = snapshot?.Result?.Payload == null ? null : JsonUtil.SerializeObject(snapshot.Result.Payload) };
         private static AgentTaskControlResponse Error(string code, string message) => new AgentTaskControlResponse { Success = false, ErrorCode = code, ErrorMessage = message };
+
+        private static string StateDirectory
+        {
+            get
+            {
+                var root = Directory.GetParent(Application.dataPath)?.FullName;
+                return root == null ? null : Path.Combine(root, "Temp", "AgentBridge", "processing");
+            }
+        }
+
+        private static string StatePath(AgentTaskId id) => Path.Combine(StateDirectory ?? string.Empty, id.Value + ".playmode.task.json");
+
+        private static void Persist(AgentTaskId id, string payload)
+        {
+            try
+            {
+                Directory.CreateDirectory(StateDirectory);
+                File.WriteAllText(StatePath(id), JsonConvert.SerializeObject(new PersistedTask { agentTaskId = id.Value, payload = payload }));
+            }
+            catch { }
+        }
+
+        private static void DeletePersisted(AgentTaskId id)
+        {
+            try { if (File.Exists(StatePath(id))) File.Delete(StatePath(id)); } catch { }
+        }
+
+        private static void RestorePersistedTasks()
+        {
+            try
+            {
+                if (!Directory.Exists(StateDirectory)) return;
+                foreach (var path in Directory.GetFiles(StateDirectory, "*.playmode.task.json"))
+                {
+                    var state = JsonConvert.DeserializeObject<PersistedTask>(File.ReadAllText(path));
+                    if (state == null || string.IsNullOrWhiteSpace(state.agentTaskId)) continue;
+                    var id = new AgentTaskId(state.agentTaskId);
+                    if (!JsonUtil.TryDeserializeArgs<UnityTestRunArgs>(state.payload ?? "{}", out var args, out _)) args = new UnityTestRunArgs();
+                    var task = new RunPlayModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), UnityTestOperationManager.CreateRunnerFilter(TestMode.PlayMode, args));
+                    Manager.RestoreRunning(id, task, DateTimeOffset.UtcNow);
+                    Manager.Fail(id, new AgentTaskError("AGENT_TASK_RECOVERY_STALE", "The PlayMode Test Runner handle was not available after domain reload."));
+                    DeletePersisted(id);
+                }
+            }
+            catch { }
+        }
+
+        [Serializable]
+        private sealed class PersistedTask
+        {
+            public string agentTaskId;
+            public string payload;
+        }
     }
 }
