@@ -6,6 +6,12 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-14
+
+### Added
+
+- Promote the accepted AgentTask compile and PlayMode task workflows to the stable release channel.
+
 ## [1.3.0-rc.2] - 2026-09-14
 
 ### Fixed
