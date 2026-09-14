@@ -9,6 +9,27 @@ namespace UnityAgentBridge.Cli.Tests;
 public sealed class McpTaskAdapterTests
 {
     [TestMethod]
+    public void PendingTaskRequestRecognizesCompileAndPlayModeOperations()
+    {
+        var compile = new McpTaskExecutionContext.PendingTaskRequest("unity_compile", "{\"timeoutMs\":321}");
+        Assert.IsTrue(compile.IsCompile);
+        Assert.IsTrue(compile.IsAgentTaskOperation);
+        Assert.AreEqual(321, compile.TimeoutMs);
+
+        var playMode = new McpTaskExecutionContext.PendingTaskRequest("unity_tests_run_play_mode", "{\"filter\":{\"testNames\":[\"Smoke\"]}}");
+        Assert.IsTrue(playMode.IsPlayModeTest);
+        Assert.IsTrue(playMode.IsAgentTaskOperation);
+        Assert.IsFalse(playMode.IsEditModeTest);
+    }
+
+    [TestMethod]
+    public void PendingTaskRequestRejectsUnknownOperation()
+    {
+        var request = new McpTaskExecutionContext.PendingTaskRequest("unity_unknown", "{}");
+        Assert.IsFalse(request.IsAgentTaskOperation);
+    }
+
+    [TestMethod]
     public void SupportsTasksRequiresAdvertisedCapability()
     {
         var adapter = CreateAdapter();
