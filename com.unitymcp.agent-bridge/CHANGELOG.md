@@ -4,7 +4,19 @@ All notable changes to `com.unitymcp.agent-bridge` are documented in this file.
 
 The format follows Keep a Changelog and Semantic Versioning.
 
-## [Unreleased]\r?\n\r?\n## [1.2.12-rc.12] - 2026-09-14\r?\n\r?\n### Fixed\r?\n\r?\n- Include AgentTaskCore and AgentTaskEditor assemblies required by AgentBridge.Editor.\r?\n
+## [Unreleased]
+
+## [1.3.0-rc.1] - 2026-09-14
+
+### Added
+
+- Add compile and PlayMode AgentTask execution through the MCP task control surface.
+
+## [1.2.12-rc.12] - 2026-09-14
+
+### Fixed
+
+- Include AgentTaskCore and AgentTaskEditor assemblies required by AgentBridge.Editor.
 ## [1.2.12-rc.11] - 2026-09-13
 
 ### Fixed
