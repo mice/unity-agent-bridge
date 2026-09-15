@@ -41,19 +41,44 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var original = File.Exists(targetPath) ? File.ReadAllText(targetPath) : string.Empty;
-            var preservedChildSections = ExcludeOwnedChildSections(
-                CodexProjectConfigWriter.ExtractUnityAgentBridgeChildSections(original));
-            var managedBlockBody = managedBlockFactory(preservedChildSections);
-            var updated = CodexProjectConfigWriter.ApplyManagedContent(
-                NormalizeLineEndings(original),
-                managedBlockBody,
-                _textEditor);
+            string updated;
+            try
+            {
+                var document = Parse(original);
+                var generated = Parse(managedBlockFactory(string.Empty));
+                var generatedServer = GetServer(generated);
+                var server = GetServer(document);
+                foreach (var pair in generatedServer.RawTable)
+                {
+                    if (pair.Key == "env" && pair.Value is TomlTable generatedEnv)
+                    {
+                        if (!server.HasKey("env")) server["env"] = new TomlTable();
+                        if (!(server["env"] is TomlTable existingEnv)) throw new FormatException("env must be a table.");
+                        foreach (var variable in generatedEnv.RawTable) existingEnv[variable.Key] = variable.Value;
+                    }
+                    else if (pair.Key == "command" || pair.Key == "args" || pair.Key == "cwd" || !server.HasKey(pair.Key))
+                    {
+                        server[pair.Key] = pair.Value;
+                    }
+                }
 
-            if (!ValidateManagedResult(updated))
+                var servers = (TomlTable)document["mcp_servers"];
+                servers.Delete("unity_agent_bridge");
+                if (servers.ChildrenCount == 0) document.Delete("mcp_servers");
+                // Regenerate ownership markers; parsed comments may contain old markers.
+                ClearManagedComments(document);
+                ClearManagedComments(server);
+                using var remainder = new StringWriter();
+                document.WriteTo(remainder);
+                using var block = new StringWriter();
+                server.WriteTo(block, "mcp_servers.unity_agent_bridge");
+                updated = _textEditor.Apply(remainder.ToString(), block.ToString());
+                if (!TryParseToml(updated)) throw new FormatException("Invalid merged TOML.");
+            }
+            catch
             {
                 return new ManagedBlockApplyResult
                 {
-                    Applied = false,
                     TargetPath = targetPath,
                     Reason = "format_validation_failed",
                 };
@@ -170,96 +195,32 @@ namespace UnityMcp.AgentBridge.Mcp
             }
         }
 
-        private static bool ValidateManagedResult(string updated)
+        private static TomlTable Parse(string text)
         {
-            return CodexProjectConfigWriter.ValidateManagedTomlResult(updated) && TryParseToml(updated);
+            using var reader = new StringReader(text ?? string.Empty);
+            return TOML.Parse(reader);
         }
 
         private static bool TryParseToml(string text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                return true;
-            }
-
-            try
-            {
-                using var reader = new StringReader(text);
-                return TOML.Parse(reader) != null;
-            }
-            catch
-            {
-                return false;
-            }
+            try { Parse(text); return true; }
+            catch { return false; }
         }
 
-        private static string ExcludeOwnedChildSections(string childSections)
+        private static TomlTable GetServer(TomlTable document)
         {
-            var normalized = NormalizeLineEndings(childSections ?? string.Empty);
-            if (string.IsNullOrWhiteSpace(normalized))
-            {
-                return string.Empty;
-            }
-
-            var builder = new StringBuilder();
-            var scanIndex = 0;
-            while (scanIndex < normalized.Length)
-            {
-                var sectionEnd = FindNextSectionStart(normalized, scanIndex);
-                var section = normalized.Substring(scanIndex, sectionEnd - scanIndex).Trim();
-                var lineEnd = section.IndexOf('\n');
-                var header = (lineEnd < 0 ? section : section.Substring(0, lineEnd)).Trim();
-                if (!IsOwnedEnvironmentHeader(header) && !string.IsNullOrEmpty(section))
-                {
-                    if (builder.Length > 0)
-                    {
-                        builder.Append(Environment.NewLine);
-                        builder.Append(Environment.NewLine);
-                    }
-
-                    builder.Append(section);
-                }
-
-                scanIndex = sectionEnd;
-            }
-
-            return builder.ToString();
+            if (!document.HasKey("mcp_servers")) document["mcp_servers"] = new TomlTable();
+            if (!(document["mcp_servers"] is TomlTable servers)) throw new FormatException("mcp_servers must be a table.");
+            if (!servers.HasKey("unity_agent_bridge")) servers["unity_agent_bridge"] = new TomlTable();
+            return servers["unity_agent_bridge"] as TomlTable ?? throw new FormatException("unity_agent_bridge must be a table.");
         }
 
-        private static int FindNextSectionStart(string text, int startIndex)
+        private static void ClearManagedComments(TomlNode node)
         {
-            var scanIndex = text.IndexOf('\n', startIndex);
-            if (scanIndex < 0)
-            {
-                return text.Length;
-            }
-
-            scanIndex++;
-            while (scanIndex < text.Length)
-            {
-                var lineEnd = text.IndexOf('\n', scanIndex);
-                if (lineEnd < 0)
-                {
-                    lineEnd = text.Length;
-                }
-
-                if (text.Substring(scanIndex, lineEnd - scanIndex).TrimStart().StartsWith("[", StringComparison.Ordinal))
-                {
-                    return scanIndex;
-                }
-
-                scanIndex = lineEnd < text.Length ? lineEnd + 1 : text.Length;
-            }
-
-            return text.Length;
-        }
-
-        private static bool IsOwnedEnvironmentHeader(string header)
-        {
-            return string.Equals(
-                header,
-                "[mcp_servers.unity_agent_bridge.env]",
-                StringComparison.OrdinalIgnoreCase);
+            if (!string.IsNullOrEmpty(node.Comment))
+                node.Comment = node.Comment.Replace("BEGIN UNITY AGENT BRIDGE MANAGED", string.Empty)
+                    .Replace("END UNITY AGENT BRIDGE MANAGED", string.Empty).Trim();
+            foreach (var child in node.Children) ClearManagedComments(child);
         }
 
         private static string NormalizeLineEndings(string value)

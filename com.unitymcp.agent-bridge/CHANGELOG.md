@@ -6,6 +6,13 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-16
+
+### Fixed
+
+- Preserve client-owned MCP permission fields when Apply refreshes the managed bridge configuration.
+- Keep the Unity package, source-only runtime build inputs, and installed machine runtime as separate delivery layers.
+
 ## [1.3.0] - 2026-09-14
 
 ### Added
