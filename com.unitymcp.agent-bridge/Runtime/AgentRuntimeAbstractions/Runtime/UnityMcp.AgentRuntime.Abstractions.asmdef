@@ -1,0 +1,16 @@
+{
+  "name": "UnityMcp.AgentRuntime.Abstractions",
+  "rootNamespace": "UnityMcp.AgentRuntime",
+  "references": [
+    "UnityMcp.AgentTaskCore"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": true
+}
