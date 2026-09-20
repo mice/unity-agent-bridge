@@ -11,6 +11,10 @@
     "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics",
     "UnityMcp.BuiltInPlugins.RoslynExecution",
     "UnityMcp.AgentTaskCore",
+    "UnityMcp.AgentRuntime.Abstractions",
+    "UnityMcp.AgentRuntime.Editor",
+    "UnityMcp.AgentRuntime.Abstractions",
+    "UnityMcp.AgentRuntime.Editor",
     "UnityMcp.AgentTaskEditor",
     "UnityMcp.Plugin.Abstractions"
   ],
