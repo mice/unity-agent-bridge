@@ -1,0 +1,14 @@
+{
+  "name": "UnityMcp.AgentRuntime.Bridge.Editor",
+  "rootNamespace": "UnityMcp.AgentBridge",
+  "references": ["UnityMcp.AgentRuntime.Abstractions", "UnityMcp.AgentRuntime.Editor", "UnityMcp.AgentTaskCore"],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
