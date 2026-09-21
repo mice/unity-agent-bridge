@@ -67,6 +67,16 @@ public static class McpToolCatalog
     private static IEnumerable<ToolMetadata> CreateBuiltInMetadata()
     {
         yield return CreateToolMetadata(
+            "agent.run",
+            "Run Agent",
+            "Run a read-only Pi agent task through the existing MCP task lifecycle.",
+            """{"type":"object","properties":{"task":{"type":"string","minLength":1},"working_directory":{"type":"string","minLength":1}},"required":["task"],"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false}""",
+            "unity.agent_task_control",
+            120000,
+            true,
+            true);
+
+        yield return CreateToolMetadata(
             "mcp_echo",
             "MCP Echo",
             "Return a local diagnostic response without touching the Unity bridge queue.",
@@ -327,7 +337,10 @@ public static class McpToolCatalog
                 var client = new ExternalBridgeClient();
                 var queuePaths = McpToolRuntimeContext.QueuePaths ?? throw new InvalidOperationException("MCP queue paths were not initialized.");
                 var commandId = client.CreateCommandId();
-                var result = await client.ExecuteAsync(queuePaths, commandId, new BridgeCommandSpec(metadata.BridgeTool, metadata.DefaultTimeoutMs, argumentsJson), cancellationToken);
+                var bridgeArguments = metadata.Name == "agent.run"
+                    ? "{\"version\":1,\"operation\":\"create\",\"projectIdentity\":" + JsonSerializer.Serialize(queuePaths.ProjectPath) + ",\"taskType\":\"agent_run\",\"payload\":" + argumentsJson + "}"
+                    : argumentsJson;
+                var result = await client.ExecuteAsync(queuePaths, commandId, new BridgeCommandSpec(metadata.BridgeTool, metadata.DefaultTimeoutMs, bridgeArguments), cancellationToken);
                 return result.RawJson;
             }
         };

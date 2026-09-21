@@ -35,7 +35,8 @@ internal static class McpTaskExecutionContext
         public bool IsEditModeTest => string.Equals(ToolName, "unity_tests_run_edit_mode", StringComparison.Ordinal);
         public bool IsCompile => string.Equals(ToolName, "unity_compile", StringComparison.Ordinal);
         public bool IsPlayModeTest => string.Equals(ToolName, "unity_tests_run_play_mode", StringComparison.Ordinal);
-        public bool IsAgentTaskOperation => IsEditModeTest || IsCompile || IsPlayModeTest;
+        public bool IsAgentRun => string.Equals(ToolName, "agent.run", StringComparison.Ordinal);
+        public bool IsAgentTaskOperation => IsEditModeTest || IsCompile || IsPlayModeTest || IsAgentRun;
 
         public string Payload
         {

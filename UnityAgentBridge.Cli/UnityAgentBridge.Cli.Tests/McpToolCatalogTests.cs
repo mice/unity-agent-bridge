@@ -28,7 +28,8 @@ public sealed class McpToolCatalogTests
             "unity_editor_open",
             "unity_bridge_health",
             "unity_bridge_submit_only",
-            "unity_bridge_wait_result"
+            "unity_bridge_wait_result",
+            "agent.run"
         };
 
         var diagnostics = CreateDiagnostics(CreateUnityProject());
@@ -38,8 +39,18 @@ public sealed class McpToolCatalogTests
             .ToArray();
 
         CollectionAssert.AreEqual(expectedNames.OrderBy(name => name, StringComparer.Ordinal).ToArray(), actualNames);
-        Assert.AreEqual(13, actualNames.Length);
+        Assert.AreEqual(14, actualNames.Length);
         Assert.IsFalse(actualNames.Any(name => name.Contains("__", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void AgentRunExposesTaskBackedReadOnlySchema()
+    {
+        var tool = McpToolCatalog.TryGet("agent.run", CreateDiagnostics(CreateUnityProject()));
+        Assert.IsNotNull(tool);
+        Assert.AreEqual("unity.agent_task_control", tool!.BridgeTool);
+        Assert.IsTrue(tool.SupportsTaskExecution);
+        Assert.IsTrue(tool.SchemaJson.Contains("working_directory", StringComparison.Ordinal));
     }
 
     [TestMethod]
