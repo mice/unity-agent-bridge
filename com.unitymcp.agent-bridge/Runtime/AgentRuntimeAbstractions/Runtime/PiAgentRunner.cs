@@ -47,56 +47,81 @@ namespace UnityMcp.AgentRuntime
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
             if (context == null) throw new ArgumentNullException(nameof(context));
-            process = processFactory.Create(options.ExecutablePath);
-            process.WorkingDirectory = request.WorkingDirectory ?? string.Empty;
-            process.Arguments = BuildArguments(request.Task, options.Model);
-            startedAt = DateTime.UtcNow;
             finished = false;
-            try { process.Start(); }
-            catch (Exception exception) { finished = true; context.Fail(new AgentRunError("PI_START_FAILED", exception.Message, exception)); }
+            try
+            {
+                process = processFactory.Create(options.ExecutablePath);
+                process.WorkingDirectory = request.WorkingDirectory ?? string.Empty;
+                process.Arguments = BuildArguments(request.Task, options.Model);
+                startedAt = DateTime.UtcNow;
+                process.Start();
+            }
+            catch (Exception exception) { Finish(); context.Fail(new AgentRunError("PI_START_FAILED", exception.Message, exception)); }
         }
 
         public void Advance(IAgentRunnerContext context)
         {
             if (finished || process == null) return;
-            if (context.CancellationRequested)
+            try
             {
-                process.Kill();
-                finished = true;
-                context.Cancel(AgentRunResult.Failed(new AgentRunError("PI_CANCELLED", "Pi execution was cancelled.")));
-                return;
+                if (context.CancellationRequested) { RequestCancellation(context); return; }
+                if ((DateTime.UtcNow - startedAt).TotalMilliseconds > options.TimeoutMilliseconds)
+                {
+                    process.Kill();
+                    Finish();
+                    context.Fail(new AgentRunError("PI_TIMEOUT", "Pi execution exceeded its timeout."));
+                    return;
+                }
+                if (!process.HasExited) return;
+                var output = process.StandardOutput;
+                var error = process.StandardError;
+                var exitCode = process.ExitCode;
+                Finish();
+                if (exitCode == 0) context.Complete(AgentRunResult.Succeeded(output));
+                else context.Fail(new AgentRunError("PI_EXIT_NONZERO", "Pi exited with code " + exitCode + ": " + error));
             }
-            if ((DateTime.UtcNow - startedAt).TotalMilliseconds > options.TimeoutMilliseconds)
-            {
-                process.Kill();
-                finished = true;
-                context.Fail(new AgentRunError("PI_TIMEOUT", "Pi execution exceeded its timeout."));
-                return;
-            }
-            if (!process.HasExited) return;
-            finished = true;
-            var output = process.StandardOutput;
-            var error = process.StandardError;
-            if (process.ExitCode == 0)
-                context.Complete(AgentRunResult.Succeeded(output));
-            else
-                context.Fail(new AgentRunError("PI_EXIT_NONZERO", "Pi exited with code " + process.ExitCode + ": " + error));
+            catch (Exception exception) { Finish(); context.Fail(new AgentRunError("PI_PROCESS_FAILED", exception.Message, exception)); }
         }
 
         public void RequestCancellation(IAgentRunnerContext context)
         {
             if (process == null || finished) return;
-            process.Kill();
+            try
+            {
+                process.Kill();
+                Finish();
+                context.Cancel(AgentRunResult.Failed(new AgentRunError("PI_CANCELLED", "Pi execution was cancelled.")));
+            }
+            catch (Exception exception) { Finish(); context.Fail(new AgentRunError("PI_CANCEL_FAILED", exception.Message, exception)); }
+        }
+
+        private void Finish()
+        {
             finished = true;
-            context.Cancel(AgentRunResult.Failed(new AgentRunError("PI_CANCELLED", "Pi execution was cancelled.")));
+            try { (process as IDisposable)?.Dispose(); }
+            catch { /* Preserve the original execution result if cleanup races process exit. */ }
         }
 
         private static string BuildArguments(string task, string model)
         {
-            var escaped = task.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n");
-            var arguments = "-p \"" + escaped + "\" --no-tools --no-session --mode text";
-            if (!string.IsNullOrWhiteSpace(model)) arguments += " --model \"" + model.Replace("\"", "\\\"") + "\"";
-            return arguments;
+            var arguments = "-p --tools read,grep,find,ls --no-extensions --no-skills --no-prompt-templates --no-session --mode text";
+            if (!string.IsNullOrWhiteSpace(model)) arguments += " --model " + QuoteArgument(model);
+            return arguments + " -- " + QuoteArgument(task);
+        }
+
+        // ProcessStartInfo.Arguments quoting: only slashes before quotes/end need doubling.
+        private static string QuoteArgument(string value)
+        {
+            var result = new System.Text.StringBuilder("\"");
+            var slashes = 0;
+            foreach (var character in value)
+            {
+                if (character == '\\') { slashes++; continue; }
+                result.Append('\\', character == '"' ? slashes * 2 + 1 : slashes);
+                result.Append(character);
+                slashes = 0;
+            }
+            return result.Append('\\', slashes * 2).Append('"').ToString();
         }
     }
 }

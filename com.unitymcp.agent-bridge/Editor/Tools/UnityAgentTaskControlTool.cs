@@ -24,6 +24,8 @@ namespace UnityMcp.AgentBridge
                 var request = new AgentTaskControlCodec().DeserializeRequest(context?.RawArgsJson ?? "{}");
                 var response = string.Equals(request?.TaskType, "agent_run", StringComparison.Ordinal)
                     ? AgentTaskPiExecutionService.Control(request)
+                    : request?.AgentTaskId != null && request.AgentTaskId.StartsWith("agent-", StringComparison.Ordinal)
+                    ? AgentTaskPiExecutionService.Control(request)
                     : string.Equals(request?.TaskType, "compile", StringComparison.Ordinal)
                     || (request?.Operation != AgentTaskControlProtocol.Create && request?.AgentTaskId != null && request.AgentTaskId.StartsWith("compile-", StringComparison.Ordinal))
                     ? AgentTaskCompileExecutionService.Control(request)
@@ -37,7 +39,9 @@ namespace UnityMcp.AgentBridge
                     commandId = context?.Command?.commandId,
                     tool = Descriptor.Name,
                     success = response.Success,
-                    status = response.Success ? (response.Snapshot != null && response.Snapshot.IsTerminal ? ToolResultStatus.Success : ToolResultStatus.Running) : ToolResultStatus.Failed,
+                    // The control command itself is synchronous. A Running snapshot is data,
+                    // not a request for the bridge poller to hold this command open.
+                    status = response.Success ? ToolResultStatus.Success : ToolResultStatus.Failed,
                     summary = response.Success ? "Agent task control completed." : (response.ErrorMessage ?? "Agent task control failed."),
                     metricsObjectJson = raw
                 };

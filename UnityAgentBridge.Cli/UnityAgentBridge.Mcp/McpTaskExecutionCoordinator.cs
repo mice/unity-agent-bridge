@@ -19,7 +19,7 @@ public sealed class McpTaskExecutionCoordinator
         if (!Supports(request)) return;
         var taskType = request.IsAgentRun ? "agent_run" : request.IsCompile ? "compile" : request.IsPlayModeTest ? "run_playmode_tests" : "run_editmode_tests";
         var response = await _adapter.CreateForExternalTaskAsync(mcpTaskId, taskType, request.StructuredPayload, request.TimeoutMs, cancellationToken);
-        if (response["success"]?.GetValue<bool>() != true)
+        if (response["success"]?.GetValue<bool>() != true && response["state"]?.GetValue<string>() != "Running")
         {
             throw new InvalidOperationException(response["errorMessage"]?.GetValue<string>() ?? "Unity AgentTask creation failed.");
         }

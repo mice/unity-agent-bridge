@@ -103,7 +103,7 @@ public sealed class McpTaskAdapter
         var envelope = JsonNode.Parse(result.RawJson)?.AsObject();
         if (envelope is null) return Error("INVALID_RESPONSE", "Unity returned an invalid task response.");
         var embedded = envelope["metricsObjectJson"]?.GetValue<string>();
-        var response = !string.IsNullOrWhiteSpace(embedded) ? JsonNode.Parse(embedded)?.AsObject() : null;
+        var response = !string.IsNullOrWhiteSpace(embedded) ? JsonNode.Parse(embedded)?.AsObject() : envelope["metrics"]?.AsObject();
         return response ?? envelope;
     }
 

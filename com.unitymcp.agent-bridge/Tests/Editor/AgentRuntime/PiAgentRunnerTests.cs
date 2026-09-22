@@ -10,12 +10,14 @@ namespace UnityMcp.AgentBridge.Tests
         public void SuccessfulProcessCompletesWithOutputAndReadOnlyArguments()
         {
             var process = new FakeProcess { HasExited = true, ExitCode = 0, StandardOutput = "inspection" };
-            var runner = new PiAgentRunner(new PiAgentRunnerOptions { ExecutablePath = "pi" }, new FakeFactory(process));
+            var runner = new PiAgentRunner(new PiAgentRunnerOptions { ExecutablePath = "pi", Model = "deepseek/deepseek-flash" }, new FakeFactory(process));
             var context = new FakeContext(new AgentRunRequest("inspect files", "C:/repo"));
             runner.Start(context.Request, context);
             runner.Advance(context);
             Assert.IsTrue(context.Result.Success);
-            StringAssert.Contains("--no-tools", process.Arguments);
+            StringAssert.Contains("--tools read,grep,find,ls", process.Arguments);
+            StringAssert.Contains("--model", process.Arguments);
+            StringAssert.Contains("deepseek/deepseek-flash", process.Arguments);
             StringAssert.Contains("-p", process.Arguments);
             Assert.AreEqual("C:/repo", process.WorkingDirectory);
         }
