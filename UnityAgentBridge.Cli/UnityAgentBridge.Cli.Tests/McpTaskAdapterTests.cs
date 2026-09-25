@@ -20,6 +20,11 @@ public sealed class McpTaskAdapterTests
         Assert.IsTrue(playMode.IsPlayModeTest);
         Assert.IsTrue(playMode.IsAgentTaskOperation);
         Assert.IsFalse(playMode.IsEditModeTest);
+
+        var analysis = new McpTaskExecutionContext.PendingTaskRequest("unity_analysis_compile_failure", "{\"problemId\":\"p1\",\"evidenceIds\":[\"e1\"]}");
+        Assert.IsTrue(analysis.IsVerifiedCompileFailureAnalysis);
+        Assert.IsTrue(analysis.IsAgentTaskOperation);
+        Assert.AreEqual("analysis_compile_failure", analysis.AgentTaskType);
     }
 
     [TestMethod]

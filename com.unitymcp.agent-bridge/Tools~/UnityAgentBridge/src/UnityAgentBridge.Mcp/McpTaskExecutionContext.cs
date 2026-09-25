@@ -35,7 +35,9 @@ internal static class McpTaskExecutionContext
         public bool IsEditModeTest => string.Equals(ToolName, "unity_tests_run_edit_mode", StringComparison.Ordinal);
         public bool IsCompile => string.Equals(ToolName, "unity_compile", StringComparison.Ordinal);
         public bool IsPlayModeTest => string.Equals(ToolName, "unity_tests_run_play_mode", StringComparison.Ordinal);
-        public bool IsAgentTaskOperation => IsEditModeTest || IsCompile || IsPlayModeTest;
+        public bool IsVerifiedCompileFailureAnalysis => string.Equals(ToolName, "unity_analysis_compile_failure", StringComparison.Ordinal);
+        public bool IsAgentTaskOperation => IsEditModeTest || IsCompile || IsPlayModeTest || IsVerifiedCompileFailureAnalysis;
+        internal string AgentTaskType => IsVerifiedCompileFailureAnalysis ? "analysis_compile_failure" : IsCompile ? "compile" : IsPlayModeTest ? "run_playmode_tests" : IsEditModeTest ? "run_editmode_tests" : string.Empty;
 
         public string Payload
         {

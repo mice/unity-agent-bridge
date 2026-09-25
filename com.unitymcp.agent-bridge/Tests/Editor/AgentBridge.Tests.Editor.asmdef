@@ -12,6 +12,8 @@
     "UnityMcp.BuiltInPlugins.RoslynExecution",
     "UnityMcp.AgentTaskCore",
     "UnityMcp.AgentRuntime.Abstractions",
+    "UnityMcp.AgentRuntime.Bridge.Editor",
+    "UnityMcp.AgentIntelligentAnalysis",
     "UnityMcp.AgentTaskEditor",
     "UnityMcp.Plugin.Abstractions"
   ],

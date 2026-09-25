@@ -22,7 +22,11 @@ namespace UnityMcp.AgentBridge
             {
                 cancellation?.ThrowIfCancellationRequested();
                 var request = new AgentTaskControlCodec().DeserializeRequest(context?.RawArgsJson ?? "{}");
-                var response = string.Equals(request?.TaskType, "agent_run", StringComparison.Ordinal)
+                var response = string.Equals(request?.TaskType, AgentTaskVerifiedAnalysisExecutionService.TaskType, StringComparison.Ordinal)
+                    ? AgentTaskVerifiedAnalysisExecutionService.Control(request)
+                    : request?.AgentTaskId != null && request.AgentTaskId.StartsWith("analysis-", StringComparison.Ordinal)
+                    ? AgentTaskVerifiedAnalysisExecutionService.Control(request)
+                    : string.Equals(request?.TaskType, "agent_run", StringComparison.Ordinal)
                     ? AgentTaskPiExecutionService.Control(request)
                     : request?.AgentTaskId != null && request.AgentTaskId.StartsWith("agent-", StringComparison.Ordinal)
                     ? AgentTaskPiExecutionService.Control(request)

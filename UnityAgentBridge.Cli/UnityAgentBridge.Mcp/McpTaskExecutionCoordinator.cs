@@ -17,7 +17,7 @@ public sealed class McpTaskExecutionCoordinator
     internal async Task CreateAsync(string mcpTaskId, McpTaskExecutionContext.PendingTaskRequest request, CancellationToken cancellationToken)
     {
         if (!Supports(request)) return;
-        var taskType = request.IsAgentRun ? "agent_run" : request.IsCompile ? "compile" : request.IsPlayModeTest ? "run_playmode_tests" : "run_editmode_tests";
+        var taskType = request.AgentTaskType;
         var response = await _adapter.CreateForExternalTaskAsync(mcpTaskId, taskType, request.StructuredPayload, request.TimeoutMs, cancellationToken);
         if (response["success"]?.GetValue<bool>() != true && response["state"]?.GetValue<string>() != "Running")
         {

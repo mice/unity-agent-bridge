@@ -29,7 +29,7 @@ public sealed class McpToolCatalogTests
             "unity_bridge_health",
             "unity_bridge_submit_only",
             "unity_bridge_wait_result",
-            "agent.run"
+            "unity_analysis_compile_failure"
         };
 
         var diagnostics = CreateDiagnostics(CreateUnityProject());
@@ -44,13 +44,35 @@ public sealed class McpToolCatalogTests
     }
 
     [TestMethod]
-    public void AgentRunExposesTaskBackedReadOnlySchema()
+    public void VerifiedCompileFailureAnalysisExposesClosedTaskSchema()
     {
-        var tool = McpToolCatalog.TryGet("agent.run", CreateDiagnostics(CreateUnityProject()));
+        var tool = McpToolCatalog.TryGet("unity_analysis_compile_failure", CreateDiagnostics(CreateUnityProject()));
         Assert.IsNotNull(tool);
         Assert.AreEqual("unity.agent_task_control", tool!.BridgeTool);
         Assert.IsTrue(tool.SupportsTaskExecution);
-        Assert.IsTrue(tool.SchemaJson.Contains("working_directory", StringComparison.Ordinal));
+        Assert.IsFalse(tool.SchemaJson.Contains("working_directory", StringComparison.Ordinal));
+        Assert.IsFalse(tool.SchemaJson.Contains("model", StringComparison.Ordinal));
+        Assert.IsTrue(tool.SchemaJson.Contains("additionalProperties", StringComparison.Ordinal));
+        var properties = tool.ProtocolTool.InputSchema.GetProperty("properties");
+        CollectionAssert.AreEquivalent(new[] { "problemId", "evidenceIds", "timeoutMs" }, properties.EnumerateObject().Select(property => property.Name).ToArray());
+    }
+
+    [TestMethod]
+    public void GenericAgentRunIsNotPublished()
+    {
+        Assert.IsNull(McpToolCatalog.TryGet("agent.run", CreateDiagnostics(CreateUnityProject())));
+    }
+
+    [TestMethod]
+    public void VerifiedAnalysisSchemaRejectsGenericAgentOverrides()
+    {
+        var tool = McpToolCatalog.TryGet("unity_analysis_compile_failure", CreateDiagnostics(CreateUnityProject()));
+        Assert.IsNotNull(tool);
+        foreach (var property in new[] { "task", "prompt", "working_directory", "model", "tools", "folders", "systemPrompt", "network" })
+        {
+            var json = "{\"problemId\":\"p1\",\"evidenceIds\":[\"e1\"],\"" + property + "\":\"blocked\"}";
+            Assert.ThrowsException<McpArgumentValidationException>(() => McpArgumentValidator.ValidateOrThrow(tool!.ProtocolTool.Name, tool.SchemaJson, json), property);
+        }
     }
 
     [TestMethod]
