@@ -29,7 +29,8 @@ public sealed class McpToolCatalogTests
             "unity_bridge_health",
             "unity_bridge_submit_only",
             "unity_bridge_wait_result",
-            "unity_analysis_compile_failure"
+            "unity_analysis_compile_failure",
+            "unity_analysis_asset_problem"
         };
 
         var diagnostics = CreateDiagnostics(CreateUnityProject());
@@ -39,7 +40,7 @@ public sealed class McpToolCatalogTests
             .ToArray();
 
         CollectionAssert.AreEqual(expectedNames.OrderBy(name => name, StringComparer.Ordinal).ToArray(), actualNames);
-        Assert.AreEqual(14, actualNames.Length);
+        Assert.AreEqual(15, actualNames.Length);
         Assert.IsFalse(actualNames.Any(name => name.Contains("__", StringComparison.Ordinal)));
     }
 
@@ -55,6 +56,42 @@ public sealed class McpToolCatalogTests
         Assert.IsTrue(tool.SchemaJson.Contains("additionalProperties", StringComparison.Ordinal));
         var properties = tool.ProtocolTool.InputSchema.GetProperty("properties");
         CollectionAssert.AreEquivalent(new[] { "problemId", "evidenceIds", "timeoutMs" }, properties.EnumerateObject().Select(property => property.Name).ToArray());
+        Assert.AreEqual(90000, tool.ProtocolTool.InputSchema.GetProperty("properties").GetProperty("timeoutMs").GetProperty("maximum").GetInt32());
+    }
+
+    [TestMethod]
+    public void VerifiedAssetAnalysisExposesClosedTaskSchemaAndSharedTimeout()
+    {
+        var tool = McpToolCatalog.TryGet("unity_analysis_asset_problem", CreateDiagnostics(CreateUnityProject()));
+        Assert.IsNotNull(tool);
+        Assert.AreEqual("unity.agent_task_control", tool!.BridgeTool);
+        Assert.IsTrue(tool.SupportsTaskExecution);
+        Assert.AreEqual(90000, tool.ProtocolTool.InputSchema.GetProperty("properties").GetProperty("timeoutMs").GetProperty("maximum").GetInt32());
+        Assert.IsFalse(tool.SchemaJson.Contains("task", StringComparison.Ordinal));
+        Assert.IsFalse(tool.SchemaJson.Contains("working_directory", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void VerifiedAnalysisTimeoutRejectsValuesAboveSharedCeiling()
+    {
+        foreach (var name in new[] { "unity_analysis_compile_failure", "unity_analysis_asset_problem" })
+        {
+            var tool = McpToolCatalog.TryGet(name, CreateDiagnostics(CreateUnityProject()));
+            Assert.IsNotNull(tool);
+            Assert.ThrowsException<McpArgumentValidationException>(() => McpArgumentValidator.ValidateOrThrow(name, tool!.SchemaJson, "{\"problemId\":\"p1\",\"evidenceIds\":[\"e1\"],\"timeoutMs\":90001}"));
+        }
+    }
+
+    [TestMethod]
+    public void AssetAnalysisSchemaRejectsGenericAgentOverrides()
+    {
+        var tool = McpToolCatalog.TryGet("unity_analysis_asset_problem", CreateDiagnostics(CreateUnityProject()));
+        Assert.IsNotNull(tool);
+        foreach (var property in new[] { "task", "prompt", "working_directory", "model", "tools", "folders", "systemPrompt", "network" })
+        {
+            var json = "{\"problemId\":\"p1\",\"evidenceIds\":[\"e1\"],\"" + property + "\":\"blocked\"}";
+            Assert.ThrowsException<McpArgumentValidationException>(() => McpArgumentValidator.ValidateOrThrow(tool!.ProtocolTool.Name, tool.SchemaJson, json), property);
+        }
     }
 
     [TestMethod]

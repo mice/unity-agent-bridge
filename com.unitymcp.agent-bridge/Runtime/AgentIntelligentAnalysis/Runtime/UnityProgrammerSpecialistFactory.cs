@@ -66,7 +66,7 @@ namespace UnityMcp.AgentIntelligentAnalysis
         }
     }
 
-    public sealed class CompileFailureAnalysisRequest
+    public sealed class CompileFailureAnalysisRequest : AnalysisRequest
     {
         public CompileFailureAnalysisRequest(string problemId, IEnumerable<string> evidenceIds)
         {
@@ -74,14 +74,29 @@ namespace UnityMcp.AgentIntelligentAnalysis
             EvidenceIds = new List<string>(evidenceIds ?? Array.Empty<string>()).AsReadOnly();
         }
 
-        public string ProblemId { get; }
-        public IReadOnlyList<string> EvidenceIds { get; }
+        public override string ProblemId { get; }
+        public override IReadOnlyList<string> EvidenceIds { get; }
 
         public ValidationResult<CompileFailureAnalysisRequest> Validate()
         {
             if (string.IsNullOrWhiteSpace(ProblemId)) return ValidationResult<CompileFailureAnalysisRequest>.Invalid(new ValidationError("PROBLEM_ID_REQUIRED", "Problem id is required."));
             if (EvidenceIds.Count == 0) return ValidationResult<CompileFailureAnalysisRequest>.Invalid(new ValidationError("EVIDENCE_REFERENCE_REQUIRED", "At least one evidence reference is required."));
             return ValidationResult<CompileFailureAnalysisRequest>.Valid(this);
+        }
+
+        public override ValidationResult<AnalysisRequest> ValidateRequest()
+        {
+            var result = Validate();
+            return result.IsValid
+                ? ValidationResult<AnalysisRequest>.Valid(this)
+                : ValidationResult<AnalysisRequest>.Invalid(ToArray(result.Errors));
+        }
+
+        private static ValidationError[] ToArray(IReadOnlyList<ValidationError> errors)
+        {
+            var result = new ValidationError[errors.Count];
+            for (var i = 0; i < errors.Count; i++) result[i] = errors[i];
+            return result;
         }
     }
 

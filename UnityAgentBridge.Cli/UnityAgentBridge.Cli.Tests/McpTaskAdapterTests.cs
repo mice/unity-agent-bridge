@@ -25,6 +25,11 @@ public sealed class McpTaskAdapterTests
         Assert.IsTrue(analysis.IsVerifiedCompileFailureAnalysis);
         Assert.IsTrue(analysis.IsAgentTaskOperation);
         Assert.AreEqual("analysis_compile_failure", analysis.AgentTaskType);
+
+        var asset = new McpTaskExecutionContext.PendingTaskRequest("unity_analysis_asset_problem", "{\"problemId\":\"p1\",\"evidenceIds\":[\"e1\"]}");
+        Assert.IsTrue(asset.IsVerifiedAssetProblemAnalysis);
+        Assert.IsTrue(asset.IsAgentTaskOperation);
+        Assert.AreEqual("analysis_asset_problem", asset.AgentTaskType);
     }
 
     [TestMethod]

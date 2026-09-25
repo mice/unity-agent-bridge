@@ -28,6 +28,7 @@ namespace UnityMcp.AgentIntelligentAnalysis
             Required(template.Id, "TEMPLATE_ID_REQUIRED", "Template id is required.", errors);
             Required(template.SpecialistId, "SPECIALIST_ID_REQUIRED", "Template specialist id is required.", errors);
             Required(template.ProblemType, "PROBLEM_TYPE_REQUIRED", "Problem type is required.", errors);
+            if (IsDeterministicProblemType(template.ProblemType)) errors.Add(Error("DETERMINISTIC_TOOL_TEMPLATE_FORBIDDEN", "Fact-only Unity operations must remain deterministic tools."));
             if (!string.Equals(template.SpecialistId, specialist.Id, StringComparison.Ordinal)) errors.Add(Error("SPECIALIST_MISMATCH", "Template specialist does not match the registered specialist."));
             ValidateCapability(template.RequestedCapability, errors);
             var effective = Intersect(specialist.Authority, template.RequestedCapability, errors);
@@ -152,6 +153,14 @@ namespace UnityMcp.AgentIntelligentAnalysis
         }
 
         private static void CheckVersion(int version, List<ValidationError> errors) { if (version != AnalysisSchema.CurrentVersion) errors.Add(Error("UNSUPPORTED_SCHEMA_VERSION", "Unsupported schema version: " + version)); }
+        private static bool IsDeterministicProblemType(string problemType)
+        {
+            return string.Equals(problemType, "prefab-scan", StringComparison.Ordinal) ||
+                   string.Equals(problemType, "spriteatlas-inventory", StringComparison.Ordinal) ||
+                   string.Equals(problemType, "missing-reference-scan", StringComparison.Ordinal) ||
+                   string.Equals(problemType, "compile", StringComparison.Ordinal) ||
+                   string.Equals(problemType, "test-execution", StringComparison.Ordinal);
+        }
         private static void Required(string value, string code, string message, List<ValidationError> errors) { if (string.IsNullOrWhiteSpace(value)) errors.Add(Error(code, message)); }
         private static ValidationError Error(string code, string message) => new ValidationError(code, message);
     }

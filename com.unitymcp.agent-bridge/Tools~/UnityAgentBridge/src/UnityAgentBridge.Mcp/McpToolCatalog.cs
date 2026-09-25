@@ -70,9 +70,19 @@ public static class McpToolCatalog
             "unity_analysis_compile_failure",
             "Unity Compile Failure Analysis",
             "Analyze a bounded Unity compile failure with the registered Unity programmer Specialist and fixed verified template.",
-            """{"type":"object","properties":{"problemId":{"type":"string","minLength":1,"maxLength":256},"evidenceIds":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"string","minLength":1,"maxLength":256}},"timeoutMs":{"type":"integer","minimum":1,"maximum":120000}},"required":["problemId","evidenceIds"],"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false}""",
+            """{"type":"object","properties":{"problemId":{"type":"string","minLength":1,"maxLength":256},"evidenceIds":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"string","minLength":1,"maxLength":256}},"timeoutMs":{"type":"integer","minimum":1,"maximum":90000}},"required":["problemId","evidenceIds"],"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false}""",
             "unity.agent_task_control",
-            120000,
+            90000,
+            true,
+            true);
+
+        yield return CreateToolMetadata(
+            "unity_analysis_asset_problem",
+            "Unity Asset Problem Analysis",
+            "Analyze bounded Unity asset problems with the registered Unity asset analyst Specialist and fixed verified template.",
+            """{"type":"object","properties":{"problemId":{"type":"string","minLength":1,"maxLength":256},"evidenceIds":{"type":"array","minItems":1,"maxItems":16,"items":{"type":"string","minLength":1,"maxLength":256}},"timeoutMs":{"type":"integer","minimum":1,"maximum":90000}},"required":["problemId","evidenceIds"],"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false}""",
+            "unity.agent_task_control",
+            90000,
             true,
             true);
 
@@ -337,8 +347,8 @@ public static class McpToolCatalog
                 var client = new ExternalBridgeClient();
                 var queuePaths = McpToolRuntimeContext.QueuePaths ?? throw new InvalidOperationException("MCP queue paths were not initialized.");
                 var commandId = client.CreateCommandId();
-                var bridgeArguments = metadata.Name == "unity_analysis_compile_failure"
-                    ? "{\"version\":1,\"operation\":\"create\",\"projectIdentity\":" + JsonSerializer.Serialize(queuePaths.ProjectPath) + ",\"taskType\":\"analysis_compile_failure\",\"payload\":" + argumentsJson + "}"
+                var bridgeArguments = metadata.Name == "unity_analysis_compile_failure" || metadata.Name == "unity_analysis_asset_problem"
+                    ? "{\"version\":1,\"operation\":\"create\",\"projectIdentity\":" + JsonSerializer.Serialize(queuePaths.ProjectPath) + ",\"taskType\":" + JsonSerializer.Serialize(metadata.Name == "unity_analysis_asset_problem" ? "analysis_asset_problem" : "analysis_compile_failure") + ",\"payload\":" + argumentsJson + "}"
                     : argumentsJson;
                 var result = await client.ExecuteAsync(queuePaths, commandId, new BridgeCommandSpec(metadata.BridgeTool, metadata.DefaultTimeoutMs, bridgeArguments), cancellationToken);
                 return result.RawJson;
