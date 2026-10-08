@@ -20,7 +20,7 @@ The default policy is:
 | Max output | `65536` bytes |
 | Tools | `read`, `grep`, `find`, `ls` |
 
-Only these read-only tools can be selected. Shell, PowerShell, edit, write, network access, extensions, skills, sessions, and raw Pi arguments are not configurable through this surface.
+Only these read-only tools can be selected. Shell, PowerShell, edit, write, network access, user extensions, skills, sessions, and raw Pi arguments are not configurable through this surface. The bridge internally loads its fixed package-owned budget guard while keeping extension discovery disabled.
 
 ## Built-in verified templates
 
@@ -59,6 +59,10 @@ Extra fields such as `model`, `tools`, `prompt`, `working_directory`, or raw Pi 
 
 The project timeout is bounded to 1000–900000 ms, turns to 1–64, and output to 1024–1048576 bytes. The closed analysis request permits a timeout of 1–90000 ms; execution takes the minimum of the request, project, and template ceilings, including request timeouts below 1000 ms.
 
-The turn budget is validated and displayed as policy metadata; the current Pi CLI adapter does not count or terminate model turns. Timeout and returned-output limits are enforced. Use those enforced limits to bound elapsed time and the returned result size.
+The turn budget is a hard ceiling on Pi provider invocations: the fixed guard runs before `before_provider_request`, admits at most the effective project/template minimum, and terminates before invocation N+1 with `PI_TURN_LIMIT_EXCEEDED`. Pi retries consume the same counter; session events do not reset it. Compaction is cancelled because Pi 0.85.1 uses a separate summarizer outside that hook. This counts Pi provider invocations, not lower-level HTTP transport retries inside a provider SDK call.
+
+Hard enforcement currently supports the verified Pi **0.85.1** baseline. The adapter probes the configured launcher before model execution and reports `PI_TURN_LIMIT_UNSUPPORTED` for other/unknown versions. It uses closed RPC mode, sends the task only after a nonce/budget-matching guard handshake, returns only final assistant text, and closes the process after completion. Missing/invalid guard readiness and malformed protocol output fail closed; partial text never becomes successful analysis after a budget failure. No text-mode fallback is used.
+
+Repeatable local checks: `pwsh Tools/AgentBridge/Verify-PiTurnBudget.ps1` in the workbench runs the offline Node guard tests and an installed-Pi compatibility smoke without sending a model task. Unity fixtures cover the runner, RPC projection, real Node child pipes, and both verified task entry points.
 
 Environment variables `UNITY_AGENT_BRIDGE_PI_PATH` and `UNITY_AGENT_BRIDGE_PI_MODEL` remain available for machine-level launch diagnostics and take precedence at the Editor bridge boundary; they do not expand the template capability or request schema.

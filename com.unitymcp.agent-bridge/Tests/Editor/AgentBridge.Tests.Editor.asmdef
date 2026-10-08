@@ -15,15 +15,16 @@
     "UnityMcp.AgentRuntime.Bridge.Editor",
     "UnityMcp.AgentIntelligentAnalysis",
     "UnityMcp.AgentTaskEditor",
-    "UnityMcp.Plugin.Abstractions"
+    "UnityMcp.Plugin.Abstractions",
+    "UnityMcp.AgentRuntime.Editor"
   ],
   "includePlatforms": [
     "Editor"
   ],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
-  "overrideReferences": false,
-  "precompiledReferences": [],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll", "Newtonsoft.Json.dll"],
   "autoReferenced": false,
   "optionalUnityReferences": [
     "TestAssemblies"

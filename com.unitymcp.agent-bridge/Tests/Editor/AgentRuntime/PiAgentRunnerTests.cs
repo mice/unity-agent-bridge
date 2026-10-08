@@ -21,7 +21,9 @@ namespace UnityMcp.AgentBridge.Tests
             StringAssert.Contains("--tools read,grep,find,ls", process.Arguments);
             StringAssert.Contains("--model", process.Arguments);
             StringAssert.Contains("deepseek/deepseek-flash", process.Arguments);
-            StringAssert.Contains("-p", process.Arguments);
+            StringAssert.Contains("--mode rpc", process.Arguments);
+            Assert.That(process.ConfiguredTask, Is.EqualTo("inspect files"));
+            StringAssert.DoesNotContain("inspect files", process.Arguments);
             Assert.AreEqual("C:/repo", process.WorkingDirectory);
         }
 
@@ -139,15 +141,92 @@ namespace UnityMcp.AgentBridge.Tests
             finally { if (File.Exists(path)) File.Delete(path); }
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_263.md
+        [Test, Category("AGB_263")]
+        public void BudgetFailureAfterPartialTextIsNeverSuccessful()
+        {
+            var process = new FakeProcess { StandardOutput = "partial", FailureCode = "PI_TURN_LIMIT_EXCEEDED", FailureMessage = "ceiling" };
+            var runner = new PiAgentRunner(new PiAgentRunnerOptions { MaxTurns = 2 }, new FakeFactory(process));
+            var context = new FakeContext(new AgentRunRequest("inspect"));
+            runner.Start(context.Request, context);
+            runner.Advance(context);
+            Assert.That(process.ConfiguredMaxTurns, Is.EqualTo(2));
+            Assert.That(process.Killed, Is.True);
+            Assert.That(context.Error.Code, Is.EqualTo("PI_TURN_LIMIT_EXCEEDED"));
+            Assert.That(context.Result.Success, Is.False);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_264.md
+        [Test, Category("AGB_264")]
+        public void MissingGuardTimesOutWithoutFallingBack()
+        {
+            var now = new DateTime(2026, 1, 1);
+            var process = new FakeProcess { GuardReady = false };
+            var runner = new PiAgentRunner(new PiAgentRunnerOptions(), new FakeFactory(process), () => now);
+            var context = new FakeContext(new AgentRunRequest("inspect"));
+            runner.Start(context.Request, context);
+            now = now.AddSeconds(5);
+            runner.Advance(context);
+            Assert.That(context.Error.Code, Is.EqualTo("PI_GUARD_NOT_READY"));
+            Assert.That(process.Killed, Is.True);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_265.md
+        [Test, Category("AGB_265")]
+        public void ReadyGuardStillRespectsTaskTimeout()
+        {
+            var now = new DateTime(2026, 1, 1);
+            var process = new FakeProcess();
+            var runner = new PiAgentRunner(new PiAgentRunnerOptions { TimeoutMilliseconds = 1000 }, new FakeFactory(process), () => now);
+            var context = new FakeContext(new AgentRunRequest("inspect"));
+            runner.Start(context.Request, context);
+            now = now.AddSeconds(2);
+            runner.Advance(context);
+            Assert.That(context.Error.Code, Is.EqualTo("PI_TIMEOUT"));
+            Assert.That(process.Killed, Is.True);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_266.md
+        [Test, Category("AGB_266")]
+        public void ProcessWithoutBudgetSeamFailsBeforeStart()
+        {
+            var process = new LegacyProcess();
+            var runner = new PiAgentRunner(new PiAgentRunnerOptions(), new FakeFactory(process));
+            var context = new FakeContext(new AgentRunRequest("inspect"));
+            runner.Start(context.Request, context);
+            Assert.That(process.Started, Is.False);
+            Assert.That(context.Error.Code, Is.EqualTo("PI_TURN_LIMIT_UNSUPPORTED"));
+        }
+
+        private sealed class LegacyProcess : IPiProcess
+        {
+            public string WorkingDirectory { get; set; }
+            public string Arguments { get; set; }
+            public bool HasExited => false;
+            public int ExitCode => 0;
+            public string StandardOutput => "";
+            public string StandardError => "";
+            public bool Started { get; private set; }
+            public void Start() { Started = true; }
+            public void Kill() { }
+        }
+
         private sealed class FakeFactory : IPiProcessFactory
         {
-            private readonly FakeProcess process;
-            public FakeFactory(FakeProcess process) { this.process = process; }
+            private readonly IPiProcess process;
+            public FakeFactory(IPiProcess process) { this.process = process; }
             public IPiProcess Create(string executablePath) => process;
         }
 
-        private sealed class FakeProcess : IPiProcess
+        private sealed class FakeProcess : IPiBudgetProcess
         {
+            public bool GuardReady { get; set; } = true;
+            public string FailureCode { get; set; }
+            public string FailureMessage { get; set; }
+            public string ConfiguredTask { get; private set; }
+            public int ConfiguredMaxTurns { get; private set; }
+            public void ConfigureBudget(string task, int maxTurns, int maxOutputBytes)
+            { ConfiguredTask = task; ConfiguredMaxTurns = maxTurns; }
             public string WorkingDirectory { get; set; }
             public string Arguments { get; set; }
             public bool HasExited { get; set; }

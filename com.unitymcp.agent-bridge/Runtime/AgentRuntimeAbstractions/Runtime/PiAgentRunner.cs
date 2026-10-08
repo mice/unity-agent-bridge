@@ -183,6 +183,20 @@ namespace UnityMcp.AgentRuntime
         IPiProcess Create(string executablePath);
     }
 
+    public interface IPiBudgetProcess : IPiProcess
+    {
+        void ConfigureBudget(string task, int maxTurns, int maxOutputBytes);
+        bool GuardReady { get; }
+        string FailureCode { get; }
+        string FailureMessage { get; }
+    }
+
+    public sealed class PiProcessException : Exception
+    {
+        public PiProcessException(string code, string message) : base(message) { Code = code; }
+        public string Code { get; }
+    }
+
     public sealed class PiAgentRunner : IAgentRunner
     {
         private readonly PiAgentRunnerOptions options;
@@ -190,11 +204,13 @@ namespace UnityMcp.AgentRuntime
         private IPiProcess process;
         private DateTime startedAt;
         private bool finished;
+        private readonly Func<DateTime> clock;
 
-        public PiAgentRunner(PiAgentRunnerOptions options = null, IPiProcessFactory processFactory = null)
+        public PiAgentRunner(PiAgentRunnerOptions options = null, IPiProcessFactory processFactory = null, Func<DateTime> clock = null)
         {
             this.options = options ?? new PiAgentRunnerOptions();
             this.processFactory = processFactory ?? throw new ArgumentNullException(nameof(processFactory), "A platform Pi process factory is required.");
+            this.clock = clock ?? (() => DateTime.UtcNow);
         }
 
         public bool CanCancel => true;
@@ -223,12 +239,15 @@ namespace UnityMcp.AgentRuntime
                 }
 
                 process = processFactory.Create(options.ExecutablePath);
+                if (process is not IPiBudgetProcess budgeted)
+                    throw new PiProcessException("PI_TURN_LIMIT_UNSUPPORTED", "The Pi process adapter cannot enforce the turn budget.");
+                budgeted.ConfigureBudget(request.Task, options.MaxTurns, options.MaxOutputBytes);
                 process.WorkingDirectory = request.WorkingDirectory ?? string.Empty;
                 process.Arguments = BuildArguments(request.Task, options.Model);
-                startedAt = DateTime.UtcNow;
+                startedAt = clock();
                 process.Start();
             }
-            catch (Exception exception) { Finish(); context.Fail(new AgentRunError("PI_START_FAILED", exception.Message, exception)); }
+            catch (Exception exception) { Finish(); context.Fail(new AgentRunError(exception is PiProcessException piError ? piError.Code : "PI_START_FAILED", exception.Message, exception)); }
         }
 
         public void Advance(IAgentRunnerContext context)
@@ -237,7 +256,22 @@ namespace UnityMcp.AgentRuntime
             try
             {
                 if (context.CancellationRequested) { RequestCancellation(context); return; }
-                if ((DateTime.UtcNow - startedAt).TotalMilliseconds > options.TimeoutMilliseconds)
+                var budgeted = (IPiBudgetProcess)process;
+                if (!string.IsNullOrWhiteSpace(budgeted.FailureCode))
+                {
+                    process.Kill();
+                    Finish();
+                    context.Fail(new AgentRunError(budgeted.FailureCode, budgeted.FailureMessage));
+                    return;
+                }
+                if (!budgeted.GuardReady && (clock() - startedAt).TotalMilliseconds >= Math.Min(5000, options.TimeoutMilliseconds))
+                {
+                    process.Kill();
+                    Finish();
+                    context.Fail(new AgentRunError("PI_GUARD_NOT_READY", "Pi did not confirm the fixed turn-budget guard; no task was submitted."));
+                    return;
+                }
+                if ((clock() - startedAt).TotalMilliseconds > options.TimeoutMilliseconds)
                 {
                     process.Kill();
                     Finish();
@@ -245,6 +279,14 @@ namespace UnityMcp.AgentRuntime
                     return;
                 }
                 if (!process.HasExited) return;
+                if (!string.IsNullOrWhiteSpace(budgeted.FailureCode))
+                {
+                    var failureCode = budgeted.FailureCode;
+                    var failureMessage = budgeted.FailureMessage;
+                    Finish();
+                    context.Fail(new AgentRunError(failureCode, failureMessage));
+                    return;
+                }
                 var output = process.StandardOutput;
                 var error = process.StandardError;
                 var exitCode = process.ExitCode;
@@ -279,9 +321,9 @@ namespace UnityMcp.AgentRuntime
             var tools = options.Tools == null || options.Tools.Count == 0
                 ? string.Join(",", PiAgentRunnerSettings.DefaultTools)
                 : string.Join(",", options.Tools);
-            var arguments = "-p --tools " + tools + " --no-extensions --no-skills --no-prompt-templates --no-session --mode text";
+            var arguments = "--tools " + tools + " --no-extensions --no-skills --no-prompt-templates --no-session --mode rpc";
             if (!string.IsNullOrWhiteSpace(model)) arguments += " --model " + QuoteArgument(model);
-            return arguments + " -- " + QuoteArgument(task);
+            return arguments;
         }
 
         private string BoundOutput(string output)
