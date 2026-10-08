@@ -1,11 +1,48 @@
 using NUnit.Framework;
 using System.Linq;
+using System.IO;
+using UnityEngine;
 using UnityMcp.AgentTaskCore;
 
 namespace UnityMcp.AgentBridge.Tests
 {
     public sealed class VerifiedAnalysisTaskControlTests
     {
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_262.md
+        [Test, Category("AGB_262")]
+        public void InvalidProjectSettingsRejectBothAnalysisTasksWithQueryableFailure()
+        {
+            var path = Path.Combine(Directory.GetParent(Application.dataPath).FullName,
+                "Library", "AgentBridge", "mcp-editor-settings.json");
+            var original = File.Exists(path) ? File.ReadAllBytes(path) : null;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                File.WriteAllText(path, "{\"piTools\":[\"bash\"]}");
+                foreach (var taskType in new[] { AgentTaskVerifiedAnalysisExecutionService.TaskType,
+                    AgentTaskVerifiedAnalysisExecutionService.AssetTaskType })
+                {
+                    var response = AgentTaskVerifiedAnalysisExecutionService.Control(new AgentTaskControlRequest
+                    {
+                        Operation = AgentTaskControlProtocol.Create,
+                        TaskType = taskType,
+                        Payload = "{\"problemId\":\"p1\",\"evidenceIds\":[\"missing-test-evidence\"]}"
+                    });
+                    Assert.That(response.Success, Is.False);
+                    Assert.That(response.ErrorCode, Is.EqualTo("PI_CONFIGURATION_INVALID"));
+                    Assert.That(response.AgentTaskId, Does.StartWith("analysis-"));
+                    var query = AgentTaskVerifiedAnalysisExecutionService.Control(new AgentTaskControlRequest
+                    { Operation = AgentTaskControlProtocol.Query, AgentTaskId = response.AgentTaskId });
+                    Assert.That(query.ErrorCode, Is.EqualTo("PI_CONFIGURATION_INVALID"));
+                }
+            }
+            finally
+            {
+                if (original == null) File.Delete(path);
+                else File.WriteAllBytes(path, original);
+            }
+        }
+
         // TestRecord: Documentation~/Testing/Unit/AgentRuntime/AGB_250.md
         [Test]
         [Category("AGB_250")]

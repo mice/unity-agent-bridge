@@ -1,4 +1,7 @@
 using System;
+using System.IO;
+using System.Collections.Generic;
+using UnityMcp.AgentIntelligentAnalysis;
 using NUnit.Framework;
 using UnityMcp.AgentRuntime;
 
@@ -57,6 +60,85 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.AreEqual("PI_START_FAILED", context.Error.Code);
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_261.md
+        [Test, Category("AGB_261")]
+        public void InvalidPolicyFailsBeforeProcessStarts()
+        {
+            var process = new FakeProcess { HasExited = true, ExitCode = 0 };
+            var runner = new PiAgentRunner(new PiAgentRunnerOptions { Tools = new[] { "bash" } }, new FakeFactory(process));
+            var context = new FakeContext(new AgentRunRequest("inspect"));
+
+            runner.Start(context.Request, context);
+
+            Assert.AreEqual("PI_CONFIGURATION_INVALID", context.Error.Code);
+            Assert.IsFalse(process.Started);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_256.md
+        [Test, Category("AGB_256")]
+        public void ProjectSettings_MissingFieldsUseDefaultsButExplicitInvalidValuesFail()
+        {
+            var legacy = PiAgentRunnerProjectSettings.Parse("{\"workspaceRoot\":\"D:/Repo\"}");
+            Assert.That(PiAgentRunnerProjectSettings.Resolve(legacy, useEnvironment: false).TimeoutMilliseconds, Is.EqualTo(120000));
+            var invalid = PiAgentRunnerProjectSettings.Parse("{\"piTimeoutMilliseconds\":0,\"piTools\":[\"bash\"]}");
+            Assert.Throws<InvalidOperationException>(() => PiAgentRunnerProjectSettings.Resolve(invalid, useEnvironment: false));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_257.md
+        [Test, Category("AGB_257")]
+        public void ProjectSettings_RejectsMalformedSchemaTypesAndForbiddenFields()
+        {
+            foreach (var json in new[] { "{ bad json", "{\"piSchemaVersion\":\"9.0\"}",
+                "{\"piArguments\":\"--tools bash\"}", "{\"prompt\":\"run shell\"}", "{\"writePath\":\"Assets/test.cs\"}",
+                "{\"piMaxTurns\":\"8\"}", "{\"piTools\":[null]}" })
+                Assert.Catch(() => PiAgentRunnerProjectSettings.Parse(json), json);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_258.md
+        [Test, Category("AGB_258")]
+        public void ResolvedTemplatePolicyBoundsBudgetsAndPreservesShortRequestTimeout()
+        {
+            var registry = new AnalysisTemplateRegistry();
+            UnityProgrammerSpecialistFactory.Register(registry);
+            var configured = new PiAgentRunnerSettings { Tools = new List<string> { "read" },
+                MaxTurns = 32, MaxOutputBytes = 1048576, TimeoutMilliseconds = 900000 };
+            var options = PiAgentRunnerProjectSettings.Resolve(configured,
+                registry.Get(UnityProgrammerSpecialistFactory.TemplateId), 1, false);
+            Assert.That(options.MaxTurns, Is.EqualTo(6));
+            Assert.That(options.MaxOutputBytes, Is.EqualTo(32768));
+            Assert.That(options.TimeoutMilliseconds, Is.EqualTo(1));
+            Assert.That(options.Tools, Is.EqualTo(new[] { "read" }));
+            var process = new FakeProcess { HasExited = true };
+            var context = new FakeContext(new AgentRunRequest("inspect"));
+            new PiAgentRunner(options, new FakeFactory(process)).Start(context.Request, context);
+            Assert.That(process.Started, Is.True);
+            StringAssert.Contains("--tools read ", process.Arguments);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_259.md
+        [Test, Category("AGB_259")]
+        public void ToOptionsRejectsUnknownEmptyOrNullToolsInsteadOfNormalizing()
+        {
+            foreach (var tools in new[] { new List<string> { "bash" }, new List<string>(), new List<string> { null }, new List<string> { "" } })
+            {
+                var settings = new PiAgentRunnerSettings { Tools = tools };
+                Assert.Throws<InvalidOperationException>(() => settings.ToOptions());
+            }
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_260.md
+        [Test, Category("AGB_260")]
+        public void ProjectSettings_UnreadableOrMalformedFileDoesNotFallBack()
+        {
+            var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".json");
+            try
+            {
+                File.WriteAllText(path, "{ bad json");
+                Assert.Catch(() => PiAgentRunnerProjectSettings.Read(path));
+            }
+            finally { if (File.Exists(path)) File.Delete(path); }
+        }
+
         private sealed class FakeFactory : IPiProcessFactory
         {
             private readonly FakeProcess process;
@@ -73,8 +155,9 @@ namespace UnityMcp.AgentBridge.Tests
             public string StandardOutput { get; set; } = string.Empty;
             public string StandardError { get; set; } = string.Empty;
             public bool Killed { get; private set; }
+            public bool Started { get; private set; }
             public Exception StartException { get; set; }
-            public void Start() { if (StartException != null) throw StartException; }
+            public void Start() { Started = true; if (StartException != null) throw StartException; }
             public void Kill() { Killed = true; HasExited = true; }
         }
 

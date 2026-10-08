@@ -1,4 +1,7 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 
 namespace UnityMcp.AgentRuntime
 {
@@ -6,7 +9,161 @@ namespace UnityMcp.AgentRuntime
     {
         public string ExecutablePath { get; set; } = "pi";
         public int TimeoutMilliseconds { get; set; } = 120000;
-        public string Model { get; set; }
+        public string Model { get; set; } = PiAgentRunnerSettings.DefaultModel;
+        public int MaxTurns { get; set; } = 8;
+        public int MaxOutputBytes { get; set; } = 65536;
+        public IReadOnlyList<string> Tools { get; set; } = PiAgentRunnerSettings.DefaultTools;
+    }
+
+    /// <summary>Project-local, read-only Pi policy shared by the Editor settings and runner seam.</summary>
+    [Serializable]
+    public sealed class PiAgentRunnerSettings
+    {
+        public const int DefaultTimeoutMilliseconds = 120000;
+        public const int DefaultMaxTurns = 8;
+        public const int DefaultMaxOutputBytes = 65536;
+        public const string DefaultExecutablePath = "pi";
+        public const string DefaultModel = "deepseek/deepseek-flash";
+
+        public static readonly IReadOnlyList<string> DefaultTools = new[] { "read", "grep", "find", "ls" };
+        public static readonly IReadOnlyList<string> KnownReadOnlyTools = DefaultTools;
+
+        public string ExecutablePath = DefaultExecutablePath;
+        public string Model = DefaultModel;
+        public int TimeoutMilliseconds = DefaultTimeoutMilliseconds;
+        public int MaxTurns = DefaultMaxTurns;
+        public int MaxOutputBytes = DefaultMaxOutputBytes;
+        public List<string> Tools = new List<string>(DefaultTools);
+
+        public PiAgentRunnerSettings Clone()
+        {
+            return new PiAgentRunnerSettings
+            {
+                ExecutablePath = ExecutablePath,
+                Model = Model,
+                TimeoutMilliseconds = TimeoutMilliseconds,
+                MaxTurns = MaxTurns,
+                MaxOutputBytes = MaxOutputBytes,
+                Tools = new List<string>(Tools ?? new List<string>())
+            };
+        }
+
+        public PiAgentRunnerOptions ToOptions(int? timeoutOverrideMilliseconds = null)
+        {
+            if (!TryValidate(this, out var error)) throw new InvalidOperationException(error);
+            var normalized = Clone();
+            normalized.ExecutablePath = normalized.ExecutablePath.Trim();
+            normalized.Model = normalized.Model.Trim();
+            if (timeoutOverrideMilliseconds.HasValue && timeoutOverrideMilliseconds.Value <= 0)
+                throw new InvalidOperationException("Pi timeout override must be positive.");
+            return new PiAgentRunnerOptions
+            {
+                ExecutablePath = normalized.ExecutablePath,
+                Model = normalized.Model,
+                TimeoutMilliseconds = timeoutOverrideMilliseconds.HasValue
+                    ? Math.Min(normalized.TimeoutMilliseconds, timeoutOverrideMilliseconds.Value)
+                    : normalized.TimeoutMilliseconds,
+                MaxTurns = normalized.MaxTurns,
+                MaxOutputBytes = normalized.MaxOutputBytes,
+                Tools = new List<string>(normalized.Tools).AsReadOnly()
+            };
+        }
+
+        public static PiAgentRunnerSettings CreateDefaults()
+        {
+            return new PiAgentRunnerSettings();
+        }
+
+        public static PiAgentRunnerSettings Normalize(PiAgentRunnerSettings settings)
+        {
+            var source = settings ?? CreateDefaults();
+            var normalized = source.Clone();
+            normalized.ExecutablePath = string.IsNullOrWhiteSpace(normalized.ExecutablePath)
+                ? DefaultExecutablePath
+                : normalized.ExecutablePath.Trim();
+            normalized.Model = string.IsNullOrWhiteSpace(normalized.Model)
+                ? DefaultModel
+                : normalized.Model.Trim();
+            normalized.TimeoutMilliseconds = NormalizeRange(normalized.TimeoutMilliseconds, 1000, 900000, DefaultTimeoutMilliseconds);
+            normalized.MaxTurns = NormalizeRange(normalized.MaxTurns, 1, 64, DefaultMaxTurns);
+            normalized.MaxOutputBytes = NormalizeRange(normalized.MaxOutputBytes, 1024, 1048576, DefaultMaxOutputBytes);
+            normalized.Tools = NormalizeTools(normalized.Tools);
+            return normalized;
+        }
+
+        public static bool TryValidate(PiAgentRunnerSettings settings, out string error)
+        {
+            if (settings == null)
+            {
+                error = "Pi runner settings are required.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(settings.ExecutablePath))
+            {
+                error = "Pi executable path is required.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(settings.Model))
+            {
+                error = "Pi model is required.";
+                return false;
+            }
+
+            if (settings.TimeoutMilliseconds < 1000 || settings.TimeoutMilliseconds > 900000)
+            {
+                error = "Pi timeout must be between 1000 and 900000 milliseconds.";
+                return false;
+            }
+
+            if (settings.MaxTurns < 1 || settings.MaxTurns > 64)
+            {
+                error = "Pi max turns must be between 1 and 64.";
+                return false;
+            }
+
+            if (settings.MaxOutputBytes < 1024 || settings.MaxOutputBytes > 1048576)
+            {
+                error = "Pi max output must be between 1024 and 1048576 bytes.";
+                return false;
+            }
+
+            if (settings.Tools == null || settings.Tools.Count == 0)
+            {
+                error = "At least one read-only Pi tool is required.";
+                return false;
+            }
+
+            if (settings.Tools.Any(tool => !KnownReadOnlyTools.Contains(tool, StringComparer.Ordinal)))
+            {
+                error = "Pi tools must be a non-empty subset of read, grep, find, and ls.";
+                return false;
+            }
+
+            error = null;
+            return true;
+        }
+
+        private static int NormalizeRange(int value, int min, int max, int fallback)
+        {
+            return value < min || value > max ? fallback : value;
+        }
+
+        private static List<string> NormalizeTools(IEnumerable<string> tools)
+        {
+            var result = new List<string>();
+            foreach (var tool in tools ?? Enumerable.Empty<string>())
+            {
+                var value = tool == null ? string.Empty : tool.Trim();
+                if (!string.IsNullOrWhiteSpace(value) && KnownReadOnlyTools.Contains(value, StringComparer.Ordinal) && !result.Contains(value))
+                {
+                    result.Add(value);
+                }
+            }
+
+            return result.Count == 0 ? new List<string>(DefaultTools) : result;
+        }
     }
 
     public interface IPiProcess
@@ -38,7 +195,6 @@ namespace UnityMcp.AgentRuntime
         {
             this.options = options ?? new PiAgentRunnerOptions();
             this.processFactory = processFactory ?? throw new ArgumentNullException(nameof(processFactory), "A platform Pi process factory is required.");
-            if (this.options.TimeoutMilliseconds <= 0) throw new ArgumentOutOfRangeException(nameof(options), "Pi timeout must be positive.");
         }
 
         public bool CanCancel => true;
@@ -50,6 +206,22 @@ namespace UnityMcp.AgentRuntime
             finished = false;
             try
             {
+                string configurationError = "Pi timeout must be positive.";
+                if (options.TimeoutMilliseconds <= 0 || !PiAgentRunnerSettings.TryValidate(new PiAgentRunnerSettings
+                {
+                    ExecutablePath = options.ExecutablePath,
+                    Model = options.Model,
+                    TimeoutMilliseconds = Math.Max(1000, options.TimeoutMilliseconds),
+                    MaxTurns = options.MaxTurns,
+                    MaxOutputBytes = options.MaxOutputBytes,
+                    Tools = options.Tools == null ? null : new List<string>(options.Tools)
+                }, out configurationError))
+                {
+                    Finish();
+                    context.Fail(new AgentRunError("PI_CONFIGURATION_INVALID", configurationError));
+                    return;
+                }
+
                 process = processFactory.Create(options.ExecutablePath);
                 process.WorkingDirectory = request.WorkingDirectory ?? string.Empty;
                 process.Arguments = BuildArguments(request.Task, options.Model);
@@ -77,7 +249,7 @@ namespace UnityMcp.AgentRuntime
                 var error = process.StandardError;
                 var exitCode = process.ExitCode;
                 Finish();
-                if (exitCode == 0) context.Complete(AgentRunResult.Succeeded(output));
+                if (exitCode == 0) context.Complete(AgentRunResult.Succeeded(BoundOutput(output)));
                 else context.Fail(new AgentRunError("PI_EXIT_NONZERO", "Pi exited with code " + exitCode + ": " + error));
             }
             catch (Exception exception) { Finish(); context.Fail(new AgentRunError("PI_PROCESS_FAILED", exception.Message, exception)); }
@@ -102,11 +274,31 @@ namespace UnityMcp.AgentRuntime
             catch { /* Preserve the original execution result if cleanup races process exit. */ }
         }
 
-        private static string BuildArguments(string task, string model)
+        private string BuildArguments(string task, string model)
         {
-            var arguments = "-p --tools read,grep,find,ls --no-extensions --no-skills --no-prompt-templates --no-session --mode text";
+            var tools = options.Tools == null || options.Tools.Count == 0
+                ? string.Join(",", PiAgentRunnerSettings.DefaultTools)
+                : string.Join(",", options.Tools);
+            var arguments = "-p --tools " + tools + " --no-extensions --no-skills --no-prompt-templates --no-session --mode text";
             if (!string.IsNullOrWhiteSpace(model)) arguments += " --model " + QuoteArgument(model);
             return arguments + " -- " + QuoteArgument(task);
+        }
+
+        private string BoundOutput(string output)
+        {
+            var text = output ?? string.Empty;
+            var max = options.MaxOutputBytes <= 0 ? PiAgentRunnerSettings.DefaultMaxOutputBytes : options.MaxOutputBytes;
+            if (Encoding.UTF8.GetByteCount(text) <= max) return text;
+            var builder = new StringBuilder();
+            var bytes = 0;
+            foreach (var character in text)
+            {
+                var count = Encoding.UTF8.GetByteCount(new[] { character });
+                if (bytes + count > max) break;
+                builder.Append(character);
+                bytes += count;
+            }
+            return builder.ToString();
         }
 
         // ProcessStartInfo.Arguments quoting: only slashes before quotes/end need doubling.

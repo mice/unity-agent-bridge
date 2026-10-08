@@ -58,10 +58,13 @@ namespace UnityMcp.AgentBridge
             var input = parsed.Value;
             var root = Directory.GetParent(Application.dataPath)?.FullName;
             if (string.IsNullOrWhiteSpace(root)) return Error("PROJECT_ROOT_UNAVAILABLE", "Unity project root could not be resolved.");
+            PiAgentRunnerOptions options;
+            try { options = PiAgentRunnerProjectSettings.Resolve(PiAgentRunnerProjectSettings.Read(), input.Template, input.TimeoutMs); }
+            catch (Exception exception) { return CreateRejected(new ValidationError("PI_CONFIGURATION_INVALID", exception.Message)); }
             var evidence = LoadEvidence(input.Request, root, input.Template);
             var evidenceValidation = IntelligentAnalysisValidator.ValidateEvidence(evidence, input.Template.EffectiveCapability, input.Template.Template.RequiredEvidenceKinds);
             if (!evidenceValidation.IsValid) return CreateRejected(evidenceValidation.Errors[0]);
-            var service = new AgentService(Manager, new VerifiedAnalysisRunnerFactory(input, root));
+            var service = new AgentService(Manager, new VerifiedAnalysisRunnerFactory(input, root, options));
             try
             {
                 var handle = service.Run(new AgentRunRequest(BuildPrompt(input), root));
@@ -202,11 +205,13 @@ namespace UnityMcp.AgentBridge
         {
             private readonly AnalysisInput input;
             private readonly string root;
-            public VerifiedAnalysisRunnerFactory(AnalysisInput input, string root) { this.input = input; this.root = root; }
+            private readonly PiAgentRunnerOptions options;
+            public VerifiedAnalysisRunnerFactory(AnalysisInput input, string root, PiAgentRunnerOptions options)
+            { this.input = input; this.root = root; this.options = options; }
             public IAgentRunner Create(AgentRunRequest request)
             {
                 var evidence = LoadEvidence(input.Request, root, input.Template);
-                return new VerifiedAnalysisRunner(evidence, input, root);
+                return new VerifiedAnalysisRunner(evidence, input, root, options);
             }
         }
 
@@ -217,17 +222,12 @@ namespace UnityMcp.AgentBridge
             private readonly string root;
             private readonly PiAgentRunner inner;
 
-            public VerifiedAnalysisRunner(EvidenceBundle evidence, AnalysisInput input, string root)
+            public VerifiedAnalysisRunner(EvidenceBundle evidence, AnalysisInput input, string root, PiAgentRunnerOptions options)
             {
                 this.evidence = evidence;
                 this.input = input;
                 this.root = root;
-                inner = new PiAgentRunner(new PiAgentRunnerOptions
-                {
-                    ExecutablePath = Environment.GetEnvironmentVariable("UNITY_AGENT_BRIDGE_PI_PATH") ?? "pi",
-                    Model = "deepseek/deepseek-flash",
-                    TimeoutMilliseconds = input.TimeoutMs
-                }, new PiProcessFactory());
+                inner = new PiAgentRunner(options, new PiProcessFactory());
             }
 
             public bool CanCancel => inner.CanCancel;

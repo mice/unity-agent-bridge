@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using System.Reflection;
 using System.IO;
 using System.Linq;
 using UnityEditor;
@@ -10,6 +11,82 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 {
     public sealed class AgentBridgeMcpSetupWindowTests
     {
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_242.md
+        [Test, Category("AGBM_242")]
+        [Category("AGBM_PI")]
+        public void PiTemplateCatalog_ListsVerifiedBuiltInsWithReadOnlyPolicy()
+        {
+            var rows = PiAgentTemplateCatalog.List();
+
+            Assert.That(rows.Count, Is.EqualTo(2));
+            Assert.That(rows.All(row => row.IsValid), Is.True);
+            Assert.That(rows.Select(row => row.Id), Does.Contain("unity_compile_failure_analysis"));
+            Assert.That(rows.Select(row => row.Id), Does.Contain("unity_asset_problem_analysis"));
+            Assert.That(rows.All(row => row.WritePolicy == "none" && row.NetworkPolicy == "disabled"), Is.True);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_243.md
+        [Test, Category("AGBM_243")]
+        [Category("AGBM_PI")]
+        public void PiConfigurationValidator_RejectsUnsafeTool()
+        {
+            var settings = new McpEditorSettings { PiTools = new[] { "bash" } };
+
+            Assert.That(PiAgentConfigurationValidator.TryValidate(settings, out var error), Is.False);
+            StringAssert.Contains("read, grep, find, and ls", error);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_246.md
+        [Test, Category("AGBM_246")]
+        public void PiCatalog_UsesConfiguredToolsAndEffectiveBudgets()
+        {
+            var settings = new McpEditorSettings { PiTools = new[] { "read" }, PiTimeoutMilliseconds = 45000,
+                PiMaxTurns = 2, PiMaxOutputBytes = 8192 };
+            var rows = PiAgentTemplateCatalog.List(settings);
+            Assert.That(rows.All(row => row.IsValid), Is.True);
+            Assert.That(rows.All(row => row.Tools.SequenceEqual(new[] { "read" })), Is.True);
+            Assert.That(rows.All(row => row.MaxTurns == 2 && row.MaxOutputBytes == 8192 && row.TimeoutMilliseconds == 45000), Is.True);
+            settings.PiTimeoutMilliseconds = 900000;
+            settings.PiMaxTurns = 64;
+            settings.PiMaxOutputBytes = 1048576;
+            Assert.That(PiAgentTemplateCatalog.List(settings).All(row => row.MaxTurns == 6 && row.MaxOutputBytes == 32768 && row.TimeoutMilliseconds == 90000), Is.True);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_247.md
+        [Test, Category("AGBM_247")]
+        public void PiCatalog_InvalidConfigurationKeepsBothTemplatesVisibleAndUnavailable()
+        {
+            var rows = PiAgentTemplateCatalog.List(new McpEditorSettings { PiTools = new[] { "bash" } });
+            Assert.That(rows.Count, Is.EqualTo(2));
+            Assert.That(rows.All(row => !row.IsValid && row.ValidationError.Contains("PI_CONFIGURATION_INVALID")), Is.True);
+            Assert.That(rows.All(row => row.Tools.Count == 0), Is.True);
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_248.md
+        [Test, Category("AGBM_248")]
+        public void PiSection_DefaultsCollapsedAndSavePersistsSettings()
+        {
+            var path = Path.Combine(Path.GetTempPath(), System.Guid.NewGuid().ToString("N") + ".json");
+            var window = ScriptableObject.CreateInstance<AgentBridgeMcpSetupWindow>();
+            try
+            {
+                const BindingFlags flags = BindingFlags.Instance | BindingFlags.NonPublic;
+                Assert.That(typeof(AgentBridgeMcpSetupWindow).GetField("_showPiAgentConfiguration", flags).GetValue(window), Is.False);
+                typeof(AgentBridgeMcpSetupWindow).GetField("_settingsStore", flags).SetValue(window, new McpEditorSettingsStore(path));
+                var save = typeof(AgentBridgeMcpSetupWindow).GetMethod("SavePiAgentSettings", flags);
+                save.Invoke(window, new object[] { new McpEditorSettings { PiMaxTurns = 3, PiTools = new[] { "read" } } });
+                Assert.That(new McpEditorSettingsStore(path).Load().PiMaxTurns, Is.EqualTo(3));
+                var saved = File.ReadAllText(path);
+                save.Invoke(window, new object[] { new McpEditorSettings { PiTools = new[] { "bash" } } });
+                Assert.That(File.ReadAllText(path), Is.EqualTo(saved));
+            }
+            finally
+            {
+                Object.DestroyImmediate(window);
+                if (File.Exists(path)) File.Delete(path);
+            }
+        }
+
         [TearDown]
         public void TearDown()
         {

@@ -1,8 +1,16 @@
 {
   "name": "UnityMcp.AgentRuntime.Bridge.Editor",
   "rootNamespace": "UnityMcp.AgentBridge",
-  "references": ["UnityMcp.AgentRuntime.Abstractions", "UnityMcp.AgentRuntime.Editor", "UnityMcp.AgentTaskCore", "UnityMcp.AgentIntelligentAnalysis"],
-  "includePlatforms": ["Editor"],
+  "references": [
+    "UnityMcp.AgentRuntime.Abstractions",
+    "UnityMcp.AgentRuntime.Editor",
+    "UnityMcp.AgentTaskCore",
+    "UnityMcp.AgentIntelligentAnalysis",
+    "Unity.Newtonsoft.Json"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
   "overrideReferences": false,

@@ -72,6 +72,9 @@ namespace UnityMcp.AgentBridge.Mcp
         private MessageType _aiQuickConnectMessageType;
         private bool _initialDiagnosticsQueued;
         private bool _showAdvancedDetails;
+        private bool _showPiAgentConfiguration;
+        private string _piAgentMessage;
+        private MessageType _piAgentMessageType;
         private IUnityToolFacade _toolFacade;
 
         [MenuItem("Tools/Unity Agent Bridge/MCP Setup & Diagnostics")]
@@ -124,6 +127,9 @@ namespace UnityMcp.AgentBridge.Mcp
             _serverProcessMessageType = MessageType.None;
             _aiQuickConnectMessage = string.Empty;
             _aiQuickConnectMessageType = MessageType.None;
+            _showPiAgentConfiguration = false;
+            _piAgentMessage = string.Empty;
+            _piAgentMessageType = MessageType.None;
             _toolFacade = CreateToolFacade();
             _pluginSection.Refresh();
         }
@@ -158,6 +164,8 @@ namespace UnityMcp.AgentBridge.Mcp
 
             EditorGUILayout.Space(12f);
             _pluginSection.Draw();
+            EditorGUILayout.Space(12f);
+            DrawPiAgentConfiguration();
             EditorGUILayout.Space(12f);
             DrawCommandListEntryPoint();
             EditorGUILayout.Space(12f);
@@ -308,6 +316,115 @@ namespace UnityMcp.AgentBridge.Mcp
                 }
 
             }
+        }
+
+        private void DrawPiAgentConfiguration()
+        {
+            _showPiAgentConfiguration = EditorGUILayout.Foldout(
+                _showPiAgentConfiguration,
+                "Pi Agent / Verified Templates",
+                true);
+            if (!_showPiAgentConfiguration)
+            {
+                return;
+            }
+
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField("Pi Runner Settings", EditorStyles.boldLabel);
+                EditorGUILayout.HelpBox(
+                    "These project-local settings apply to verified templates. The runner remains read-only and does not accept shell, write, network, extension, skill, session, or raw argument permissions.",
+                    MessageType.Info);
+
+                var settings = _settings ?? McpEditorSettingsDefaults.Create();
+                settings.PiExecutablePath = EditorGUILayout.TextField("Executable", settings.PiExecutablePath ?? "pi");
+                settings.PiModel = EditorGUILayout.TextField("Model", settings.PiModel ?? "deepseek/deepseek-flash");
+                settings.PiTimeoutMilliseconds = EditorGUILayout.IntField("Timeout (ms)", settings.PiTimeoutMilliseconds);
+                settings.PiMaxTurns = EditorGUILayout.IntField("Max turns", settings.PiMaxTurns);
+                settings.PiMaxOutputBytes = EditorGUILayout.IntField("Max output (bytes)", settings.PiMaxOutputBytes);
+
+                EditorGUILayout.LabelField("Read-only tools", EditorStyles.boldLabel);
+                var selectedTools = new System.Collections.Generic.HashSet<string>(settings.PiTools ?? new string[0], StringComparer.Ordinal);
+                foreach (var tool in new[] { "read", "grep", "find", "ls" })
+                {
+                    var selected = EditorGUILayout.ToggleLeft(tool, selectedTools.Contains(tool));
+                    if (selected) selectedTools.Add(tool);
+                    else selectedTools.Remove(tool);
+                }
+                settings.PiTools = selectedTools.ToArray();
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("Save / Validate", GUILayout.Width(140f)))
+                    {
+                        SavePiAgentSettings(settings);
+                    }
+
+                    if (GUILayout.Button("Reset Safe Defaults", GUILayout.Width(150f)))
+                    {
+                        var defaults = McpEditorSettingsDefaults.Create();
+                        settings.PiExecutablePath = defaults.PiExecutablePath;
+                        settings.PiModel = defaults.PiModel;
+                        settings.PiTimeoutMilliseconds = defaults.PiTimeoutMilliseconds;
+                        settings.PiMaxTurns = defaults.PiMaxTurns;
+                        settings.PiMaxOutputBytes = defaults.PiMaxOutputBytes;
+                        settings.PiTools = defaults.PiTools;
+                        settings.PiSchemaVersion = defaults.PiSchemaVersion;
+                        settings.PiLoadError = null;
+                        SavePiAgentSettings(settings);
+                    }
+                }
+
+                if (_piAgentMessageType != MessageType.None && !string.IsNullOrWhiteSpace(_piAgentMessage))
+                {
+                    EditorGUILayout.HelpBox(_piAgentMessage, _piAgentMessageType);
+                }
+
+                EditorGUILayout.Space(8f);
+                EditorGUILayout.LabelField("Verified template catalog", EditorStyles.boldLabel);
+                foreach (var row in PiAgentTemplateCatalog.List(settings))
+                {
+                    using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                    {
+                        EditorGUILayout.LabelField(row.Id, EditorStyles.boldLabel);
+                        if (!row.IsValid)
+                        {
+                            EditorGUILayout.HelpBox(row.ValidationError, MessageType.Error);
+                            continue;
+                        }
+
+                        EditorGUILayout.LabelField("Specialist", row.SpecialistId);
+                        EditorGUILayout.LabelField("Executable / model", row.ExecutablePath + " / " + row.Model);
+                        EditorGUILayout.LabelField("Problem / evidence", row.ProblemType + " / " + row.EvidenceKind);
+                        EditorGUILayout.LabelField("Read", string.Join(", ", row.ReadFolders.ToArray()));
+                        EditorGUILayout.LabelField("Deny", string.Join(", ", row.DenyFolders.ToArray()));
+                        EditorGUILayout.LabelField("Tools", string.Join(", ", row.Tools.ToArray()));
+                        EditorGUILayout.LabelField("Write / network", row.WritePolicy + " / " + row.NetworkPolicy);
+                        EditorGUILayout.LabelField("Budget", row.MaxTurns + " turns, " + row.MaxEvidenceBytes + " evidence bytes, " + row.MaxOutputBytes + " output bytes, " + row.TimeoutMilliseconds + " ms");
+                        EditorGUILayout.LabelField("Status", "Verified and available");
+                    }
+                }
+            }
+        }
+
+        private void SavePiAgentSettings(McpEditorSettings settings)
+        {
+            // An explicit save repairs a parse error after the operator reviews the displayed values.
+            var loadError = settings.PiLoadError;
+            settings.PiLoadError = null;
+            if (!PiAgentConfigurationValidator.TryValidate(settings, out var error))
+            {
+                settings.PiLoadError = loadError;
+                _piAgentMessage = error;
+                _piAgentMessageType = MessageType.Error;
+                return;
+            }
+
+            _settingsStore.Save(settings);
+            _settings = _settingsStore.Load();
+            _piAgentMessage = "Pi runner settings saved. Verified templates will use the bounded read-only policy.";
+            _piAgentMessageType = MessageType.Info;
+            Repaint();
         }
 
         private void DrawRuntimeSelectionControls()

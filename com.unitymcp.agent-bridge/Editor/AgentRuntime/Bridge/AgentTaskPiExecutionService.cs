@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 using UnityMcp.AgentRuntime;
 using UnityMcp.AgentTaskCore;
@@ -10,13 +11,6 @@ namespace UnityMcp.AgentBridge
     {
         private static readonly AgentTaskManager Manager = new AgentTaskManager(idFactory: () => new AgentTaskId("agent-" + Guid.NewGuid().ToString("N")));
         private static readonly Dictionary<string, AgentTaskId> Tasks = new Dictionary<string, AgentTaskId>(StringComparer.Ordinal);
-        private static readonly AgentService Service = new AgentService(Manager, new PiAgentRunnerFactory(new PiAgentRunnerOptions
-        {
-            ExecutablePath = Environment.GetEnvironmentVariable("UNITY_AGENT_BRIDGE_PI_PATH") ?? "pi",
-            Model = string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("UNITY_AGENT_BRIDGE_PI_MODEL"))
-                ? "deepseek/deepseek-flash"
-                : Environment.GetEnvironmentVariable("UNITY_AGENT_BRIDGE_PI_MODEL")
-        }));
         static AgentTaskPiExecutionService() => UnityEditor.EditorApplication.update += AdvanceTasks;
         public static AgentTaskControlResponse Control(AgentTaskControlRequest request)
         {
@@ -33,7 +27,14 @@ namespace UnityMcp.AgentBridge
             try { arguments = JsonUtility.FromJson<AgentRunArguments>(request.Payload ?? "{}"); } catch (Exception exception) { return Error("INVALID_ARGS", exception.Message); }
             if (arguments == null || string.IsNullOrWhiteSpace(arguments.task)) return Error("INVALID_ARGS", "Agent task is required.");
             var directory = string.IsNullOrWhiteSpace(arguments.working_directory) ? System.IO.Directory.GetParent(Application.dataPath)?.FullName : arguments.working_directory;
-            try { var handle = Service.Run(new AgentRunRequest(arguments.task, directory)); Tasks[handle.TaskId.Value] = handle.TaskId; return Project(handle.Snapshot, handle.TaskId.Value); }
+            try
+            {
+                var settings = PiAgentRunnerProjectSettings.Load();
+                var service = new AgentService(Manager, new PiAgentRunnerFactory(settings));
+                var handle = service.Run(new AgentRunRequest(arguments.task, directory));
+                Tasks[handle.TaskId.Value] = handle.TaskId;
+                return Project(handle.Snapshot, handle.TaskId.Value);
+            }
             catch (Exception exception) { return Error("AGENT_RUN_CREATE_FAILED", exception.Message); }
         }
         private static void AdvanceTasks() { foreach (var id in new List<AgentTaskId>(Tasks.Values)) { var snapshot = Manager.Get(id); if (snapshot != null && snapshot.State == AgentTaskState.Running) Manager.Advance(id); } }
@@ -60,4 +61,5 @@ namespace UnityMcp.AgentBridge
         [Serializable] private sealed class AgentRunArguments { public string task; public string working_directory; }
         [Serializable] private sealed class AgentRunPayload { public bool success; public string output; public string error; }
     }
+
 }
