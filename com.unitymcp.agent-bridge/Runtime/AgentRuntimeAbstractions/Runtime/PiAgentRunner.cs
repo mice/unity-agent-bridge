@@ -259,9 +259,10 @@ namespace UnityMcp.AgentRuntime
                 var budgeted = (IPiBudgetProcess)process;
                 if (!string.IsNullOrWhiteSpace(budgeted.FailureCode))
                 {
-                    process.Kill();
+                    var failureCode = budgeted.FailureCode;
+                    var failureMessage = budgeted.FailureMessage;
                     Finish();
-                    context.Fail(new AgentRunError(budgeted.FailureCode, budgeted.FailureMessage));
+                    context.Fail(new AgentRunError(failureCode, failureMessage));
                     return;
                 }
                 if (!budgeted.GuardReady && (clock() - startedAt).TotalMilliseconds >= Math.Min(5000, options.TimeoutMilliseconds))

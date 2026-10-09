@@ -57,7 +57,15 @@ namespace UnityMcp.AgentBridge
             public string WorkingDirectory { get => process.StartInfo.WorkingDirectory; set => process.StartInfo.WorkingDirectory = value ?? string.Empty; }
             public string Arguments { get => process.StartInfo.Arguments; set => process.StartInfo.Arguments = value ?? string.Empty; }
             public bool GuardReady { get { lock (gate) return session?.GuardReady ?? false; } }
-            public string FailureCode { get { FinalizeStreams(); lock (gate) return session?.FailureCode; } }
+            public string FailureCode
+            {
+                get
+                {
+                    lock (gate) { if (session?.FailureCode != null) return session.FailureCode; }
+                    FinalizeStreams();
+                    lock (gate) return session?.FailureCode;
+                }
+            }
             public string FailureMessage { get { lock (gate) return session?.FailureMessage; } }
             public bool HasExited { get { FinalizeStreams(); return started && !disposed && process.HasExited && stdout.IsCompleted && stderr.IsCompleted; } }
             public int ExitCode => process.ExitCode;

@@ -198,6 +198,22 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(context.Error.Code, Is.EqualTo("PI_TURN_LIMIT_UNSUPPORTED"));
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_288.md
+        [Test, Category("AGB_288")]
+        public void KnownBudgetFailureSurvivesThrowingProcessCleanup()
+        {
+            var process = new FakeProcess { FailureCode = "PI_TURN_LIMIT_EXCEEDED", FailureMessage = "two requests",
+                KillException = new InvalidOperationException("native process is gone"), FailReadAfterDispose = true };
+            var context = new FakeContext(new AgentRunRequest("inspect"));
+            var runner = new PiAgentRunner(new PiAgentRunnerOptions(), new FakeFactory(process));
+            runner.Start(context.Request, context);
+            runner.Advance(context);
+            Assert.That(process.Disposed, Is.True);
+            Assert.That(context.Error.Code, Is.EqualTo("PI_TURN_LIMIT_EXCEEDED"));
+            Assert.That(context.Error.Message, Is.EqualTo("two requests"));
+            Assert.That(context.Result.Success, Is.False);
+        }
+
         private sealed class LegacyProcess : IPiProcess
         {
             public string WorkingDirectory { get; set; }
@@ -218,10 +234,18 @@ namespace UnityMcp.AgentBridge.Tests
             public IPiProcess Create(string executablePath) => process;
         }
 
-        private sealed class FakeProcess : IPiBudgetProcess
+        private sealed class FakeProcess : IPiBudgetProcess, IDisposable
         {
             public bool GuardReady { get; set; } = true;
-            public string FailureCode { get; set; }
+            private string failureCode;
+            public string FailureCode
+            {
+                get { if (Disposed && FailReadAfterDispose) throw new ObjectDisposedException("process"); return failureCode; }
+                set => failureCode = value;
+            }
+            public bool Disposed { get; private set; }
+            public bool FailReadAfterDispose { get; set; }
+            public Exception KillException { get; set; }
             public string FailureMessage { get; set; }
             public string ConfiguredTask { get; private set; }
             public int ConfiguredMaxTurns { get; private set; }
@@ -237,7 +261,8 @@ namespace UnityMcp.AgentBridge.Tests
             public bool Started { get; private set; }
             public Exception StartException { get; set; }
             public void Start() { Started = true; if (StartException != null) throw StartException; }
-            public void Kill() { Killed = true; HasExited = true; }
+            public void Kill() { Killed = true; HasExited = true; if (KillException != null) throw KillException; }
+            public void Dispose() { Disposed = true; Kill(); }
         }
 
         private sealed class FakeContext : IAgentRunnerContext

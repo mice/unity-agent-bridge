@@ -93,6 +93,26 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(session.FailureCode, Is.EqualTo("PI_MODEL_FAILED"));
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_292.md
+        [Test, Category("AGB_292")]
+        public void ProviderErrorDiagnosticIsBoundedRedactedAndExcludesAssistantContent()
+        {
+            var session = new PiRpcSession(Nonce, 2, 1024, "inspect");
+            session.AcceptGuardLine(Marker("ready"));
+            var terminal = JObject.Parse(Terminal("unpublished body", "error"));
+            terminal["messages"][0]["errorMessage"] = "Provider unavailable Bearer secret-credential sk-example-secret eyJabc.abc.abc refresh_token=hidden " + new string('x', 2000);
+            session.AcceptEventLine(terminal.ToString(Newtonsoft.Json.Formatting.None));
+            Assert.That(session.FailureCode, Is.EqualTo("PI_MODEL_FAILED"));
+            Assert.That(session.FailureMessage, Does.StartWith("Pi model failed: Provider unavailable"));
+            Assert.That(session.FailureMessage.Length, Is.EqualTo(1024));
+            Assert.That(session.FailureMessage, Does.Not.Contain("secret-credential"));
+            Assert.That(session.FailureMessage, Does.Not.Contain("sk-example-secret"));
+            Assert.That(session.FailureMessage, Does.Not.Contain("eyJabc.abc.abc"));
+            Assert.That(session.FailureMessage, Does.Not.Contain("hidden"));
+            Assert.That(session.FailureMessage, Does.Not.Contain("unpublished body"));
+            Assert.That(session.Output, Is.Empty);
+        }
+
         // TestRecord: Documentation~/AgentBridge/test_records/AGB_273.md
         [Test, Category("AGB_273")]
         public void OutputCeilingPreservesUtf8CharacterBoundary()

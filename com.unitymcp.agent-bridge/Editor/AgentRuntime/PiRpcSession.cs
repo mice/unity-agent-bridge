@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -86,7 +87,9 @@ namespace UnityMcp.AgentBridge
                 var stopReason = assistant.Value<string>("stopReason");
                 if (stopReason != "stop")
                 {
-                    Fail("PI_MODEL_FAILED", "Pi did not finish with a successful terminal assistant response.");
+                    var diagnostic = assistant["errorMessage"]?.Type == JTokenType.String
+                        ? assistant.Value<string>("errorMessage") : null;
+                    Fail("PI_MODEL_FAILED", ProviderFailureMessage(diagnostic));
                     return;
                 }
                 var content = assistant["content"] as JArray;
@@ -113,6 +116,18 @@ namespace UnityMcp.AgentBridge
             FailureCode = code;
             FailureMessage = message;
             Output = string.Empty;
+        }
+
+        private static string ProviderFailureMessage(string diagnostic)
+        {
+            if (string.IsNullOrWhiteSpace(diagnostic))
+                return "Pi did not finish with a successful terminal assistant response.";
+            var redacted = Regex.Replace(diagnostic, @"\bBearer\s+\S+", "Bearer [redacted]", RegexOptions.IgnoreCase);
+            redacted = Regex.Replace(redacted, @"\bsk-[A-Za-z0-9_-]+", "[redacted]");
+            redacted = Regex.Replace(redacted, @"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+", "[redacted]");
+            redacted = Regex.Replace(redacted, @"\b(access_token|refresh_token|api_key)\s*[:=]\s*[^\s,;]+", "$1=[redacted]", RegexOptions.IgnoreCase);
+            var message = "Pi model failed: " + redacted;
+            return message.Length > 1024 ? message.Substring(0, 1024) : message;
         }
 
         private string BoundText(string text)

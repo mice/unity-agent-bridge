@@ -6,6 +6,24 @@ namespace UnityMcp.AgentBridge.Tests
 {
     public sealed class JsonUtilTests
     {
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_287.md
+        [Test, Category("AGB_287")]
+        public void SerializeResult_AllControlCharactersRoundTripInStringFields()
+        {
+            var text = "native \\\"";
+            for (var value = 0; value < 32; value++) text += (char)value;
+            var result = ToolResult.InvalidArgs("CONTROL_DIAGNOSTIC", text);
+            result.changedFiles.Add(text);
+            result.reportPath = text;
+            var serialized = JsonUtil.SerializeResult(result);
+            foreach (var character in serialized) Assert.That((int)character, Is.GreaterThanOrEqualTo(32));
+            var parsed = Newtonsoft.Json.Linq.JObject.Parse(serialized);
+            Assert.That(parsed.Value<string>("summary"), Is.EqualTo(text));
+            Assert.That(parsed["errors"][0].Value<string>("message"), Is.EqualTo(text));
+            Assert.That((string)parsed["changedFiles"][0], Is.EqualTo(text));
+            Assert.That(parsed.Value<string>("reportPath"), Is.EqualTo(text));
+        }
+
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_001.md
         [Test]
         [Category("AGB_Core")]
