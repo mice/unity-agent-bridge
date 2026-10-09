@@ -5,10 +5,11 @@ namespace UnityMcp.AgentBridge.Tests
 {
     public sealed class PiRpcSessionTests
     {
+        private const string PolicyHash = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         private const string Nonce = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         private static string Marker(string type, int requests = 0, string nonce = Nonce, int maxTurns = 2)
             => PiRpcSession.MarkerPrefix + new JObject { ["type"] = type, ["nonce"] = nonce,
-                ["protocolVersion"] = 1, ["maxTurns"] = maxTurns, ["requests"] = requests }.ToString(Newtonsoft.Json.Formatting.None);
+                ["protocolVersion"] = 2, ["policyHash"] = PolicyHash, ["maxTurns"] = maxTurns, ["requests"] = requests }.ToString(Newtonsoft.Json.Formatting.None);
         private static string Terminal(string text, string stopReason = "stop", bool willRetry = false)
             => new JObject { ["type"] = "agent_end", ["willRetry"] = willRetry, ["messages"] = new JArray(
                 new JObject { ["role"] = "assistant", ["stopReason"] = stopReason, ["content"] = new JArray(
@@ -20,7 +21,7 @@ namespace UnityMcp.AgentBridge.Tests
         public void ReadinessSubmitsExactlyOneJsonPrompt()
         {
             const string task = "inspect \"quotes\"\n$literal";
-            var session = new PiRpcSession(Nonce, 2, 1024, task);
+            var session = new PiRpcSession(Nonce, 2, 1024, task, PolicyHash);
             Assert.That(session.PromptSent, Is.False);
             Assert.That(session.AcceptGuardLine("ordinary diagnostic"), Is.Null);
             var prompt = JObject.Parse(session.AcceptGuardLine(Marker("ready")));
@@ -36,7 +37,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             foreach (var marker in new[] { Marker("ready", nonce: "other"), Marker("ready", maxTurns: 3) })
             {
-                var session = new PiRpcSession(Nonce, 2, 1024, "inspect");
+                var session = new PiRpcSession(Nonce, 2, 1024, "inspect", PolicyHash);
                 Assert.That(session.AcceptGuardLine(marker), Is.Null);
                 Assert.That(session.PromptSent, Is.False);
                 Assert.That(session.FailureCode, Is.EqualTo("PI_GUARD_INVALID"));
@@ -47,7 +48,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Test, Category("AGB_269")]
         public void TerminalProjectionExcludesPartialTextAndThinking()
         {
-            var session = new PiRpcSession(Nonce, 2, 1024, "inspect");
+            var session = new PiRpcSession(Nonce, 2, 1024, "inspect", PolicyHash);
             session.AcceptGuardLine(Marker("ready"));
             session.AcceptEventLine("{\"type\":\"message_update\",\"delta\":\"partial\"}");
             session.AcceptEventLine(Terminal("final"));
@@ -61,7 +62,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Test, Category("AGB_270")]
         public void LimitMarkerClearsPartialOrTerminalOutput()
         {
-            var session = new PiRpcSession(Nonce, 2, 1024, "inspect");
+            var session = new PiRpcSession(Nonce, 2, 1024, "inspect", PolicyHash);
             session.AcceptGuardLine(Marker("ready"));
             session.AcceptEventLine(Terminal("partial"));
             session.AcceptGuardLine(Marker("limit", requests: 2));
@@ -75,7 +76,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             foreach (var line in new[] { "not json", new string('x', PiRpcSession.MaxFrameCharacters + 1) })
             {
-                var session = new PiRpcSession(Nonce, 2, 1024, "inspect");
+                var session = new PiRpcSession(Nonce, 2, 1024, "inspect", PolicyHash);
                 session.AcceptEventLine(line);
                 Assert.That(session.FailureCode, Is.EqualTo("PI_RPC_PROTOCOL_INVALID"));
             }
@@ -85,7 +86,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Test, Category("AGB_272")]
         public void RetryEventsDoNotCompleteAndModelErrorsFail()
         {
-            var session = new PiRpcSession(Nonce, 2, 1024, "inspect");
+            var session = new PiRpcSession(Nonce, 2, 1024, "inspect", PolicyHash);
             session.AcceptGuardLine(Marker("ready"));
             session.AcceptEventLine(Terminal("retry", "error", true));
             Assert.That(session.Completed, Is.False);
@@ -97,7 +98,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Test, Category("AGB_292")]
         public void ProviderErrorDiagnosticIsBoundedRedactedAndExcludesAssistantContent()
         {
-            var session = new PiRpcSession(Nonce, 2, 1024, "inspect");
+            var session = new PiRpcSession(Nonce, 2, 1024, "inspect", PolicyHash);
             session.AcceptGuardLine(Marker("ready"));
             var terminal = JObject.Parse(Terminal("unpublished body", "error"));
             terminal["messages"][0]["errorMessage"] = "Provider unavailable Bearer secret-credential sk-example-secret eyJabc.abc.abc refresh_token=hidden " + new string('x', 2000);
@@ -117,7 +118,7 @@ namespace UnityMcp.AgentBridge.Tests
         [Test, Category("AGB_273")]
         public void OutputCeilingPreservesUtf8CharacterBoundary()
         {
-            var session = new PiRpcSession(Nonce, 2, 5, "inspect");
+            var session = new PiRpcSession(Nonce, 2, 5, "inspect", PolicyHash);
             session.AcceptGuardLine(Marker("ready"));
             session.AcceptEventLine(Terminal("a😀b"));
             Assert.That(session.Output, Is.EqualTo("a😀"));
@@ -127,20 +128,50 @@ namespace UnityMcp.AgentBridge.Tests
         [Test, Category("AGB_274")]
         public void ZeroExitWithoutReadinessOrTerminalResultFails()
         {
-            var absent = new PiRpcSession(Nonce, 2, 1024, "inspect");
+            var absent = new PiRpcSession(Nonce, 2, 1024, "inspect", PolicyHash);
             absent.EndOfStream(0);
             Assert.That(absent.FailureCode, Is.EqualTo("PI_GUARD_NOT_READY"));
-            var incomplete = new PiRpcSession(Nonce, 2, 1024, "inspect");
+            var incomplete = new PiRpcSession(Nonce, 2, 1024, "inspect", PolicyHash);
             incomplete.AcceptGuardLine(Marker("ready"));
             incomplete.EndOfStream(0);
             Assert.That(incomplete.FailureCode, Is.EqualTo("PI_RPC_PROTOCOL_INVALID"));
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_299.md
+        [Test, Category("AGB_299")]
+        public void WrongScopeHashOrLegacyMarkerNeverSubmitsPrompt()
+        {
+            foreach (var variant in new[] { "missing", "wrong", "legacy" })
+            {
+                var marker = JObject.Parse(Marker("ready").Substring(PiRpcSession.MarkerPrefix.Length));
+                if (variant == "missing") marker.Remove("policyHash");
+                if (variant == "wrong") marker["policyHash"] = new string('c', 64);
+                if (variant == "legacy") marker["protocolVersion"] = 1;
+                var session = new PiRpcSession(Nonce, 2, 1024, "inspect", PolicyHash);
+                Assert.That(session.AcceptGuardLine(PiRpcSession.MarkerPrefix + marker.ToString()), Is.Null);
+                Assert.That(session.FailureCode, Is.EqualTo("PI_GUARD_INVALID"));
+                Assert.That(session.PromptSent, Is.False);
+            }
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_300.md
+        [Test, Category("AGB_300")]
+        public void PermissionMarkerDiscardsPreviouslyCompletedText()
+        {
+            var session = new PiRpcSession(Nonce, 2, 1024, "inspect", PolicyHash);
+            session.AcceptGuardLine(Marker("ready"));
+            session.AcceptEventLine(Terminal("partial result"));
+            session.AcceptGuardLine(Marker("path_denied", requests: 1));
+            session.EndOfStream(80);
+            Assert.That(session.FailureCode, Is.EqualTo("PI_PATH_ACCESS_DENIED"));
+            Assert.That(session.Output, Is.Empty);
         }
 
         // TestRecord: Documentation~/AgentBridge/test_records/AGB_278.md
         [Test, Category("AGB_278")]
         public void GuardExtensionErrorsCannotBecomeSuccessfulResults()
         {
-            var session = new PiRpcSession(Nonce, 2, 1024, "inspect");
+            var session = new PiRpcSession(Nonce, 2, 1024, "inspect", PolicyHash);
             session.AcceptGuardLine(Marker("ready"));
             session.AcceptEventLine("{\"type\":\"extension_error\",\"event\":\"before_provider_request\"}");
             session.AcceptEventLine(Terminal("partial"));

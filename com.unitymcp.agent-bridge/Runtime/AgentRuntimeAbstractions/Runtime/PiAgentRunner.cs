@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using System.Text;
 
 namespace UnityMcp.AgentRuntime
@@ -13,6 +14,8 @@ namespace UnityMcp.AgentRuntime
         public int MaxTurns { get; set; } = 8;
         public int MaxOutputBytes { get; set; } = 65536;
         public IReadOnlyList<string> Tools { get; set; } = PiAgentRunnerSettings.DefaultTools;
+        public IReadOnlyList<string> ReadFolders { get; set; } = PiReadPathScope.DefaultReadFolders;
+        public IReadOnlyList<string> DenyFolders { get; set; } = PiReadPathScope.DefaultDenyFolders;
     }
 
     /// <summary>Project-local, read-only Pi policy shared by the Editor settings and runner seam.</summary>
@@ -191,6 +194,36 @@ namespace UnityMcp.AgentRuntime
         string FailureMessage { get; }
     }
 
+    public interface IPiReadScopeProcess : IPiBudgetProcess
+    {
+        void ConfigureReadPaths(string projectRoot, IReadOnlyList<string> readFolders,
+            IReadOnlyList<string> denyFolders, IReadOnlyList<string> tools);
+    }
+
+    public static class PiReadPathScope
+    {
+        public static readonly IReadOnlyList<string> DefaultReadFolders = Array.AsReadOnly(new[] { "Assets", "Packages", "ProjectSettings", "Documentation~" });
+        public static readonly IReadOnlyList<string> DefaultDenyFolders = Array.AsReadOnly(new[] { "Library", "Temp", "Logs", "Build" });
+
+        public static IReadOnlyList<string> NormalizeFolders(IEnumerable<string> folders)
+        {
+            if (folders == null) throw new PiProcessException("PI_PATH_SCOPE_INVALID", "Read scope folders are required.");
+            var normalized = new List<string>();
+            foreach (var folder in folders)
+            {
+                var value = folder?.Trim().Replace('\\', '/').TrimEnd('/') ?? string.Empty;
+                if (string.IsNullOrEmpty(value) || value.StartsWith("/", StringComparison.Ordinal) ||
+                    value.IndexOf(':') >= 0 || value.Any(character => character < 32) ||
+                    value.Split('/').Any(segment => segment == ".." || segment == "." || segment.Length == 0))
+                    throw new PiProcessException("PI_PATH_SCOPE_INVALID", "Read scope folders must be normalized project-relative directories.");
+                if (!normalized.Contains(value)) normalized.Add(value);
+                if (normalized.Count > 64)
+                    throw new PiProcessException("PI_PATH_SCOPE_INVALID", "Read scope folder count exceeds its bound.");
+            }
+            return normalized.AsReadOnly();
+        }
+    }
+
     public sealed class PiProcessException : Exception
     {
         public PiProcessException(string code, string message) : base(message) { Code = code; }
@@ -238,9 +271,15 @@ namespace UnityMcp.AgentRuntime
                     return;
                 }
 
+                var readFolders = PiReadPathScope.NormalizeFolders(options.ReadFolders);
+                var denyFolders = PiReadPathScope.NormalizeFolders(options.DenyFolders);
                 process = processFactory.Create(options.ExecutablePath);
                 if (process is not IPiBudgetProcess budgeted)
                     throw new PiProcessException("PI_TURN_LIMIT_UNSUPPORTED", "The Pi process adapter cannot enforce the turn budget.");
+                if (process is not IPiReadScopeProcess scoped)
+                    throw new PiProcessException("PI_PATH_SCOPE_UNSUPPORTED", "The Pi process adapter cannot enforce template read paths.");
+                var root = Path.GetFullPath(string.IsNullOrWhiteSpace(request.WorkingDirectory) ? Environment.CurrentDirectory : request.WorkingDirectory);
+                scoped.ConfigureReadPaths(root, readFolders, denyFolders, options.Tools);
                 budgeted.ConfigureBudget(request.Task, options.MaxTurns, options.MaxOutputBytes);
                 process.WorkingDirectory = request.WorkingDirectory ?? string.Empty;
                 process.Arguments = BuildArguments(request.Task, options.Model);

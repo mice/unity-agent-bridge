@@ -89,7 +89,10 @@ namespace UnityMcp.AgentBridge
                 if (requestTimeoutMilliseconds.Value < 1 || requestTimeoutMilliseconds.Value > 90000)
                     throw new InvalidOperationException("Analysis timeout must be between 1 and 90000 milliseconds.");
             }
-            return effective.ToOptions(requestTimeoutMilliseconds);
+            var options = effective.ToOptions(requestTimeoutMilliseconds);
+            options.ReadFolders = PiReadPathScope.NormalizeFolders(template == null ? PiReadPathScope.DefaultReadFolders : template.EffectiveCapability.Paths.ReadFolders);
+            options.DenyFolders = PiReadPathScope.NormalizeFolders(template == null ? PiReadPathScope.DefaultDenyFolders : template.EffectiveCapability.Paths.DenyFolders);
+            return options;
         }
 
         private static string ReadString(JObject document, string name, string fallback)

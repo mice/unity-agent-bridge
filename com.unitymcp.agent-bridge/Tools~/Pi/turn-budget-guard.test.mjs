@@ -1,16 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
 const guard = new URL("./turn-budget-guard.mjs", import.meta.url);
+const policy = JSON.stringify({version:1,projectRoot:process.cwd(),readFolders:["Assets"],denyFolders:["Library"],tools:["read","grep","find","ls"]});
+const policyHash = createHash("sha256").update(policy).digest("hex");
 const nonce = "a".repeat(32);
 function simulate(maxTurns, attempts, reset = false, extraEnv = {}, closeStderr = false) {
     const source = `
         import install from ${JSON.stringify(guard.href)};
         import { closeSync } from "node:fs";
         const handlers = new Map();
-        install({on(name, handler) { handlers.set(name, handler); }});
+        install({on(name, handler) { handlers.set(name, handler); }, registerTool() {}, setActiveTools() {}});
         handlers.get("session_start")();
         for (let i = 0; i < ${attempts}; i++) {
             if (${reset}) handlers.get("session_start")();
@@ -23,7 +26,7 @@ function simulate(maxTurns, attempts, reset = false, extraEnv = {}, closeStderr 
     return spawnSync(process.execPath, ["--input-type=module", "--eval", source], {
         encoding: "utf8", timeout: 5000,
         env: { ...process.env, UNITY_AGENT_BRIDGE_PI_GUARD_NONCE: nonce,
-            UNITY_AGENT_BRIDGE_PI_MAX_TURNS: String(maxTurns), ...extraEnv }
+            UNITY_AGENT_BRIDGE_PI_MAX_TURNS: String(maxTurns), UNITY_AGENT_BRIDGE_PI_READ_POLICY: policy, ...extraEnv }
     });
 }
 
@@ -39,7 +42,7 @@ test("N+1 is never dispatched even when hook exceptions are swallowed", () => {
     assert.equal(result.status, 78);
     assert.equal(result.stdout, "DISPATCH:1\nDISPATCH:2\n");
     const marker = JSON.parse(result.stderr.trim().split("\n").at(-1).slice("AGB_PI_GUARD:".length));
-    assert.deepEqual(marker, { type: "limit", protocolVersion: 1, nonce, maxTurns: 2, requests: 2 });
+    assert.deepEqual(marker, { type: "limit", protocolVersion: 2, nonce, maxTurns: 2, requests: 2, policyHash });
 });
 
 test("session events cannot reset retry accounting", () => {
@@ -58,13 +61,16 @@ test("compaction is cancelled before an uncounted summarizer request", async () 
     const { default: install } = await import(guard.href);
     const originalNonce = process.env.UNITY_AGENT_BRIDGE_PI_GUARD_NONCE;
     const originalBudget = process.env.UNITY_AGENT_BRIDGE_PI_MAX_TURNS;
+    const originalPolicy = process.env.UNITY_AGENT_BRIDGE_PI_READ_POLICY;
     try {
         process.env.UNITY_AGENT_BRIDGE_PI_GUARD_NONCE = nonce;
         process.env.UNITY_AGENT_BRIDGE_PI_MAX_TURNS = "2";
+        process.env.UNITY_AGENT_BRIDGE_PI_READ_POLICY = policy;
         const handlers = new Map();
-        install({ on(name, handler) { handlers.set(name, handler); } });
+        install({ on(name, handler) { handlers.set(name, handler); }, registerTool() {}, setActiveTools() {} });
         assert.deepEqual(await handlers.get("session_before_compact")(), { cancel: true });
     } finally {
+        if (originalPolicy === undefined) delete process.env.UNITY_AGENT_BRIDGE_PI_READ_POLICY; else process.env.UNITY_AGENT_BRIDGE_PI_READ_POLICY = originalPolicy;
         if (originalNonce === undefined) delete process.env.UNITY_AGENT_BRIDGE_PI_GUARD_NONCE;
         else process.env.UNITY_AGENT_BRIDGE_PI_GUARD_NONCE = originalNonce;
         if (originalBudget === undefined) delete process.env.UNITY_AGENT_BRIDGE_PI_MAX_TURNS;
@@ -87,7 +93,7 @@ test("installed Pi loads the fixed guard in closed RPC mode without submitting a
         "--no-prompt-templates", "--no-session", "--tools", "read,grep,find,ls", "--mode", "rpc",
         "--extension", fileURLToPath(guard)], {
         stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env, UNITY_AGENT_BRIDGE_PI_GUARD_NONCE: nonce, UNITY_AGENT_BRIDGE_PI_MAX_TURNS: "2" }
+        env: { ...process.env, UNITY_AGENT_BRIDGE_PI_GUARD_NONCE: nonce, UNITY_AGENT_BRIDGE_PI_MAX_TURNS: "2", UNITY_AGENT_BRIDGE_PI_READ_POLICY: policy }
     });
     let stdout = "", stderr = "";
     let ready = false;

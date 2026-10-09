@@ -66,3 +66,15 @@ Hard enforcement currently supports the verified Pi **0.85.1** baseline. The ada
 Repeatable local checks: `pwsh Tools/AgentBridge/Verify-PiTurnBudget.ps1` in the workbench runs the offline Node guard tests and an installed-Pi compatibility smoke without sending a model task. Unity fixtures cover the runner, RPC projection, real Node child pipes, and both verified task entry points.
 
 Environment variables `UNITY_AGENT_BRIDGE_PI_PATH` and `UNITY_AGENT_BRIDGE_PI_MODEL` remain available for machine-level launch diagnostics and take precedence at the Editor bridge boundary; they do not expand the template capability or request schema.
+
+## Executed read-folder policy — 2026-10-10
+
+Effective read/deny folders are now captured into the fixed guard's process policy. Readiness uses protocol 2 with the SHA-256 of that policy, plus the existing nonce and request ceiling. No prompt is sent with missing/mismatched scope readiness. Directory rules remain template-owned and are not additional editable settings or public request fields.
+
+The registered read/grep/find/ls variants validate logical project-relative and physical resolved targets. Outside-project, parent traversal, denied folders and unsafe explicit links terminate the task with `PI_PATH_ACCESS_DENIED`. Root searches/listings show only permitted branches; recursive searches filter every descendant and exclude unsafe links. Inside-scope links are usable, with cycles bounded.
+
+Scoped tool operations are bounded to 8192 visited entries, depth 64, 1 MiB per file, 16 MiB scanned text and 32 KiB returned data. Truncated results are marked. grep uses JavaScript line regex/literal matching; common glob patterns are supported. Discovery omits .git/node_modules and does not claim full native utility/gitignore semantics. Read accepts text and small images; larger/binary files return tool errors.
+
+This application-level guard applies to the four mediated tools on a trusted Pi 0.85.1 installation and stable tree. It is not an OS sandbox, and does not govern Pi bootstrap/config/auth/context reads or claim protection from hostile concurrent filesystem changes. External physical UPM aliases are denied; the host can still provide bounded deterministic evidence.
+
+Repeatable checks: `Verify-PiReadPathScope.ps1`, `Verify-PiTurnBudget.ps1` and the 15-case `Verify-VerifiedAnalysisEndToEnd.ps1`. Scope tests and installed-Pi SDK/tool checks execute without provider prompts.

@@ -3,6 +3,9 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using System.Collections.Generic;
+using System.Security.Cryptography;
+using Newtonsoft.Json;
 using UnityEditor.PackageManager;
 using UnityMcp.AgentRuntime;
 
@@ -19,7 +22,7 @@ namespace UnityMcp.AgentBridge
     {
         public IPiProcess Create(string executablePath) => new SystemPiProcess(executablePath);
 
-        private sealed class SystemPiProcess : IPiBudgetProcess, IDisposable
+        private sealed class SystemPiProcess : IPiReadScopeProcess, IDisposable
         {
             private readonly Process process;
             private readonly string executablePath;
@@ -33,6 +36,7 @@ namespace UnityMcp.AgentBridge
             private string launcherPrefix = string.Empty;
             private bool started;
             private bool disposed;
+            private string policyHash;
 
             public SystemPiProcess(string executablePath)
             {
@@ -72,12 +76,28 @@ namespace UnityMcp.AgentBridge
             public string StandardOutput { get { lock (gate) return session.Output; } }
             public string StandardError { get { lock (gate) return diagnostics.ToString(); } }
 
+            public void ConfigureReadPaths(string projectRoot, IReadOnlyList<string> readFolders,
+                IReadOnlyList<string> denyFolders, IReadOnlyList<string> tools)
+            {
+                if (started || session != null) throw new InvalidOperationException("Pi scope must be captured before budget/startup.");
+                if (string.IsNullOrWhiteSpace(projectRoot) || !Path.IsPathRooted(projectRoot))
+                    throw new PiProcessException("PI_PATH_SCOPE_INVALID", "An absolute bound project root is required.");
+                var policy = JsonConvert.SerializeObject(new { version = 1, projectRoot = Path.GetFullPath(projectRoot),
+                    readFolders = PiReadPathScope.NormalizeFolders(readFolders), denyFolders = PiReadPathScope.NormalizeFolders(denyFolders), tools });
+                if (Encoding.UTF8.GetByteCount(policy) > 16384)
+                    throw new PiProcessException("PI_PATH_SCOPE_INVALID", "Read scope policy exceeds its byte bound.");
+                using (var sha = SHA256.Create())
+                    policyHash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(policy))).Replace("-", "").ToLowerInvariant();
+                process.StartInfo.EnvironmentVariables["UNITY_AGENT_BRIDGE_PI_READ_POLICY"] = policy;
+            }
+
             public void ConfigureBudget(string task, int maxTurns, int maxOutputBytes)
             {
                 if (started) throw new InvalidOperationException("Pi policy cannot change after startup.");
                 if (maxTurns < 1 || maxTurns > 64 || maxOutputBytes < 1024 || maxOutputBytes > 1048576)
                     throw new PiProcessException("PI_CONFIGURATION_INVALID", "Pi budget is outside supported bounds.");
-                session = new PiRpcSession(nonce, maxTurns, maxOutputBytes, task);
+                if (policyHash == null) throw new PiProcessException("PI_PATH_SCOPE_INVALID", "Pi read scope must be captured before its budget.");
+                session = new PiRpcSession(nonce, maxTurns, maxOutputBytes, task, policyHash);
                 process.StartInfo.EnvironmentVariables["UNITY_AGENT_BRIDGE_PI_GUARD_NONCE"] = nonce;
                 process.StartInfo.EnvironmentVariables["UNITY_AGENT_BRIDGE_PI_MAX_TURNS"] = maxTurns.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
@@ -87,7 +107,7 @@ namespace UnityMcp.AgentBridge
                 if (session == null) throw new PiProcessException("PI_GUARD_INVALID", "Pi budget must be configured before startup.");
                 var package = PackageInfo.FindForAssembly(typeof(PiProcessFactory).Assembly);
                 var guardPath = package == null ? null : Path.Combine(package.resolvedPath, "Tools~", "Pi", "turn-budget-guard.mjs");
-                if (string.IsNullOrWhiteSpace(guardPath) || !File.Exists(guardPath))
+                if (string.IsNullOrWhiteSpace(guardPath) || !File.Exists(guardPath) || !File.Exists(Path.Combine(Path.GetDirectoryName(guardPath), "read-scope-tools.mjs")))
                     throw new PiProcessException("PI_GUARD_INVALID", "The fixed package turn-budget guard is missing.");
                 process.StartInfo.Arguments += " --extension " + QuoteArgument(guardPath);
                 ConfigureExecutable();

@@ -214,6 +214,69 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(context.Result.Success, Is.False);
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_296.md
+        [Test, Category("AGB_296")]
+        public void BothTemplatesPropagateCapturedReadAndDenyFolders()
+        {
+            var registry = new UnityMcp.AgentIntelligentAnalysis.AnalysisTemplateRegistry();
+            var templates = new[] { UnityMcp.AgentIntelligentAnalysis.UnityProgrammerSpecialistFactory.Register(registry).Value,
+                UnityMcp.AgentIntelligentAnalysis.UnityAssetAnalystSpecialistFactory.Register(registry).Value };
+            foreach (var template in templates)
+            {
+                var options = PiAgentRunnerProjectSettings.Resolve(PiAgentRunnerSettings.CreateDefaults(), template);
+                Assert.That(options.ReadFolders, Is.EqualTo(template.EffectiveCapability.Paths.ReadFolders));
+                Assert.That(options.DenyFolders, Is.EqualTo(template.EffectiveCapability.Paths.DenyFolders));
+                var process = new FakeProcess();
+                var context = new FakeContext(new AgentRunRequest("inspect", System.IO.Path.GetTempPath()));
+                new PiAgentRunner(options, new FakeFactory(process)).Start(context.Request, context);
+                options.ReadFolders = new[] { "ChangedAfterStartup" };
+                Assert.That(process.ScopedReadFolders, Is.EqualTo(template.EffectiveCapability.Paths.ReadFolders));
+                Assert.That(process.ScopedDenyFolders, Does.Contain("Library"));
+            }
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_297.md
+        [Test, Category("AGB_297")]
+        public void InvalidReadScopeNeverStartsProcess()
+        {
+            foreach (var folders in new IReadOnlyList<string>[] { null, new[] { "../outside" }, new[] { "C:/absolute" }, new[] { "Assets/../Temp" } })
+            {
+                var process = new FakeProcess();
+                var context = new FakeContext(new AgentRunRequest("inspect"));
+                new PiAgentRunner(new PiAgentRunnerOptions { ReadFolders = folders }, new FakeFactory(process)).Start(context.Request, context);
+                Assert.That(context.Error.Code, Is.EqualTo("PI_PATH_SCOPE_INVALID"));
+                Assert.That(process.Started, Is.False);
+            }
+        }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_298.md
+        [Test, Category("AGB_298")]
+        public void BudgetOnlyAdapterCannotRunWithoutScopeSeam()
+        {
+            var process = new BudgetOnlyProcess();
+            var context = new FakeContext(new AgentRunRequest("inspect"));
+            new PiAgentRunner(new PiAgentRunnerOptions(), new FakeFactory(process)).Start(context.Request, context);
+            Assert.That(context.Error.Code, Is.EqualTo("PI_PATH_SCOPE_UNSUPPORTED"));
+            Assert.That(process.Started, Is.False);
+        }
+
+        private sealed class BudgetOnlyProcess : IPiBudgetProcess
+        {
+            public string WorkingDirectory { get; set; }
+            public string Arguments { get; set; }
+            public bool HasExited => false;
+            public int ExitCode => 0;
+            public string StandardOutput => "";
+            public string StandardError => "";
+            public bool GuardReady => false;
+            public string FailureCode => null;
+            public string FailureMessage => null;
+            public bool Started { get; private set; }
+            public void ConfigureBudget(string task, int maxTurns, int maxOutputBytes) { }
+            public void Start() { Started = true; }
+            public void Kill() { }
+        }
+
         private sealed class LegacyProcess : IPiProcess
         {
             public string WorkingDirectory { get; set; }
@@ -234,9 +297,13 @@ namespace UnityMcp.AgentBridge.Tests
             public IPiProcess Create(string executablePath) => process;
         }
 
-        private sealed class FakeProcess : IPiBudgetProcess, IDisposable
+        private sealed class FakeProcess : IPiReadScopeProcess, IDisposable
         {
             public bool GuardReady { get; set; } = true;
+            public IReadOnlyList<string> ScopedReadFolders { get; private set; }
+            public IReadOnlyList<string> ScopedDenyFolders { get; private set; }
+            public void ConfigureReadPaths(string root, IReadOnlyList<string> read, IReadOnlyList<string> deny, IReadOnlyList<string> tools)
+            { ScopedReadFolders = read; ScopedDenyFolders = deny; }
             private string failureCode;
             public string FailureCode
             {

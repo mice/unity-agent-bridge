@@ -72,6 +72,22 @@ namespace UnityMcp.AgentBridge.Tests
             }
         }
 
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_301.md
+        [Test, Category("AGB_301"), Timeout(30000)]
+        public void RealProcessRejectsForbiddenPathWithoutReturningContents()
+        {
+            using (var process = (IDisposable)CreateFixture("denied", 1))
+            {
+                var bounded = (IPiBudgetProcess)process;
+                bounded.ConfigureBudget("inspect", 2, 1024);
+                bounded.Start();
+                Assert.That(SpinWait.SpinUntil(() => bounded.HasExited, 10000), Is.True);
+                Assert.That(bounded.FailureCode, Is.EqualTo("PI_PATH_ACCESS_DENIED"));
+                Assert.That(bounded.StandardOutput, Is.Empty);
+                Assert.That(File.Exists(Path.Combine(directory, "dispatches.txt")), Is.False);
+            }
+        }
+
         private IPiProcess CreateFixture(string mode, int requests)
         {
             var path = Path.Combine(directory, "fixture.mjs");
@@ -82,12 +98,13 @@ import { createInterface } from 'node:readline';
 if (process.argv.includes('--version')) { console.log(VERSION); process.exit(0); }
 const guard = process.argv[process.argv.indexOf('--extension') + 1];
 const handlers = new Map();
-(await import(pathToFileURL(guard).href)).default({on(name, handler) { handlers.set(name, handler); }});
+(await import(pathToFileURL(guard).href)).default({on(name, handler) { handlers.set(name, handler); }, registerTool() {}, setActiveTools() {}});
 handlers.get('session_start')();
 const input = createInterface({input: process.stdin});
 input.once('line', async line => {
     const command = JSON.parse(line);
     if (command.type !== 'prompt') process.exit(4);
+    if (DENIED) { handlers.get('tool_call')({toolName:'read',input:{path:'Library/hidden.txt'}}); console.log('UNEXPECTED_READ'); }
     for (let i = 0; i < REQUESTS; i++) {
         try { await handlers.get('before_provider_request')({}); } catch { }
         appendFileSync('dispatches.txt', 'request\n');
@@ -99,9 +116,10 @@ input.once('line', async line => {
 input.on('close', () => process.exit(0));
 ";
             File.WriteAllText(path, source.Replace("VERSION", mode == "unsupported" ? "'0.0.0'" : "'0.85.1'")
-                .Replace("REQUESTS", requests.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+                .Replace("REQUESTS", requests.ToString(System.Globalization.CultureInfo.InvariantCulture)).Replace("DENIED", mode == "denied" ? "true" : "false"));
             var process = new PiProcessFactory().Create(path);
             process.WorkingDirectory = directory;
+            ((IPiReadScopeProcess)process).ConfigureReadPaths(directory, PiReadPathScope.DefaultReadFolders, PiReadPathScope.DefaultDenyFolders, PiAgentRunnerSettings.DefaultTools);
             process.Arguments = "--tools read --no-extensions --no-skills --no-prompt-templates --no-session --mode rpc";
             return process;
         }

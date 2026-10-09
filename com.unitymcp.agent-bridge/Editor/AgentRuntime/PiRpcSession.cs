@@ -16,13 +16,15 @@ namespace UnityMcp.AgentBridge
         private readonly int maxTurns;
         private readonly int maxOutputBytes;
         private readonly string task;
+        private readonly string policyHash;
 
-        public PiRpcSession(string nonce, int maxTurns, int maxOutputBytes, string task)
+        public PiRpcSession(string nonce, int maxTurns, int maxOutputBytes, string task, string policyHash)
         {
             this.nonce = nonce;
             this.maxTurns = maxTurns;
             this.maxOutputBytes = maxOutputBytes;
             this.task = task;
+            this.policyHash = policyHash;
         }
 
         public bool GuardReady { get; private set; }
@@ -38,10 +40,19 @@ namespace UnityMcp.AgentBridge
             try
             {
                 var marker = JObject.Parse(line.Substring(MarkerPrefix.Length));
-                if (marker.Value<string>("nonce") != nonce || marker.Value<int?>("protocolVersion") != 1 ||
+                if (marker.Value<string>("nonce") != nonce || marker.Value<int?>("protocolVersion") != 2 ||
+                    policyHash == null || policyHash.Length != 64 || policyHash.Any(character => !(character >= '0' && character <= '9') && !(character >= 'a' && character <= 'f')) || marker.Value<string>("policyHash") != policyHash ||
                     marker.Value<int?>("maxTurns") != maxTurns)
                     throw new InvalidOperationException("Pi guard readiness does not match this task.");
                 var type = marker.Value<string>("type");
+                if (type == "path_denied")
+                {
+                    var requests = marker.Value<int?>("requests");
+                    if (!GuardReady || !requests.HasValue || requests.Value < 0 || requests.Value > maxTurns)
+                        throw new InvalidOperationException("Unexpected Pi permission marker.");
+                    Fail("PI_PATH_ACCESS_DENIED", "Pi file tool access was rejected by the template read scope.");
+                    return null;
+                }
                 if (type == "limit")
                 {
                     if (marker.Value<int?>("requests") != maxTurns)
@@ -107,6 +118,7 @@ namespace UnityMcp.AgentBridge
             if (FailureCode != null) return;
             if (!GuardReady) Fail("PI_GUARD_NOT_READY", "Pi exited without confirming its turn-budget guard.");
             else if (exitCode == 78) Fail("PI_TURN_LIMIT_EXCEEDED", "Pi exhausted its model-request ceiling.");
+            else if (exitCode == 80) Fail("PI_PATH_ACCESS_DENIED", "Pi file tool access was rejected by the template read scope.");
             else if (exitCode == 0 && !Completed) Fail("PI_RPC_PROTOCOL_INVALID", "Pi exited without a terminal assistant response.");
         }
 
