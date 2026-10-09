@@ -19,7 +19,7 @@ public sealed class McpTaskExecutionCoordinator
         if (!Supports(request)) return;
         var taskType = request.AgentTaskType;
         var response = await _adapter.CreateForExternalTaskAsync(mcpTaskId, taskType, request.StructuredPayload, request.TimeoutMs, cancellationToken);
-        if (response["agentTaskId"] is null)
+        if (!_adapter.HasBinding(mcpTaskId))
         {
             throw new InvalidOperationException(response["errorMessage"]?.GetValue<string>() ?? "Unity AgentTask creation failed.");
         }

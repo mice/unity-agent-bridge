@@ -86,7 +86,7 @@ namespace UnityMcp.AgentIntelligentAnalysis
             Required(claim.Text, "CLAIM_TEXT_REQUIRED", "Analysis claim text is required.", errors);
             if (material && claim.EvidenceIds.Count == 0) errors.Add(Error("CLAIM_CITATION_REQUIRED", "Material claims require evidence citations."));
             if (claim.EvidenceIds.Any(id => !ids.Contains(id))) errors.Add(Error("CLAIM_CITATION_UNKNOWN", "Claim references unknown evidence."));
-            if (claim.Confidence < 0 || claim.Confidence > 1) errors.Add(Error("CONFIDENCE_INVALID", "Confidence must be between 0 and 1."));
+            if (double.IsNaN(claim.Confidence) || double.IsInfinity(claim.Confidence) || claim.Confidence < 0 || claim.Confidence > 1) errors.Add(Error("CONFIDENCE_INVALID", "Confidence must be between 0 and 1."));
         }
 
         private static CapabilityProfile Intersect(CapabilityProfile authority, CapabilityProfile requested, List<ValidationError> errors)

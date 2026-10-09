@@ -329,15 +329,25 @@ namespace UnityMcp.AgentBridge
             if (text.StartsWith("```") && text.EndsWith("```")) text = text.Substring(text.IndexOf('\n') + 1, text.Length - text.IndexOf('\n') - 4).Trim();
             var json = JObject.Parse(text);
             var ids = new HashSet<string>(evidence.Items.Select(item => item.Id), StringComparer.Ordinal);
-            return new ProblemAnalysisResult(ReadClaims(json["facts"] as JArray, ids), ReadClaims(json["hypotheses"] as JArray, ids), ReadClaim((JObject)json["rootCause"], ids), ReadClaims(json["impact"] as JArray, ids), ReadClaims(json["recommendations"] as JArray, ids), ReadClaims(json["verificationPlan"] as JArray, ids));
+            return new ProblemAnalysisResult(ReadClaims(json["facts"] as JArray, ids), ReadClaims(json["hypotheses"] as JArray, ids), ReadClaim(json["rootCause"] as JObject, ids), ReadClaims(json["impact"] as JArray, ids), ReadClaims(json["recommendations"] as JArray, ids), ReadClaims(json["verificationPlan"] as JArray, ids));
         }
 
-        private static List<AnalysisClaim> ReadClaims(JArray array, HashSet<string> ids) => array == null ? new List<AnalysisClaim>() : array.OfType<JObject>().Select(item => ReadClaim(item, ids)).ToList();
+        private static List<AnalysisClaim> ReadClaims(JArray array, HashSet<string> ids)
+        {
+            if (array == null || array.Any(item => item is not JObject))
+                throw new InvalidOperationException("Every required analysis collection must be an array of claim objects.");
+            return array.OfType<JObject>().Select(item => ReadClaim(item, ids)).ToList();
+        }
+
         private static AnalysisClaim ReadClaim(JObject item, HashSet<string> ids)
         {
-            if (item == null) return null;
-            var citations = (item["evidenceIds"] as JArray)?.Values<string>()?.Where(ids.Contains).ToArray() ?? Array.Empty<string>();
-            return new AnalysisClaim(item.Value<string>("text"), citations, item.Value<double?>("confidence") ?? 0);
+            if (item == null || item["text"]?.Type != JTokenType.String || item["evidenceIds"] is not JArray citations ||
+                citations.Any(citation => citation.Type != JTokenType.String) ||
+                (item["confidence"]?.Type != JTokenType.Float && item["confidence"]?.Type != JTokenType.Integer))
+                throw new InvalidOperationException("Each analysis claim requires text, a string evidenceIds array, and numeric confidence.");
+            // Preserve every provider citation so the domain validator can reject unknown IDs.
+            return new AnalysisClaim(item.Value<string>("text"), citations.Values<string>().ToArray(), item.Value<double>("confidence"));
         }
+
     }
 }

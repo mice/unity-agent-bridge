@@ -55,7 +55,7 @@ public sealed class McpTaskAdapter
         {
             var response = await GetAsync(mcpTaskId, cancellationToken);
             var status = MapStatus(response);
-            if (status is "completed" or "failed" or "cancelled" || response["success"]?.GetValue<bool>() == false)
+            if (status is "completed" or "failed" or "cancelled" || response["errorCode"] is not null)
                 return response;
             await Task.Delay(250, cancellationToken);
         }
@@ -105,14 +105,14 @@ public sealed class McpTaskAdapter
         var envelope = JsonNode.Parse(result.RawJson)?.AsObject();
         if (envelope is null) return Error("INVALID_RESPONSE", "Unity returned an invalid task response.");
         var embedded = envelope["metricsObjectJson"]?.GetValue<string>();
-        var response = !string.IsNullOrWhiteSpace(embedded) ? JsonNode.Parse(embedded)?.AsObject() : null;
+        var response = !string.IsNullOrWhiteSpace(embedded) ? JsonNode.Parse(embedded)?.AsObject() : envelope["metrics"]?.AsObject();
         return response ?? envelope;
     }
 
     private static string MapStatus(JsonObject response)
     {
         var state = response["state"]?.GetValue<string>() ?? response["snapshot"]?["state"]?.GetValue<string>();
-        return state?.ToLowerInvariant() switch { "completed" => "completed", "failed" => "failed", "cancelled" => "cancelled", _ => "working" };
+        return state?.ToLowerInvariant() switch { "completed" => "completed", "failed" => "failed", "cancelled" => "cancelled", "created" or "running" => "working", _ => response["success"]?.GetValue<bool>() == false ? "failed" : "working" };
     }
 
     private static JsonObject Error(string code, string message) => new() { ["success"] = false, ["errorCode"] = code, ["errorMessage"] = message, ["status"] = "failed" };
