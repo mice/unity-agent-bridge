@@ -23,8 +23,8 @@ public sealed class BridgeHealthClient
     {
         var statusPath = Path.Combine(queuePaths.StatusDirectory, "unity_bridge_status.json");
         var statusFileExists = File.Exists(statusPath);
-        var status = statusFileExists ? SafeParseJsonObject(File.ReadAllText(statusPath, Encoding.UTF8)) : new JObject();
-        return ClassifyLifecycle(statusFileExists, GetHeartbeatAgeMs(status), status);
+        var status = ReadStatusSnapshot(statusPath, out var readable);
+        return ClassifyLifecycle(statusFileExists && readable, GetHeartbeatAgeMs(status), status);
     }
 
     public bool TryHandleLocalCommand(QueuePaths queuePaths, BridgeCommandSpec commandSpec, string commandId, out ToolResultEnvelope result)
@@ -50,8 +50,8 @@ public sealed class BridgeHealthClient
             case "unity.bridge_health":
             {
                 var statusPath = Path.Combine(queuePaths.StatusDirectory, "unity_bridge_status.json");
-                var status = File.Exists(statusPath) ? SafeParseJsonObject(File.ReadAllText(statusPath, Encoding.UTF8)) : new JObject();
-                var lifecycle = ClassifyLifecycle(File.Exists(statusPath), GetHeartbeatAgeMs(status), status);
+                var status = ReadStatusSnapshot(statusPath, out var readable);
+                var lifecycle = ClassifyLifecycle(File.Exists(statusPath) && readable, GetHeartbeatAgeMs(status), status);
                 var payload = new JObject
                 {
                     ["schemaVersion"] = AgentCommandEnvelope.SchemaVersion,
@@ -239,6 +239,28 @@ public sealed class BridgeHealthClient
         };
     }
 
+    private static JObject ReadStatusSnapshot(string path, out bool readable)
+    {
+        readable = false;
+        if (!File.Exists(path)) return new JObject();
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            try
+            {
+                using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+                var snapshot = SafeParseJsonObject(reader.ReadToEnd());
+                readable = true;
+                return snapshot;
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+            {
+                if (attempt < 2) Thread.Sleep(10);
+            }
+        }
+        return new JObject();
+    }
+
     private static JObject SafeParseJsonObject(string rawJson)
     {
         var parsed = JToken.Parse(rawJson);
@@ -290,8 +312,8 @@ public sealed class BridgeHealthClient
         if (includeBridgeHealth)
         {
             var statusPath = Path.Combine(queuePaths.StatusDirectory, "unity_bridge_status.json");
-            var status = File.Exists(statusPath) ? SafeParseJsonObject(File.ReadAllText(statusPath, Encoding.UTF8)) : new JObject();
-            var lifecycle = ClassifyLifecycle(File.Exists(statusPath), GetHeartbeatAgeMs(status), status);
+            var status = ReadStatusSnapshot(statusPath, out var readable);
+            var lifecycle = ClassifyLifecycle(File.Exists(statusPath) && readable, GetHeartbeatAgeMs(status), status);
             payload["bridgeHealth"] = new JObject
             {
                 ["statusFileExists"] = File.Exists(statusPath),
@@ -503,8 +525,8 @@ public sealed class BridgeHealthClient
         {
             if (File.Exists(statusPath))
             {
-                var status = SafeParseJsonObject(File.ReadAllText(statusPath, Encoding.UTF8));
-                var heartbeatAgeToken = GetHeartbeatAgeMs(status);
+                var status = ReadStatusSnapshot(statusPath, out var readable);
+                var heartbeatAgeToken = readable ? GetHeartbeatAgeMs(status) : JValue.CreateNull();
                 if (heartbeatAgeToken.Type != JTokenType.Null)
                 {
                     var heartbeatAgeMs = heartbeatAgeToken.Value<long>();
