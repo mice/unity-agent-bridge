@@ -7,7 +7,6 @@
     "UnityMcp.AgentTaskEditor",
     "UnityMcp.AgentRuntime.Abstractions",
     "UnityMcp.AgentRuntime.Bridge.Editor",
-    "UnityMcp.AgentRuntime.Editor",
     "UnityMcp.Plugin.Abstractions",
     "UnityEditor.TestRunner",
     "UnityEngine.TestRunner",

@@ -3,7 +3,6 @@
   "rootNamespace": "UnityMcp.AgentBridge",
   "references": [
     "UnityMcp.AgentRuntime.Abstractions",
-    "UnityMcp.AgentRuntime.Editor",
     "UnityMcp.AgentTaskCore",
     "UnityMcp.AgentIntelligentAnalysis",
     "Unity.Newtonsoft.Json"

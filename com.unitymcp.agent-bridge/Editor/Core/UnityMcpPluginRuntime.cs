@@ -8,12 +8,44 @@ using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityMcp.Plugin;
+using UnityMcp.AgentRuntime;
 
 namespace UnityMcp.AgentBridge
 {
     public static class UnityMcpPluginRuntime
     {
         private static Func<string, UnityMcpRoslynCompilerPayload> _roslynCompilerPayloadResolver;
+        private static readonly AgentPluginLifetimeCache<IUnityMcpToolProvider> ManifestProviders =
+            new AgentPluginLifetimeCache<IUnityMcpToolProvider>(exception => Debug.LogWarning("Plugin retirement failed: " + exception.Message));
+        private static readonly Dictionary<string, IUnityMcpToolProvider> ConfigurationProviders = new Dictionary<string, IUnityMcpToolProvider>(StringComparer.Ordinal);
+        private static AgentBridgeSettings _lastDiscoverySettings;
+        private static IReadOnlyList<UnityMcpInstalledPlugin> _lastInstalledPlugins = Array.Empty<UnityMcpInstalledPlugin>();
+
+        static UnityMcpPluginRuntime()
+        {
+            AssemblyReloadEvents.beforeAssemblyReload += RetireAllProviders;
+            EditorApplication.quitting += RetireAllProviders;
+        }
+
+        private static void RetireAllProviders()
+        {
+            ManifestProviders.RetainOnly(Array.Empty<string>());
+            ConfigurationProviders.Clear();
+            _lastDiscoverySettings = null;
+            _lastInstalledPlugins = Array.Empty<UnityMcpInstalledPlugin>();
+        }
+
+        public static bool CanConfigure(string pluginId) => !string.IsNullOrWhiteSpace(pluginId) && ConfigurationProviders.TryGetValue(pluginId, out var provider) && provider is IAgentPluginConfiguration;
+
+        public static void OpenConfiguration(string pluginId)
+        {
+            if (ConfigurationProviders.TryGetValue(pluginId, out var provider) && provider is IAgentPluginConfiguration configuration)
+                configuration.OpenConfiguration();
+        }
+
+        private static string InstallationIdentity(UnityMcpInstalledPlugin plugin, string projectRoot)
+            => string.Join("|", projectRoot, plugin.PluginId, plugin.Version, plugin.PackageRoot,
+                plugin.Assembly.FullName, plugin.ProviderType.FullName);
 
         public static void ConfigureRoslynCompilerPayloadResolver(Func<string, UnityMcpRoslynCompilerPayload> resolver)
         {
@@ -78,14 +110,28 @@ namespace UnityMcp.AgentBridge
 
             var installedPlugins = UnityMcpPluginManifestDiscovery.Discover(settings);
             result.InstalledPlugins.AddRange(installedPlugins);
-            foreach (var plugin in installedPlugins.Where(item => item.Enabled && item.Ready))
+            var candidates = installedPlugins.Where(item => item.Enabled && item.Ready).ToArray();
+            ManifestProviders.RetainOnly(candidates.Select(item => InstallationIdentity(item, paths.ProjectRoot)));
+            ManifestProviders.BeginRefresh();
+            ConfigurationProviders.Clear();
+            foreach (var plugin in candidates)
             {
+                var catalogStart = result.Catalog.tools.Count;
+                var registryBefore = new HashSet<string>(registry.ListTools().Select(item => item.Name), StringComparer.Ordinal);
                 try
                 {
                     ProcessManifestPlugin(plugin, registry, paths, logger, result, builtInNames, pluginNames, pluginMcpNames, hostServices);
                 }
                 catch (Exception exception)
                 {
+                    ManifestProviders.Reject(InstallationIdentity(plugin, paths.ProjectRoot));
+                    foreach (var added in registry.ListTools().Where(item => !registryBefore.Contains(item.Name)).ToArray())
+                    {
+                        registry.Unregister(added.Name);
+                        pluginNames.Remove(added.Name);
+                    }
+                    foreach (var added in result.Catalog.tools.Skip(catalogStart)) pluginMcpNames.Remove(added.mcpName);
+                    result.Catalog.tools.RemoveRange(catalogStart, result.Catalog.tools.Count - catalogStart);
                     plugin.Ready = false;
                     plugin.Exposed = false;
                     plugin.DiagnosticCode = UnityMcpPluginDiagnosticCodes.ProviderInvalid;
@@ -93,14 +139,29 @@ namespace UnityMcp.AgentBridge
                     logger?.Exception("plugin_manifest_provider_failed", exception);
                 }
             }
+            ManifestProviders.EndRefresh();
 
             WriteCatalog(paths.PluginCatalogPath, result.Catalog, logger);
+            _lastDiscoverySettings = settings;
+            _lastInstalledPlugins = result.InstalledPlugins.ToArray();
             return result;
         }
 
         public static IReadOnlyList<UnityMcpInstalledPlugin> DiscoverInstalledPlugins(AgentBridgeSettings settings)
         {
-            return UnityMcpPluginManifestDiscovery.Discover(settings);
+            var installed = UnityMcpPluginManifestDiscovery.Discover(settings);
+            if (!ReferenceEquals(settings, _lastDiscoverySettings)) return installed;
+            foreach (var plugin in installed)
+            {
+                var previous = _lastInstalledPlugins.FirstOrDefault(item => item.PluginId == plugin.PluginId &&
+                    item.Version == plugin.Version && item.PackageRoot == plugin.PackageRoot && item.Enabled == plugin.Enabled);
+                if (previous == null || !plugin.Ready) continue;
+                plugin.Ready = previous.Ready;
+                plugin.Exposed = previous.Exposed;
+                plugin.DiagnosticCode = previous.DiagnosticCode;
+                plugin.DiagnosticMessage = previous.DiagnosticMessage;
+            }
+            return installed;
         }
 
         private static UnityMcpRoslynCompilerPayload ResolveRoslynCompilerPayload(AgentBridgePaths paths)
@@ -246,7 +307,9 @@ namespace UnityMcp.AgentBridge
             ISet<string> pluginMcpNames,
             UnityMcpPluginHostServices hostServices)
         {
-            var provider = Activator.CreateInstance(plugin.ProviderType) as IUnityMcpToolProvider;
+            var identity = InstallationIdentity(plugin, paths.ProjectRoot);
+            var provider = ManifestProviders.GetOrCreate(identity, () => Activator.CreateInstance(plugin.ProviderType) as IUnityMcpToolProvider);
+            ConfigurationProviders[plugin.PluginId] = provider;
             if (provider == null)
             {
                 throw new InvalidOperationException($"Provider '{plugin.ProviderType?.FullName}' could not be instantiated.");
@@ -281,8 +344,13 @@ namespace UnityMcp.AgentBridge
             plugin.Exposed = result.Catalog.tools.Count > catalogCount;
             if (!plugin.Exposed)
             {
+                ManifestProviders.Reject(identity);
                 plugin.DiagnosticCode = UnityMcpPluginDiagnosticCodes.ProviderInvalid;
                 plugin.DiagnosticMessage = "Provider returned no valid tools.";
+            }
+            else
+            {
+                ManifestProviders.Activate(identity);
             }
         }
 

@@ -28,9 +28,8 @@ namespace UnityMcp.AgentBridge
                     : request?.AgentTaskId != null && request.AgentTaskId.StartsWith("analysis-", StringComparison.Ordinal)
                     ? AgentTaskVerifiedAnalysisExecutionService.Control(request)
                     : string.Equals(request?.TaskType, "agent_run", StringComparison.Ordinal)
-                    ? AgentTaskPiExecutionService.Control(request)
-                    : request?.AgentTaskId != null && request.AgentTaskId.StartsWith("agent-", StringComparison.Ordinal)
-                    ? AgentTaskPiExecutionService.Control(request)
+                    || (request?.AgentTaskId != null && request.AgentTaskId.StartsWith("agent-", StringComparison.Ordinal))
+                    ? new AgentTaskControlResponse { Success = false, ErrorCode = "AGENT_TASK_UNSUPPORTED", ErrorMessage = "Generic agent execution is unavailable; use an enabled fixed-template provider." }
                     : string.Equals(request?.TaskType, "compile", StringComparison.Ordinal)
                     || (request?.Operation != AgentTaskControlProtocol.Create && request?.AgentTaskId != null && request.AgentTaskId.StartsWith("compile-", StringComparison.Ordinal))
                     ? AgentTaskCompileExecutionService.Control(request)

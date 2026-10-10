@@ -108,6 +108,7 @@ public sealed class VerifiedAnalysisLifecycleRegressionTests
             Paths = new QueuePaths(Root, Path.Combine(Root, "Temp", "AgentBridge"));
             CommandStore.EnsureQueueDirectories(Paths);
             File.WriteAllText(Path.Combine(Paths.StatusDirectory, "unity_bridge_status.json"), new JsonObject { ["heartbeatUtc"] = DateTime.UtcNow.ToString("O"), ["projectPath"] = Root, ["currentStage"] = "idle" }.ToJsonString());
+            VerifiedAnalysisCatalogFixture.Install(Root);
             Adapter = new McpTaskAdapter(new ExternalBridgeClient(), Paths, Root);
             worker = PumpAsync();
         }

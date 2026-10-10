@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using UnityEngine;
+using Newtonsoft.Json.Linq;
 
 namespace UnityMcp.AgentBridge.Mcp
 {
@@ -37,17 +38,16 @@ namespace UnityMcp.AgentBridge.Mcp
             try
             {
                 var json = File.ReadAllText(_settingsFilePath);
+                JObject.Parse(json);
                 var dto = CreateLoadDto();
                 JsonUtility.FromJsonOverwrite(json, dto);
                 var settings = Normalize(dto);
-                try { PiAgentRunnerProjectSettings.Parse(json); }
-                catch (Exception exception) { settings.PiLoadError = "PI_CONFIGURATION_INVALID: " + exception.Message; }
                 return settings;
             }
             catch (Exception exception)
             {
                 var settings = McpEditorSettingsDefaults.Create();
-                settings.PiLoadError = "PI_CONFIGURATION_INVALID: Unable to read settings JSON. " + exception.Message;
+                settings.LoadError = "Unable to read settings JSON. " + exception.Message;
                 return settings;
             }
         }
@@ -59,8 +59,6 @@ namespace UnityMcp.AgentBridge.Mcp
                 throw new ArgumentNullException(nameof(settings));
             }
 
-            if (!PiAgentConfigurationValidator.TryValidate(settings, out var error))
-                throw new InvalidOperationException("PI_CONFIGURATION_INVALID: " + error);
             var normalized = Normalize(settings);
             var directory = Path.GetDirectoryName(_settingsFilePath);
             if (!string.IsNullOrEmpty(directory))
@@ -69,7 +67,10 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var json = JsonUtility.ToJson(ToDto(normalized), true);
-            File.WriteAllText(_settingsFilePath, json);
+            // Unknown fields may belong to optional plugins. Preserve them without knowing their schema.
+            var document = File.Exists(_settingsFilePath) ? JObject.Parse(File.ReadAllText(_settingsFilePath)) : new JObject();
+            foreach (var property in JObject.Parse(json).Properties()) document[property.Name] = property.Value.DeepClone();
+            File.WriteAllText(_settingsFilePath, document.ToString());
         }
 
         internal static string GetDefaultSettingsFilePath()
@@ -91,7 +92,7 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var normalized = Normalize(ToDto(settings));
-            normalized.PiLoadError = settings.PiLoadError;
+            normalized.LoadError = settings.LoadError;
             return normalized;
         }
 
@@ -119,13 +120,6 @@ namespace UnityMcp.AgentBridge.Mcp
                 RuntimeChannel = NormalizeRuntimeChannel(dto.runtimeChannel),
                 MachineRuntimeRoot = NormalizePathValue(dto.machineRuntimeRoot),
                 DiagnosticTimeoutMs = NormalizePositive(dto.diagnosticTimeoutMs, defaults.DiagnosticTimeoutMs),
-                PiSchemaVersion = dto.piSchemaVersion,
-                PiExecutablePath = dto.piExecutablePath?.Trim(),
-                PiModel = dto.piModel?.Trim(),
-                PiTimeoutMilliseconds = dto.piTimeoutMilliseconds,
-                PiMaxTurns = dto.piMaxTurns,
-                PiMaxOutputBytes = dto.piMaxOutputBytes,
-                PiTools = NormalizeTools(dto.piTools),
             };
         }
 
@@ -145,13 +139,6 @@ namespace UnityMcp.AgentBridge.Mcp
                 runtimeChannel = NormalizeRuntimeChannel(settings.RuntimeChannel),
                 machineRuntimeRoot = NormalizePathValue(settings.MachineRuntimeRoot),
                 diagnosticTimeoutMs = NormalizePositive(settings.DiagnosticTimeoutMs, DefaultDiagnosticTimeoutMs),
-                piSchemaVersion = settings.PiSchemaVersion,
-                piExecutablePath = settings.PiExecutablePath?.Trim(),
-                piModel = settings.PiModel?.Trim(),
-                piTimeoutMilliseconds = settings.PiTimeoutMilliseconds,
-                piMaxTurns = settings.PiMaxTurns,
-                piMaxOutputBytes = settings.PiMaxOutputBytes,
-                piTools = NormalizeTools(settings.PiTools),
             };
         }
 
@@ -210,13 +197,6 @@ namespace UnityMcp.AgentBridge.Mcp
             public string runtimeChannel;
             public string machineRuntimeRoot;
             public int diagnosticTimeoutMs;
-            public string piSchemaVersion = "1.0";
-            public string piExecutablePath = "pi";
-            public string piModel = "deepseek/deepseek-flash";
-            public int piTimeoutMilliseconds = 120000;
-            public int piMaxTurns = 8;
-            public int piMaxOutputBytes = 65536;
-            public string[] piTools = new[] { "read", "grep", "find", "ls" };
         }
     }
 
@@ -238,12 +218,6 @@ namespace UnityMcp.AgentBridge.Mcp
                 RuntimeChannel = string.Empty,
                 MachineRuntimeRoot = string.Empty,
                 DiagnosticTimeoutMs = McpEditorSettingsStore.DefaultDiagnosticTimeoutMs,
-                PiExecutablePath = "pi",
-                PiModel = "deepseek/deepseek-flash",
-                PiTimeoutMilliseconds = 120000,
-                PiMaxTurns = 8,
-                PiMaxOutputBytes = 65536,
-                PiTools = new[] { "read", "grep", "find", "ls" },
             };
         }
 

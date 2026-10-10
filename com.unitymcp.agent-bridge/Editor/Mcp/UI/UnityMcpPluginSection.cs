@@ -94,6 +94,11 @@ namespace UnityMcp.AgentBridge.Mcp
                 var displayName = string.IsNullOrWhiteSpace(plugin.DisplayName) ? plugin.PluginId : plugin.DisplayName;
                 EditorGUILayout.LabelField($"{displayName}  {plugin.Version}", EditorStyles.boldLabel);
                 GUILayout.FlexibleSpace();
+                if (UnityMcpPluginRuntime.CanConfigure(plugin.PluginId) && GUILayout.Button("Configure", GUILayout.Width(84f)))
+                {
+                    UnityMcpPluginRuntime.OpenConfiguration(plugin.PluginId);
+                    GUIUtility.ExitGUI();
+                }
                 using (new EditorGUI.DisabledScope(string.IsNullOrWhiteSpace(plugin.PluginId)))
                 {
                     var label = plugin.Enabled ? "Disable" : "Enable";

@@ -55,9 +55,6 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(settings.SchemaVersion, Is.EqualTo("1.0"));
             Assert.That(settings.DiagnosticTimeoutMs, Is.EqualTo(30000));
             Assert.That(settings.ToolsRoot, Is.Empty);
-            Assert.That(settings.PiExecutablePath, Is.EqualTo("pi"));
-            Assert.That(settings.PiModel, Is.EqualTo("deepseek/deepseek-flash"));
-            Assert.That(settings.PiTools, Is.EquivalentTo(new[] { "read", "grep", "find", "ls" }));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_002.md
@@ -72,8 +69,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var settings = store.Load();
 
             Assert.That(settings.SchemaVersion, Is.EqualTo("1.0"));
-            Assert.That(PiAgentConfigurationValidator.TryValidate(settings, out _), Is.False);
-            StringAssert.Contains("PI_CONFIGURATION_INVALID", settings.PiLoadError);
+            Assert.That(settings.LoadError, Is.Not.Empty);
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_003.md
@@ -146,58 +142,22 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(savedJson, Does.Contain("\"diagnosticTimeoutMs\": 30000"));
             Assert.That(savedJson, Does.Contain("\"workspaceRoot\": \"D:/Repo\""));
             Assert.That(savedJson, Does.Contain("\"toolsRoot\": \"D:/Repo/Tools\""));
-            Assert.That(savedJson, Does.Contain("\"piExecutablePath\": \"pi\""));
-            Assert.That(savedJson, Does.Contain("\"piModel\": \"deepseek/deepseek-flash\""));
         }
 
-        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_244.md
-        [Test, Category("AGBM_244")]
-        [Category("AGBM_Settings")]
-        public void Load_InvalidPiValuesRemainVisibleAndCannotBeSaved()
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_332.md
+        [Test, Category("AGB_332")]
+        public void SavePreservesOpaquePluginAndFutureSettings()
         {
-            var json = "{\"piTimeoutMilliseconds\":9999999,\"piMaxTurns\":0,\"piMaxOutputBytes\":1,\"piTools\":[\"bash\"]}";
-            File.WriteAllText(_settingsPath, json);
+            File.WriteAllText(_settingsPath, "{\"piMaxTurns\":0,\"futurePlugin\":{\"authority\":\"preserved\"}}");
             var store = new McpEditorSettingsStore(_settingsPath);
             var settings = store.Load();
-            Assert.That(settings.PiTimeoutMilliseconds, Is.EqualTo(9999999));
-            Assert.That(settings.PiMaxTurns, Is.EqualTo(0));
-            Assert.That(settings.PiMaxOutputBytes, Is.EqualTo(1));
-            Assert.That(settings.PiTools, Is.EqualTo(new[] { "bash" }));
-            Assert.That(PiAgentConfigurationValidator.TryValidate(settings, out _), Is.False);
-            Assert.Throws<InvalidOperationException>(() => store.Save(settings));
-            Assert.That(File.ReadAllText(_settingsPath), Is.EqualTo(json));
+            settings.WorkspaceRoot = "D:/Repo";
+            store.Save(settings);
+            var text = File.ReadAllText(_settingsPath);
+            Assert.That(text, Does.Contain("\"piMaxTurns\": 0"));
+            Assert.That(text, Does.Contain("\"authority\": \"preserved\""));
+            Assert.That(store.Load().WorkspaceRoot, Is.EqualTo("D:/Repo"));
         }
 
-        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_245.md
-        [Test, Category("AGBM_245")]
-        public void PiSettings_RoundTripPreservesSafePolicyAndUnrelatedSettings()
-        {
-            var store = new McpEditorSettingsStore(_settingsPath);
-            store.Save(new McpEditorSettings { WorkspaceRoot = "D:/Repo", PiExecutablePath = "custom-pi",
-                PiModel = "provider/model", PiTimeoutMilliseconds = 45000, PiMaxTurns = 3,
-                PiMaxOutputBytes = 8192, PiTools = new[] { "read" } });
-            var settings = store.Load();
-            Assert.That(settings.WorkspaceRoot, Is.EqualTo("D:/Repo"));
-            Assert.That(settings.PiSchemaVersion, Is.EqualTo("1.0"));
-            Assert.That(settings.PiExecutablePath, Is.EqualTo("custom-pi"));
-            Assert.That(settings.PiModel, Is.EqualTo("provider/model"));
-            Assert.That(settings.PiTimeoutMilliseconds, Is.EqualTo(45000));
-            Assert.That(settings.PiMaxTurns, Is.EqualTo(3));
-            Assert.That(settings.PiMaxOutputBytes, Is.EqualTo(8192));
-            Assert.That(settings.PiTools, Is.EqualTo(new[] { "read" }));
-        }
-
-        // TestRecord: Documentation~/AgentBridge/test_records/AGBM_249.md
-        [Test, Category("AGBM_249")]
-        public void PiSettings_ForbiddenFieldAndUnsupportedSchemaRemainUnavailable()
-        {
-            foreach (var json in new[] { "{\"piSchemaVersion\":\"9.0\"}", "{\"piArguments\":\"--tools bash\"}" })
-            {
-                File.WriteAllText(_settingsPath, json);
-                var settings = new McpEditorSettingsStore(_settingsPath).Load();
-                Assert.That(PiAgentConfigurationValidator.TryValidate(settings, out _), Is.False);
-                Assert.That(PiAgentTemplateCatalog.List(settings).All(row => !row.IsValid), Is.True);
-            }
-        }
     }
 }

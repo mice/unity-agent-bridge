@@ -6,6 +6,30 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Runtime-neutral Agent Runtime contracts and Fake Runner coverage, composed with AgentTaskCore lifecycle and stable task identities.
+- Intelligent-analysis schema, template registry and bounded capability validation, plus the Unity programmer and Unity asset analyst Specialists.
+- Fixed verified compile-failure and asset-problem analysis tools with closed problem/evidence/timeout inputs, cited structured output and synchronous/MCP task execution.
+- Optional source-built `com.unitymcp.pi-agent` managed-DLL UPM plugin with explicit installation/enablement and a reusable provider seam for future execution adapters.
+
+### Changed
+
+- **Breaking installation change:** Agent Bridge alone no longer contains Pi or advertises its analysis tools. Build/install and enable the separate Pi plugin, and update the MCP runtime from matching core source; ordinary core tools remain available without it.
+- Move Pi configuration and effective-template UI into the plugin. Valid legacy `pi*` settings migrate atomically and once to `Library/AgentBridge/plugins/pi-agent/settings.json`; explicit new settings take precedence and invalid policy remains unavailable. Unrelated/opaque core settings are preserved.
+- Use `deepseek/deepseek-flash` as the safe default model. Settings only reduce fixed-template tools and budgets; callers cannot override model, prompt, paths or tools.
+- Enforce a hard provider-request ceiling including retries, cancel uncounted compaction and apply captured logical/physical read scope to read/grep/find/ls, including links and recursive searches.
+- Preserve matching providers and tasks during plugin refresh. Disable/removal/readiness loss withdraws execution and cancels owned processes while existing terminal task identities/results remain queryable in the current Editor domain.
+
+### Fixed
+
+- Correct verified-analysis string payload dispatch, SDK task binding and terminal failure/cancellation projection.
+- Reject malformed structured claims and unknown citations without filtering them into successful output.
+- Preserve known guard failures during process cleanup and retain bounded, credential-redacted model diagnostics.
+- Handle concurrent bridge-heartbeat reads with bounded retries and shared-read access.
+
+Pi integration remains an initial capability with two fixed templates; a broader useful workflow chain and a Codex CLI adapter are future work. DeepSeek live compile/asset/cancellation acceptance is recorded separately from offline plugin extraction regressions. Source-only distribution continues; generated executables and DLL artifacts are built locally and are not hosted release assets. Release preparation must align the new provider/plugin compatibility versions before tagging. MCP SDK 2.x long-task optimization belongs to the following version.
+
 ## [1.3.1] - 2026-09-16
 
 ### Fixed

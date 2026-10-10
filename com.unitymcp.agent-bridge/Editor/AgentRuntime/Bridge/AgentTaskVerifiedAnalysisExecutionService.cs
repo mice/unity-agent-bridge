@@ -24,7 +24,13 @@ namespace UnityMcp.AgentBridge
         private static readonly AgentTaskManager Manager = new AgentTaskManager(idFactory: () => new AgentTaskId("analysis-" + Guid.NewGuid().ToString("N")));
         private static readonly Dictionary<string, AgentTaskId> Tasks = new Dictionary<string, AgentTaskId>(StringComparer.Ordinal);
 
-        static AgentTaskVerifiedAnalysisExecutionService() => EditorApplication.update += AdvanceTasks;
+        private static readonly Dictionary<string, AgentRunnerProviderRegistration> Owners = new Dictionary<string, AgentRunnerProviderRegistration>(StringComparer.Ordinal);
+
+        static AgentTaskVerifiedAnalysisExecutionService()
+        {
+            EditorApplication.update += AdvanceTasks;
+            AgentRunnerProviderRegistry.Retired += CancelOwnedTasks;
+        }
 
         public static AgentTaskControlResponse Control(AgentTaskControlRequest request)
         {
@@ -58,17 +64,29 @@ namespace UnityMcp.AgentBridge
             var input = parsed.Value;
             var root = Directory.GetParent(Application.dataPath)?.FullName;
             if (string.IsNullOrWhiteSpace(root)) return Error("PROJECT_ROOT_UNAVAILABLE", "Unity project root could not be resolved.");
-            PiAgentRunnerOptions options;
-            try { options = PiAgentRunnerProjectSettings.Resolve(PiAgentRunnerProjectSettings.Read(), input.Template, input.TimeoutMs); }
-            catch (Exception exception) { return CreateRejected(new ValidationError("PI_CONFIGURATION_INVALID", exception.Message)); }
+            if (!AgentRunnerProviderRegistry.TryResolve(input.Template.Template.Id, out var owner, out var unavailable))
+                return CreateRejected(new ValidationError(unavailable.Code, unavailable.Message));
+            IAgentRunnerFactory factory;
+            try
+            {
+                var capability = input.Template.EffectiveCapability;
+                var policy = new AgentRunnerPolicy(input.Template.Template.Id,
+                    Math.Min(input.TimeoutMs, capability.Budget.TimeoutSeconds * 1000),
+                    capability.Budget.MaxTurns, capability.Budget.MaxOutputBytes,
+                    capability.Tools, capability.Paths.ReadFolders, capability.Paths.DenyFolders);
+                factory = owner.Provider.Prepare(policy) ?? throw new InvalidOperationException("Provider returned no runner factory.");
+            }
+            catch (AgentProviderException exception) { return CreateRejected(new ValidationError(exception.Code, exception.Message)); }
+            catch (Exception exception) { return CreateRejected(new ValidationError("AGENT_PROVIDER_CONFIGURATION_INVALID", exception.Message)); }
             var evidence = LoadEvidence(input.Request, root, input.Template);
             var evidenceValidation = IntelligentAnalysisValidator.ValidateEvidence(evidence, input.Template.EffectiveCapability, input.Template.Template.RequiredEvidenceKinds);
             if (!evidenceValidation.IsValid) return CreateRejected(evidenceValidation.Errors[0]);
-            var service = new AgentService(Manager, new VerifiedAnalysisRunnerFactory(input, root, options));
+            var service = new AgentService(Manager, new VerifiedAnalysisRunnerFactory(input, root, factory));
             try
             {
                 var handle = service.Run(new AgentRunRequest(BuildPrompt(input), root));
                 Tasks[handle.TaskId.Value] = handle.TaskId;
+                Owners[handle.TaskId.Value] = owner;
                 return Project(handle.Snapshot, handle.TaskId.Value);
             }
             catch (Exception exception)
@@ -100,6 +118,14 @@ namespace UnityMcp.AgentBridge
             {
                 var snapshot = Manager.Get(id);
                 if (snapshot != null && snapshot.State == AgentTaskState.Running) Manager.Advance(id);
+            }
+        }
+
+        private static void CancelOwnedTasks(AgentRunnerProviderRegistration owner)
+        {
+            foreach (var pair in Owners.Where(item => ReferenceEquals(item.Value, owner)).ToArray())
+            {
+                if (Tasks.TryGetValue(pair.Key, out var id)) Manager.Cancel(id);
             }
         }
 
@@ -205,13 +231,13 @@ namespace UnityMcp.AgentBridge
         {
             private readonly AnalysisInput input;
             private readonly string root;
-            private readonly PiAgentRunnerOptions options;
-            public VerifiedAnalysisRunnerFactory(AnalysisInput input, string root, PiAgentRunnerOptions options)
-            { this.input = input; this.root = root; this.options = options; }
+            private readonly IAgentRunnerFactory factory;
+            public VerifiedAnalysisRunnerFactory(AnalysisInput input, string root, IAgentRunnerFactory factory)
+            { this.input = input; this.root = root; this.factory = factory; }
             public IAgentRunner Create(AgentRunRequest request)
             {
                 var evidence = LoadEvidence(input.Request, root, input.Template);
-                return new VerifiedAnalysisRunner(evidence, input, root, options);
+                return new VerifiedAnalysisRunner(evidence, input, root, factory.Create(request));
             }
         }
 
@@ -220,14 +246,14 @@ namespace UnityMcp.AgentBridge
             private readonly EvidenceBundle evidence;
             private readonly AnalysisInput input;
             private readonly string root;
-            private readonly PiAgentRunner inner;
+            private readonly IAgentRunner inner;
 
-            public VerifiedAnalysisRunner(EvidenceBundle evidence, AnalysisInput input, string root, PiAgentRunnerOptions options)
+            public VerifiedAnalysisRunner(EvidenceBundle evidence, AnalysisInput input, string root, IAgentRunner runner)
             {
                 this.evidence = evidence;
                 this.input = input;
                 this.root = root;
-                inner = new PiAgentRunner(options, new PiProcessFactory());
+                inner = runner ?? throw new InvalidOperationException("Provider returned no runner.");
             }
 
             public bool CanCancel => inner.CanCancel;
