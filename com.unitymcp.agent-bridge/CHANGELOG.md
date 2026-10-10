@@ -6,6 +6,8 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-11
+
 ### Added
 
 - Runtime-neutral Agent Runtime contracts and Fake Runner coverage, composed with AgentTaskCore lifecycle and stable task identities.
@@ -28,7 +30,7 @@ The format follows Keep a Changelog and Semantic Versioning.
 - Preserve known guard failures during process cleanup and retain bounded, credential-redacted model diagnostics.
 - Handle concurrent bridge-heartbeat reads with bounded retries and shared-read access.
 
-Pi integration remains an initial capability with two fixed templates; a broader useful workflow chain and a Codex CLI adapter are future work. DeepSeek live compile/asset/cancellation acceptance is recorded separately from offline plugin extraction regressions. Source-only distribution continues; generated executables and DLL artifacts are built locally and are not hosted release assets. Release preparation must align the new provider/plugin compatibility versions before tagging. MCP SDK 2.x long-task optimization belongs to the following version.
+Pi integration remains an initial capability with two fixed templates; a broader useful workflow chain and a Codex CLI adapter are future work. DeepSeek live compile/asset/cancellation acceptance is recorded separately from offline plugin extraction regressions. Source-only distribution continues; generated executables and DLL artifacts are built locally and are not hosted release assets. Pi plugin 0.1.0 requires Agent Bridge 1.4.0 and an MCP runtime built from matching source. MCP SDK 2.x long-task optimization belongs to the following version.
 
 ## [1.3.1] - 2026-09-16
 
