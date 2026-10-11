@@ -84,6 +84,8 @@ namespace UnityMcp.AgentBridge
             return _tools.TryGetValue(toolName, out tool);
         }
 
+        internal void Unregister(string toolName) => _tools.Remove(toolName);
+
         public IReadOnlyList<ToolDescriptor> ListTools()
         {
             return _tools.Values.Select(tool => tool.Descriptor).OrderBy(descriptor => descriptor.Name, StringComparer.Ordinal).ToArray();

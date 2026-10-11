@@ -543,12 +543,8 @@ namespace UnityMcp.AgentBridge
                 return string.Empty;
             }
 
-            return value
-                .Replace("\\", "\\\\")
-                .Replace("\"", "\\\"")
-                .Replace("\r", "\\r")
-                .Replace("\n", "\\n")
-                .Replace("\t", "\\t");
+            var quoted = JsonConvert.ToString(value);
+            return quoted.Substring(1, quoted.Length - 2);
         }
     }
 

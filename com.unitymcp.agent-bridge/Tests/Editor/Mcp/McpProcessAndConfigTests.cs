@@ -716,6 +716,40 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(content, Does.Contain(projectRoot.Replace("\\", "\\\\")));
         }
 
+        // TestRecord: Documentation~/test_records/AGBM_233.md
+        [Test]
+        [Category("AGBM_P3")]
+        [Category("AGBM_233")]
+        public void GrokProjectConfigWriter_Apply_PreservesPermissionFieldsOnManagedEntry()
+        {
+            var workspaceRoot = Path.Combine(_tempDirectory, "workspace");
+            var configDirectory = Path.Combine(workspaceRoot, ".grok");
+            Directory.CreateDirectory(configDirectory);
+            var targetPath = Path.Combine(configDirectory, "config.toml");
+            File.WriteAllText(targetPath,
+                "[mcp_servers.unity_agent_bridge]\n" +
+                "command = \"custom\"\n" +
+                "enabled = true\n" +
+                "approval_mode = \"always\"\n\n" +
+                "[mcp_servers.unity_agent_bridge.env]\n" +
+                "UNITY_AGENT_BRIDGE_PROJECT_PATH = \"D:/OldProject\"\n");
+
+            var projectRoot = Path.Combine(workspaceRoot, "nested", "RuntimeCallSample");
+            Directory.CreateDirectory(projectRoot);
+            CreatePreparedLauncher(projectRoot);
+            var writer = new GrokProjectConfigWriter(
+                new ManagedTomlConfigEditor(),
+                new McpPathResolver(() => projectRoot));
+
+            var result = writer.Apply(new McpEditorSettings { WorkspaceRoot = workspaceRoot });
+
+            var content = File.ReadAllText(targetPath);
+            Assert.That(result.Applied, Is.True);
+            Assert.That(content, Does.Contain("enabled = true"));
+            Assert.That(content, Does.Contain("approval_mode = \"always\""));
+            Assert.That(content, Does.Not.Contain("command = \"custom\""));
+        }
+
         // TestRecord: Documentation~/AgentBridge/test_records/AGBM_229.md
         [Test]
         [Category("AGBM_P3")]

@@ -6,6 +6,62 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-11
+
+### Added
+
+- Runtime-neutral Agent Runtime contracts and Fake Runner coverage, composed with AgentTaskCore lifecycle and stable task identities.
+- Intelligent-analysis schema, template registry and bounded capability validation, plus the Unity programmer and Unity asset analyst Specialists.
+- Fixed verified compile-failure and asset-problem analysis tools with closed problem/evidence/timeout inputs, cited structured output and synchronous/MCP task execution.
+- Optional source-built `com.unitymcp.pi-agent` managed-DLL UPM plugin with explicit installation/enablement and a reusable provider seam for future execution adapters.
+
+### Changed
+
+- **Breaking installation change:** Agent Bridge alone no longer contains Pi or advertises its analysis tools. Build/install and enable the separate Pi plugin, and update the MCP runtime from matching core source; ordinary core tools remain available without it.
+- Move Pi configuration and effective-template UI into the plugin. Valid legacy `pi*` settings migrate atomically and once to `Library/AgentBridge/plugins/pi-agent/settings.json`; explicit new settings take precedence and invalid policy remains unavailable. Unrelated/opaque core settings are preserved.
+- Use `deepseek/deepseek-flash` as the safe default model. Settings only reduce fixed-template tools and budgets; callers cannot override model, prompt, paths or tools.
+- Enforce a hard provider-request ceiling including retries, cancel uncounted compaction and apply captured logical/physical read scope to read/grep/find/ls, including links and recursive searches.
+- Preserve matching providers and tasks during plugin refresh. Disable/removal/readiness loss withdraws execution and cancels owned processes while existing terminal task identities/results remain queryable in the current Editor domain.
+
+### Fixed
+
+- Correct verified-analysis string payload dispatch, SDK task binding and terminal failure/cancellation projection.
+- Reject malformed structured claims and unknown citations without filtering them into successful output.
+- Preserve known guard failures during process cleanup and retain bounded, credential-redacted model diagnostics.
+- Handle concurrent bridge-heartbeat reads with bounded retries and shared-read access.
+
+Pi integration remains an initial capability with two fixed templates; a broader useful workflow chain and a Codex CLI adapter are future work. DeepSeek live compile/asset/cancellation acceptance is recorded separately from offline plugin extraction regressions. Source-only distribution continues; generated executables and DLL artifacts are built locally and are not hosted release assets. Pi plugin 0.1.0 requires Agent Bridge 1.4.0 and an MCP runtime built from matching source. MCP SDK 2.x long-task optimization belongs to the following version.
+
+## [1.3.1] - 2026-09-16
+
+### Fixed
+
+- Preserve client-owned MCP permission fields when Apply refreshes the managed bridge configuration.
+- Keep the Unity package, source-only runtime build inputs, and installed machine runtime as separate delivery layers.
+
+## [1.3.0] - 2026-09-14
+
+### Added
+
+- Promote the accepted AgentTask compile and PlayMode task workflows to the stable release channel.
+
+## [1.3.0-rc.2] - 2026-09-14
+
+### Fixed
+
+- Align RC release identity with the immutable product commit and manifest.
+
+## [1.3.0-rc.1] - 2026-09-14
+
+### Added
+
+- Add compile and PlayMode AgentTask execution through the MCP task control surface.
+
+## [1.2.12-rc.12] - 2026-09-14
+
+### Fixed
+
+- Include AgentTaskCore and AgentTaskEditor assemblies required by AgentBridge.Editor.
 ## [1.2.12-rc.11] - 2026-09-13
 
 ### Fixed
@@ -338,3 +394,4 @@ The format follows Keep a Changelog and Semantic Versioning.
 - `Library/AgentBridge/` is the authoritative location for logs, metrics, and reports.
 - `Temp/AgentBridge/` remains the session-scoped queue root.
 - Maintainer-owned release actions such as tagging remain outside Implementer Agent scope.
+

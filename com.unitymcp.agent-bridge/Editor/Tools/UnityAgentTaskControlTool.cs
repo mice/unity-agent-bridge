@@ -22,14 +22,30 @@ namespace UnityMcp.AgentBridge
             {
                 cancellation?.ThrowIfCancellationRequested();
                 var request = new AgentTaskControlCodec().DeserializeRequest(context?.RawArgsJson ?? "{}");
-                var response = AgentTaskEditModeExecutionService.Control(request);
+                var response = (string.Equals(request?.TaskType, AgentTaskVerifiedAnalysisExecutionService.TaskType, StringComparison.Ordinal)
+                    || string.Equals(request?.TaskType, AgentTaskVerifiedAnalysisExecutionService.AssetTaskType, StringComparison.Ordinal))
+                    ? AgentTaskVerifiedAnalysisExecutionService.Control(request)
+                    : request?.AgentTaskId != null && request.AgentTaskId.StartsWith("analysis-", StringComparison.Ordinal)
+                    ? AgentTaskVerifiedAnalysisExecutionService.Control(request)
+                    : string.Equals(request?.TaskType, "agent_run", StringComparison.Ordinal)
+                    || (request?.AgentTaskId != null && request.AgentTaskId.StartsWith("agent-", StringComparison.Ordinal))
+                    ? new AgentTaskControlResponse { Success = false, ErrorCode = "AGENT_TASK_UNSUPPORTED", ErrorMessage = "Generic agent execution is unavailable; use an enabled fixed-template provider." }
+                    : string.Equals(request?.TaskType, "compile", StringComparison.Ordinal)
+                    || (request?.Operation != AgentTaskControlProtocol.Create && request?.AgentTaskId != null && request.AgentTaskId.StartsWith("compile-", StringComparison.Ordinal))
+                    ? AgentTaskCompileExecutionService.Control(request)
+                    : string.Equals(request?.TaskType, "run_playmode_tests", StringComparison.Ordinal)
+                    || (request?.Operation != AgentTaskControlProtocol.Create && request?.AgentTaskId != null && request.AgentTaskId.StartsWith("playmode-", StringComparison.Ordinal))
+                    ? AgentTaskPlayModeExecutionService.Control(request)
+                    : AgentTaskEditModeExecutionService.Control(request);
                 var raw = new AgentTaskControlCodec().SerializeResponse(response);
                 return new ToolResult
                 {
                     commandId = context?.Command?.commandId,
                     tool = Descriptor.Name,
                     success = response.Success,
-                    status = response.Success ? (response.Snapshot != null && response.Snapshot.IsTerminal ? ToolResultStatus.Success : ToolResultStatus.Running) : ToolResultStatus.Failed,
+                    // The control command itself is synchronous. A Running snapshot is data,
+                    // not a request for the bridge poller to hold this command open.
+                    status = response.Success ? ToolResultStatus.Success : ToolResultStatus.Failed,
                     summary = response.Success ? "Agent task control completed." : (response.ErrorMessage ?? "Agent task control failed."),
                     metricsObjectJson = raw
                 };

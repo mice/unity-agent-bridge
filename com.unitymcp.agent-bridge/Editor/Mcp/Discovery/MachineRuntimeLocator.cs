@@ -108,11 +108,12 @@ namespace UnityMcp.AgentBridge.Mcp
             var releasesRoot = Path.Combine(managerRoot, "releases");
             if (!Directory.Exists(releasesRoot))
             {
-                return new List<PublishedMachineRuntimeVersion>(CreateBuiltInPublishedVersions(managerRoot));
+                return IsDefaultManagerRoot(managerRoot)
+                    ? new List<PublishedMachineRuntimeVersion>(ReadPackagedPublishedVersions(managerRoot))
+                    : Array.Empty<PublishedMachineRuntimeVersion>();
             }
 
             var publishedVersions = new List<PublishedMachineRuntimeVersion>();
-            var hasSourceOnlyManifest = false;
             try
             {
                 foreach (var releaseRoot in Directory.GetDirectories(releasesRoot))
@@ -144,7 +145,6 @@ namespace UnityMcp.AgentBridge.Mcp
                         string.Equals(artifactUrl, sourceArchiveUrl, StringComparison.OrdinalIgnoreCase))
                     {
                         artifactUrl = string.Empty;
-                        hasSourceOnlyManifest = true;
                     }
 
                     publishedVersions.Add(new PublishedMachineRuntimeVersion
@@ -165,11 +165,6 @@ namespace UnityMcp.AgentBridge.Mcp
             catch (UnauthorizedAccessException)
             {
                 return Array.Empty<PublishedMachineRuntimeVersion>();
-            }
-
-            if (hasSourceOnlyManifest)
-            {
-                return new List<PublishedMachineRuntimeVersion>(CreateBuiltInPublishedVersions(managerRoot));
             }
 
             if (IsDefaultManagerRoot(managerRoot))

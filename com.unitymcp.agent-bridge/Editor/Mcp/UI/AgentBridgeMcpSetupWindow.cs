@@ -159,6 +159,7 @@ namespace UnityMcp.AgentBridge.Mcp
             EditorGUILayout.Space(12f);
             _pluginSection.Draw();
             EditorGUILayout.Space(12f);
+            EditorGUILayout.Space(12f);
             DrawCommandListEntryPoint();
             EditorGUILayout.Space(12f);
             _showAdvancedDetails = EditorGUILayout.Foldout(_showAdvancedDetails, "Advanced Details", true);

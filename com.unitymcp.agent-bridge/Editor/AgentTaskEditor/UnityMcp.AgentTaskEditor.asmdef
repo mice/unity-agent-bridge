@@ -1,0 +1,20 @@
+{
+  "name": "UnityMcp.AgentTaskEditor",
+  "rootNamespace": "UnityMcp.AgentTaskEditor",
+  "references": [
+    "UnityMcp.AgentTaskCore",
+    "UnityEditor.TestRunner",
+    "UnityEngine.TestRunner"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

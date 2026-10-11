@@ -235,6 +235,8 @@ namespace UnityMcp.AgentBridge
             return null;
         }
 
+        internal static ToolResult ValidateRunArgsForAgentTask(UnityTestRunArgs args) => ValidateRunArgs(args);
+
         private static ToolResult ValidateNoWildcards(string[] values, string fieldName)
         {
             if (!HasValues(values))

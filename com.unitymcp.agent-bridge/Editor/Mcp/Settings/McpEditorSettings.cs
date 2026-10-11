@@ -1,9 +1,9 @@
 using System;
-
 namespace UnityMcp.AgentBridge.Mcp
 {
     public sealed class McpEditorSettings
     {
+        public string LoadError { get; set; }
         public string SchemaVersion { get; set; } = "1.0";
         public string DotnetPath { get; set; } = string.Empty;
         public string WorkspaceRoot { get; set; } = string.Empty;
@@ -17,4 +17,5 @@ namespace UnityMcp.AgentBridge.Mcp
         public string MachineRuntimeRoot { get; set; } = string.Empty;
         public int DiagnosticTimeoutMs { get; set; } = 30000;
     }
+
 }

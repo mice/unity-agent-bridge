@@ -5,6 +5,8 @@
     "UnityMcp.AgentBridge.SharedProtocolCore",
     "UnityMcp.AgentTaskCore",
     "UnityMcp.AgentTaskEditor",
+    "UnityMcp.AgentRuntime.Abstractions",
+    "UnityMcp.AgentRuntime.Bridge.Editor",
     "UnityMcp.Plugin.Abstractions",
     "UnityEditor.TestRunner",
     "UnityEngine.TestRunner",

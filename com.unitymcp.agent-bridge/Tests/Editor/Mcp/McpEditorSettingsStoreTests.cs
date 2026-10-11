@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using NUnit.Framework;
 using UnityMcp.AgentBridge;
 using UnityMcp.AgentBridge.Mcp;
@@ -68,6 +69,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             var settings = store.Load();
 
             Assert.That(settings.SchemaVersion, Is.EqualTo("1.0"));
+            Assert.That(settings.LoadError, Is.Not.Empty);
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_003.md
@@ -141,5 +143,21 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(savedJson, Does.Contain("\"workspaceRoot\": \"D:/Repo\""));
             Assert.That(savedJson, Does.Contain("\"toolsRoot\": \"D:/Repo/Tools\""));
         }
+
+        // TestRecord: Documentation~/AgentBridge/test_records/AGB_332.md
+        [Test, Category("AGB_332")]
+        public void SavePreservesOpaquePluginAndFutureSettings()
+        {
+            File.WriteAllText(_settingsPath, "{\"piMaxTurns\":0,\"futurePlugin\":{\"authority\":\"preserved\"}}");
+            var store = new McpEditorSettingsStore(_settingsPath);
+            var settings = store.Load();
+            settings.WorkspaceRoot = "D:/Repo";
+            store.Save(settings);
+            var text = File.ReadAllText(_settingsPath);
+            Assert.That(text, Does.Contain("\"piMaxTurns\": 0"));
+            Assert.That(text, Does.Contain("\"authority\": \"preserved\""));
+            Assert.That(store.Load().WorkspaceRoot, Is.EqualTo("D:/Repo"));
+        }
+
     }
 }

@@ -11,6 +11,10 @@
     "UnityMcp.BuiltInPlugins.MonoBehaviourSemantics",
     "UnityMcp.BuiltInPlugins.RoslynExecution",
     "UnityMcp.AgentTaskCore",
+    "UnityMcp.AgentRuntime.Abstractions",
+    "UnityMcp.AgentRuntime.Bridge.Editor",
+    "UnityMcp.AgentIntelligentAnalysis",
+    "UnityMcp.AgentTaskEditor",
     "UnityMcp.Plugin.Abstractions"
   ],
   "includePlatforms": [
@@ -18,8 +22,11 @@
   ],
   "excludePlatforms": [],
   "allowUnsafeCode": false,
-  "overrideReferences": false,
-  "precompiledReferences": [],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "nunit.framework.dll",
+    "Newtonsoft.Json.dll"
+  ],
   "autoReferenced": false,
   "optionalUnityReferences": [
     "TestAssemblies"

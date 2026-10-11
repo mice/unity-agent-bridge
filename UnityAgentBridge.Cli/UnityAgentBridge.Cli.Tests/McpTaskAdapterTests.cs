@@ -9,6 +9,37 @@ namespace UnityAgentBridge.Cli.Tests;
 public sealed class McpTaskAdapterTests
 {
     [TestMethod]
+    public void PendingTaskRequestRecognizesCompileAndPlayModeOperations()
+    {
+        var compile = new McpTaskExecutionContext.PendingTaskRequest("unity_compile", "{\"timeoutMs\":321}");
+        Assert.IsTrue(compile.IsCompile);
+        Assert.IsTrue(compile.IsAgentTaskOperation);
+        Assert.AreEqual(321, compile.TimeoutMs);
+
+        var playMode = new McpTaskExecutionContext.PendingTaskRequest("unity_tests_run_play_mode", "{\"filter\":{\"testNames\":[\"Smoke\"]}}");
+        Assert.IsTrue(playMode.IsPlayModeTest);
+        Assert.IsTrue(playMode.IsAgentTaskOperation);
+        Assert.IsFalse(playMode.IsEditModeTest);
+
+        var analysis = new McpTaskExecutionContext.PendingTaskRequest("unity_analysis_compile_failure", "{\"problemId\":\"p1\",\"evidenceIds\":[\"e1\"]}");
+        Assert.IsTrue(analysis.IsVerifiedCompileFailureAnalysis);
+        Assert.IsTrue(analysis.IsAgentTaskOperation);
+        Assert.AreEqual("analysis_compile_failure", analysis.AgentTaskType);
+
+        var asset = new McpTaskExecutionContext.PendingTaskRequest("unity_analysis_asset_problem", "{\"problemId\":\"p1\",\"evidenceIds\":[\"e1\"]}");
+        Assert.IsTrue(asset.IsVerifiedAssetProblemAnalysis);
+        Assert.IsTrue(asset.IsAgentTaskOperation);
+        Assert.AreEqual("analysis_asset_problem", asset.AgentTaskType);
+    }
+
+    [TestMethod]
+    public void PendingTaskRequestRejectsUnknownOperation()
+    {
+        var request = new McpTaskExecutionContext.PendingTaskRequest("unity_unknown", "{}");
+        Assert.IsFalse(request.IsAgentTaskOperation);
+    }
+
+    [TestMethod]
     public void SupportsTasksRequiresAdvertisedCapability()
     {
         var adapter = CreateAdapter();

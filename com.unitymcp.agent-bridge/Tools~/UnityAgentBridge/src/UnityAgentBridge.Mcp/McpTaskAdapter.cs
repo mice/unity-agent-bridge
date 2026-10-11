@@ -37,9 +37,11 @@ public sealed class McpTaskAdapter
     {
         var response = await SendAsync("create", null, taskType, payload, timeoutMs, cancellationToken);
         var agentId = response["agentTaskId"]?.GetValue<string>();
-        if (response["success"]?.GetValue<bool>() != true || string.IsNullOrWhiteSpace(agentId)) return response;
+        if (string.IsNullOrWhiteSpace(agentId)) return response;
         _bindings.Save(new McpTaskBinding(_projectIdentity, mcpId, agentId, response["commandId"]?.GetValue<string>()));
-        return new JsonObject { ["success"] = true, ["taskId"] = mcpId, ["status"] = "working", ["pollIntervalMs"] = 250 };
+        var state = response["state"]?.GetValue<string>();
+        var status = string.Equals(state, "Failed", StringComparison.OrdinalIgnoreCase) ? "failed" : string.Equals(state, "Cancelled", StringComparison.OrdinalIgnoreCase) ? "cancelled" : "working";
+        return new JsonObject { ["success"] = status == "working", ["taskId"] = mcpId, ["status"] = status, ["pollIntervalMs"] = 250 };
     }
 
     public Task<JsonObject> GetAsync(string mcpTaskId, CancellationToken cancellationToken) => SendMappedAsync("query", mcpTaskId, cancellationToken);
@@ -53,7 +55,7 @@ public sealed class McpTaskAdapter
         {
             var response = await GetAsync(mcpTaskId, cancellationToken);
             var status = MapStatus(response);
-            if (status is "completed" or "failed" or "cancelled" || response["success"]?.GetValue<bool>() == false)
+            if (status is "completed" or "failed" or "cancelled" || response["errorCode"] is not null)
                 return response;
             await Task.Delay(250, cancellationToken);
         }
@@ -99,18 +101,18 @@ public sealed class McpTaskAdapter
         if (payload != null) request["payload"] = payload;
         if (timeoutMs > 0) request["timeoutMs"] = timeoutMs;
         var commandId = _client.CreateCommandId();
-        var result = await _client.ExecuteAsync(_queuePaths, commandId, new BridgeCommandSpec("unity.agent_task_control", 120000, request.ToJsonString()), cancellationToken);
+        var result = await _client.ExecuteAsync(_queuePaths, commandId, new BridgeCommandSpec("unity.agent_task_control", 90000, request.ToJsonString()), cancellationToken);
         var envelope = JsonNode.Parse(result.RawJson)?.AsObject();
         if (envelope is null) return Error("INVALID_RESPONSE", "Unity returned an invalid task response.");
         var embedded = envelope["metricsObjectJson"]?.GetValue<string>();
-        var response = !string.IsNullOrWhiteSpace(embedded) ? JsonNode.Parse(embedded)?.AsObject() : null;
+        var response = !string.IsNullOrWhiteSpace(embedded) ? JsonNode.Parse(embedded)?.AsObject() : envelope["metrics"]?.AsObject();
         return response ?? envelope;
     }
 
     private static string MapStatus(JsonObject response)
     {
         var state = response["state"]?.GetValue<string>() ?? response["snapshot"]?["state"]?.GetValue<string>();
-        return state?.ToLowerInvariant() switch { "completed" => "completed", "failed" => "failed", "cancelled" => "cancelled", _ => "working" };
+        return state?.ToLowerInvariant() switch { "completed" => "completed", "failed" => "failed", "cancelled" => "cancelled", "created" or "running" => "working", _ => response["success"]?.GetValue<bool>() == false ? "failed" : "working" };
     }
 
     private static JsonObject Error(string code, string message) => new() { ["success"] = false, ["errorCode"] = code, ["errorMessage"] = message, ["status"] = "failed" };

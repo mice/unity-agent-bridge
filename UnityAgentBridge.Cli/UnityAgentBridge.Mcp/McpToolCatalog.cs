@@ -327,6 +327,15 @@ public static class McpToolCatalog
                 var client = new ExternalBridgeClient();
                 var queuePaths = McpToolRuntimeContext.QueuePaths ?? throw new InvalidOperationException("MCP queue paths were not initialized.");
                 var commandId = client.CreateCommandId();
+                if (metadata.Name is "unity_analysis_compile_failure" or "unity_analysis_asset_problem")
+                {
+                    var adapter = new McpTaskAdapter(client, queuePaths, queuePaths.ProjectPath);
+                    var taskType = metadata.Name == "unity_analysis_asset_problem" ? "analysis_asset_problem" : "analysis_compile_failure";
+                    var created = await adapter.CreateAsync(taskType, argumentsJson, cancellationToken);
+                    var taskId = created["taskId"]?.GetValue<string>();
+                    if (string.IsNullOrWhiteSpace(taskId)) return created.ToJsonString();
+                    return (await adapter.WaitForTerminalAsync(taskId, cancellationToken)).ToJsonString();
+                }
                 var result = await client.ExecuteAsync(queuePaths, commandId, new BridgeCommandSpec(metadata.BridgeTool, metadata.DefaultTimeoutMs, argumentsJson), cancellationToken);
                 return result.RawJson;
             }

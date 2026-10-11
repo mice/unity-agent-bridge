@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Runtime.InteropServices;
 using UnityEditor;
 
 namespace UnityMcp.AgentBridge
@@ -233,12 +234,28 @@ namespace UnityMcp.AgentBridge
                 writer.Write(content);
             }
 
-            if (File.Exists(targetPath))
+            try
             {
-                File.Delete(targetPath);
+                var replaced = Environment.OSVersion.Platform == PlatformID.Win32NT
+                    ? MoveFileEx(tempPath, targetPath, 1 | 8)
+                    : RenameFile(tempPath, targetPath) == 0;
+                if (!replaced) throw new IOException("Atomic heartbeat rename failed with native error " + Marshal.GetLastWin32Error() + ".");
             }
-
-            File.Move(tempPath, targetPath);
+            catch (IOException) when (File.Exists(targetPath))
+            {
+                // A reader may temporarily hold a Windows handle without delete sharing.
+                // Keep the prior valid heartbeat and retry on the next scheduled publish.
+            }
+            finally
+            {
+                if (File.Exists(tempPath)) File.Delete(tempPath);
+            }
         }
+
+        [DllImport("kernel32.dll", EntryPoint = "MoveFileExW", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool MoveFileEx(string source, string destination, int flags);
+
+        [DllImport("libc", EntryPoint = "rename", SetLastError = true)]
+        private static extern int RenameFile(string source, string destination);
     }
 }

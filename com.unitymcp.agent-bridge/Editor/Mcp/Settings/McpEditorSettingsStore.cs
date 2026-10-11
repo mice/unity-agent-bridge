@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+using System.Linq;
 using UnityEngine;
+using Newtonsoft.Json.Linq;
 
 namespace UnityMcp.AgentBridge.Mcp
 {
@@ -36,13 +38,17 @@ namespace UnityMcp.AgentBridge.Mcp
             try
             {
                 var json = File.ReadAllText(_settingsFilePath);
+                JObject.Parse(json);
                 var dto = CreateLoadDto();
                 JsonUtility.FromJsonOverwrite(json, dto);
-                return Normalize(dto);
+                var settings = Normalize(dto);
+                return settings;
             }
-            catch (Exception)
+            catch (Exception exception)
             {
-                return McpEditorSettingsDefaults.Create();
+                var settings = McpEditorSettingsDefaults.Create();
+                settings.LoadError = "Unable to read settings JSON. " + exception.Message;
+                return settings;
             }
         }
 
@@ -61,7 +67,10 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var json = JsonUtility.ToJson(ToDto(normalized), true);
-            File.WriteAllText(_settingsFilePath, json);
+            // Unknown fields may belong to optional plugins. Preserve them without knowing their schema.
+            var document = File.Exists(_settingsFilePath) ? JObject.Parse(File.ReadAllText(_settingsFilePath)) : new JObject();
+            foreach (var property in JObject.Parse(json).Properties()) document[property.Name] = property.Value.DeepClone();
+            File.WriteAllText(_settingsFilePath, document.ToString());
         }
 
         internal static string GetDefaultSettingsFilePath()
@@ -82,7 +91,9 @@ namespace UnityMcp.AgentBridge.Mcp
                 return McpEditorSettingsDefaults.Create();
             }
 
-            return Normalize(ToDto(settings));
+            var normalized = Normalize(ToDto(settings));
+            normalized.LoadError = settings.LoadError;
+            return normalized;
         }
 
         internal static McpEditorSettings Normalize(McpEditorSettingsFileDto dto)
@@ -161,6 +172,11 @@ namespace UnityMcp.AgentBridge.Mcp
             return string.Empty;
         }
 
+        private static string[] NormalizeTools(string[] values)
+        {
+            return values?.Distinct(StringComparer.Ordinal).ToArray();
+        }
+
         private static McpEditorSettingsFileDto CreateLoadDto()
         {
             return new McpEditorSettingsFileDto();
@@ -204,5 +220,6 @@ namespace UnityMcp.AgentBridge.Mcp
                 DiagnosticTimeoutMs = McpEditorSettingsStore.DefaultDiagnosticTimeoutMs,
             };
         }
+
     }
 }
