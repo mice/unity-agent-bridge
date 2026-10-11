@@ -12,6 +12,41 @@ namespace UnityAgentBridge.Cli.Tests;
 public sealed class McpToolCatalogTests
 {
     [TestMethod]
+    public void CompileCatalogPublishesSelfContainedOutputSchemaWithoutChangingInput()
+    {
+        var root = CreateUnityProject();
+        try
+        {
+            var tools = McpToolCatalog.GetTools(CreateDiagnostics(root));
+            var tool = tools.Single(value => value.ProtocolTool.Name == "unity_project_compile").ProtocolTool;
+            Assert.IsTrue(tool.OutputSchema.HasValue);
+            var schema = tool.OutputSchema.Value;
+            Assert.AreEqual("object", schema.GetProperty("type").GetString());
+            Assert.AreEqual("compile.v1", schema.GetProperty("$defs").GetProperty("compileMetrics").GetProperty("properties").GetProperty("contractVersion").GetProperty("const").GetString());
+            Assert.AreEqual(0, tool.InputSchema.GetProperty("properties").EnumerateObject().Count());
+            Assert.IsFalse(tool.InputSchema.GetProperty("additionalProperties").GetBoolean());
+            Assert.IsTrue(tools.Where(value => value.ProtocolTool.Name != tool.Name).All(value => value.ProtocolTool.OutputSchema is null));
+
+            // Catalog schema must be identical in the runtime, package docs and
+            // contained rebuild sources; consumers need no checkout at runtime.
+            var product = new DirectoryInfo(AppContext.BaseDirectory);
+            while (product is not null && !Directory.Exists(Path.Combine(product.FullName, "com.unitymcp.agent-bridge"))) product = product.Parent;
+            Assert.IsNotNull(product);
+            foreach (var relative in new[]
+            {
+                "UnityAgentBridge.Cli/UnityAgentBridge.Mcp/Schemas/unity.compile.result.schema.json",
+                "com.unitymcp.agent-bridge/Documentation~/schemas/unity.compile.result.schema.json",
+                "com.unitymcp.agent-bridge/Tools~/UnityAgentBridge/src/UnityAgentBridge.Mcp/Schemas/unity.compile.result.schema.json"
+            })
+            {
+                var documented = JsonNode.Parse(File.ReadAllText(Path.Combine(product.FullName, relative)));
+                Assert.IsTrue(JsonNode.DeepEquals(JsonNode.Parse(schema.GetRawText()), documented), relative);
+            }
+        }
+        finally { Directory.Delete(root, true); }
+    }
+
+    [TestMethod]
     public void CatalogMatchesFrozenToolNamesAndCount()
     {
         var expectedNames = new[]

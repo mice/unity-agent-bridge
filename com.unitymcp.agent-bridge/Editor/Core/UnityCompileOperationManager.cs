@@ -44,6 +44,9 @@ namespace UnityMcp.AgentBridge
 
             Subscribe();
 
+            var retained = ReadCompletedResult(command.commandId);
+            if (retained != null) return retained;
+
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
             if (string.IsNullOrWhiteSpace(projectRoot))
             {
@@ -78,6 +81,7 @@ namespace UnityMcp.AgentBridge
                     lastTransitionAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                     domainReloadRestored = false
                 };
+                state.editorSession = CurrentEditorSession;
                 LogCompileStage(state, "compile_requested", ToolResultStatus.Running, "compile command accepted");
             }
             else
@@ -145,7 +149,8 @@ namespace UnityMcp.AgentBridge
             CompilationPipeline.compilationStarted += OnCompilationStarted;
             CompilationPipeline.assemblyCompilationFinished += OnAssemblyCompilationFinished;
             CompilationPipeline.compilationFinished += OnCompilationFinished;
-            Application.logMessageReceivedThreaded += OnLogMessageReceived;
+            // Compiler callbacks are authoritative. Console history and arbitrary
+            // user logs are not reliable evidence for a compilation result.
             _subscribed = true;
         }
 
@@ -159,10 +164,19 @@ namespace UnityMcp.AgentBridge
                 return;
             }
 
-            var processingDirectory = Path.Combine(projectRoot, "Temp", "AgentBridge", "processing");
-            if (!Directory.Exists(processingDirectory))
+            var processingDirectory = Path.Combine(projectRoot, "Library", "AgentBridge", "compile-operations");
+            Directory.CreateDirectory(processingDirectory);
+            var legacyDirectory = Path.Combine(projectRoot, "Temp", "AgentBridge", "processing");
+            var migrationMarker = Path.Combine(processingDirectory, ".legacy-imported");
+            if (!File.Exists(migrationMarker))
             {
-                return;
+                if (Directory.Exists(legacyDirectory))
+                    foreach (var legacy in Directory.GetFiles(legacyDirectory, "*.compile.data"))
+                    {
+                        var migrated = Path.Combine(processingDirectory, Path.GetFileName(legacy));
+                        if (!File.Exists(migrated)) File.Copy(legacy, migrated);
+                    }
+                File.WriteAllText(migrationMarker, "1");
             }
 
             foreach (var path in Directory.GetFiles(processingDirectory, "*.compile.data"))
@@ -196,6 +210,7 @@ namespace UnityMcp.AgentBridge
 
         private static void TryFinalizeRestoredOperations()
         {
+            OnEditorUpdate();
             EvaluateOperations(forceLifecycleRefresh: true);
         }
 
@@ -212,6 +227,13 @@ namespace UnityMcp.AgentBridge
             {
                 if (pair.Value == null || pair.Value.effectiveTimeoutMs <= 0)
                 {
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(pair.Value.editorSession) && pair.Value.editorSession != CurrentEditorSession)
+                {
+                    pair.Value.timeoutReason = "editor_interrupted";
+                    timedOutIds.Add(pair.Key);
                     continue;
                 }
 
@@ -233,7 +255,7 @@ namespace UnityMcp.AgentBridge
                     continue;
                 }
 
-                state.timeoutReason = state.targetEpoch <= 0 ? "compile_start_timeout" : "compile_finish_timeout";
+                state.timeoutReason = state.timeoutReason == "editor_interrupted" ? state.timeoutReason : state.targetEpoch <= 0 ? "compile_start_timeout" : "compile_finish_timeout";
                 state.lifecycleStage = "timeout";
                 state.lastTransition = "compile_timeout";
                 state.lastTransitionAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
@@ -312,7 +334,8 @@ namespace UnityMcp.AgentBridge
                     continue;
                 }
 
-                if (state.targetEpoch <= 0)
+                var currentLifecycle = new CompileLifecycleStore(state.projectRoot, state.tempRoot).Read();
+                if (state.targetEpoch <= 0 || state.targetEpoch != currentLifecycle?.lastStartedEpoch)
                 {
                     continue;
                 }
@@ -411,6 +434,17 @@ namespace UnityMcp.AgentBridge
                     state.lastTransition = "compile_rebound_after_restore";
                     state.lastTransitionAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
                     PersistState(GetOperationPath(state.projectRoot, state.tempRoot, state.commandId), state);
+                }
+
+                // Compiler callbacks can finish before the next Editor update. Apply the
+                // execution deadline here too, preserving diagnostics already collected.
+                if (state.effectiveTimeoutMs > 0 && DateTime.TryParse(state.startedAt, CultureInfo.InvariantCulture,
+                    DateTimeStyles.RoundtripKind, out var startedAt) && (DateTime.UtcNow - startedAt).TotalMilliseconds > state.effectiveTimeoutMs)
+                {
+                    state.timeoutReason = state.targetEpoch > 0 ? "compile_finish_timeout" : "compile_start_timeout";
+                    state.lifecycleStage = "timeout";
+                    CompleteOperation(state, BuildTimeoutResult(state));
+                    continue;
                 }
 
                 if (state.targetEpoch > 0 && CompileLifecycleStateMachine.HasFinishedEpoch(lifecycle, state.targetEpoch))
@@ -544,6 +578,7 @@ namespace UnityMcp.AgentBridge
                 AttachLifecycleDiagnostics(state, result);
 
                 var queue = new AgentCommandQueue(state.projectRoot, state.tempRoot);
+                AgentTaskDurableResults.WriteAtomic(CompletedResultPath(state.commandId), JsonUtil.SerializeObject(result));
                 queue.Complete(state.commandId, result);
                 LogCompileStage(state, "compile_result_written", result.status ?? ToolResultStatus.Exception, result.summary ?? "compile result written");
             }
@@ -565,11 +600,6 @@ namespace UnityMcp.AgentBridge
                     column = record.column
                 })
                 .ToList();
-
-            if (fullErrors.Count == 0)
-            {
-                fullErrors.AddRange(ParseFallbackErrors(state.consoleFallbackEntries));
-            }
 
             var warningCount = state.warningCount;
             var success = fullErrors.Count == 0;
@@ -599,6 +629,8 @@ namespace UnityMcp.AgentBridge
                 status = success ? ToolResultStatus.Success : ToolResultStatus.Failed,
                 summary = summary,
                 errors = boundedErrors,
+                warnings = (state.compilerWarnings ?? new List<CompilerWarningRecord>()).Take(DiagnosticSampleLimit)
+                    .Select(warning => new ToolWarning { code = warning.code, message = warning.message }).ToList(),
                 metricsObjectJson = JsonUtil.SerializeObject(new CompileMetrics
                 {
                     contractVersion = CompileMetrics.ContractVersion,
@@ -606,6 +638,11 @@ namespace UnityMcp.AgentBridge
                     warningCount = warningCount,
                     diagnosticSampleCount = diagnosticSamples.Length,
                     diagnosticSamples = diagnosticSamples,
+                    inlineErrorCount = boundedErrors.Count,
+                    diagnosticLimit = DiagnosticSampleLimit,
+                    diagnosticsTruncated = fullErrors.Count + warningCount > DiagnosticSampleLimit,
+                    diagnosticsComplete = true,
+                    diagnosticSource = "compiler_callbacks",
                     isCompiling = EditorApplication.isCompiling,
                     observedEpochAtStart = state.observedEpochAtStart,
                     targetEpoch = state.targetEpoch,
@@ -625,48 +662,21 @@ namespace UnityMcp.AgentBridge
 
         private static ToolResult BuildTimeoutResult(CompileOperationState state)
         {
-            return new ToolResult
-            {
-                success = false,
-                status = ToolResultStatus.Timeout,
-                summary = state.targetEpoch <= 0 ? "Compilation did not start before timeout." : "Compilation timed out before the target epoch finished.",
-                logs = new List<ToolLog>
-                {
-                    new ToolLog
-                    {
-                        level = "warning",
-                        message = state.timeoutReason ?? "compile_timeout",
-                        timestamp = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture)
-                    }
-                },
-                metricsObjectJson = JsonUtil.SerializeObject(new CompileMetrics
-                {
-                    contractVersion = CompileMetrics.ContractVersion,
-                    errorCount = 0,
-                    warningCount = state.warningCount,
-                    diagnosticSampleCount = 0,
-                    diagnosticSamples = Array.Empty<CompileDiagnosticSample>(),
-                    isCompiling = EditorApplication.isCompiling,
-                    observedEpochAtStart = state.observedEpochAtStart,
-                    targetEpoch = state.targetEpoch,
-                    completedEpoch = state.completedEpoch,
-                    lifecycleStage = state.lifecycleStage,
-                    timeoutReason = state.timeoutReason ?? string.Empty,
-                    reloadRestored = state.reloadRestored,
-                    unknownEpochRestored = state.unknownEpochRestored,
-                    lastTransition = state.lastTransition ?? string.Empty,
-                    lastTransitionAtUtc = state.lastTransitionAtUtc ?? string.Empty,
-                    compileEpoch = 0,
-                    details = ToolResultMetadata.CreateDetails(true, true, "/diagnostics"),
-                    followUp = ToolResultMetadata.Recommended(
-                        ToolResultMetadata.Option(
-                            "unity.read_report",
-                            "Read the compile report for timeout diagnostics and lifecycle evidence.",
-                            new JObject()))
-                })
-            };
+            var result = BuildCompileResult(state, null);
+            result.success = false;
+            result.status = state.timeoutReason == "editor_interrupted" ? ToolResultStatus.Exception : ToolResultStatus.Timeout;
+            result.summary = state.timeoutReason == "editor_interrupted" ? "Editor exited before compilation completed; collected diagnostics are incomplete."
+                : state.targetEpoch <= 0 ? "Compilation did not start before timeout." : "Compilation timed out before the target epoch finished.";
+            var metrics = JObject.Parse(result.metricsObjectJson);
+            metrics["diagnosticsComplete"] = false;
+            metrics["timeoutReason"] = state.timeoutReason ?? "compile_timeout";
+            metrics["details"] = JObject.FromObject(ToolResultMetadata.CreateDetails(true, true, "/diagnostics"));
+            metrics["followUp"] = JObject.FromObject(ToolResultMetadata.Recommended(ToolResultMetadata.Option(
+                "unity.read_report", "Read retained partial compiler diagnostics and lifecycle evidence.", new JObject())));
+            result.metricsObjectJson = metrics.ToString(Newtonsoft.Json.Formatting.None);
+            result.logs.Add(new ToolLog { level = "warning", message = state.timeoutReason ?? "compile_timeout", timestamp = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture) });
+            return result;
         }
-
         private static ToolError[] BuildFullDiagnostics(CompileOperationState state)
         {
             var errors = (state.compilerErrors ?? new List<CompilerErrorRecord>())
@@ -679,11 +689,6 @@ namespace UnityMcp.AgentBridge
                     column = record.column
                 })
                 .ToList();
-
-            if (errors.Count == 0)
-            {
-                errors.AddRange(ParseFallbackErrors(state.consoleFallbackEntries));
-            }
 
             errors.AddRange((state.compilerWarnings ?? new List<CompilerWarningRecord>())
                 .Select(record => new ToolError
@@ -880,8 +885,16 @@ namespace UnityMcp.AgentBridge
 
         private static string GetOperationPath(string projectRoot, string tempRoot, string commandId)
         {
-            var queueRoot = Path.GetFullPath(Path.Combine(projectRoot, tempRoot.Replace('/', Path.DirectorySeparatorChar)));
-            return Path.Combine(queueRoot, "processing", commandId + ".compile.data");
+            return Path.Combine(projectRoot, "Library", "AgentBridge", "compile-operations", commandId + ".compile.data");
+        }
+
+        private static string CurrentEditorSession => System.Diagnostics.Process.GetCurrentProcess().Id + ":" + System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks;
+        private static string CompletedResultPath(string commandId) => Path.Combine(AgentTaskDurableResults.Root, "compile-results", commandId + ".json");
+        internal static bool HasOperation(string commandId) => OperationsById.ContainsKey(commandId);
+        internal static ToolResult ReadCompletedResult(string commandId)
+        {
+            var path = CompletedResultPath(commandId);
+            return File.Exists(path) ? Newtonsoft.Json.JsonConvert.DeserializeObject<ToolResult>(File.ReadAllText(path)) : null;
         }
 
         private static void PersistState(string path, CompileOperationState state)
@@ -899,12 +912,8 @@ namespace UnityMcp.AgentBridge
                 writer.Write(Newtonsoft.Json.JsonConvert.SerializeObject(state, Newtonsoft.Json.Formatting.None));
             }
 
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-
-            File.Move(tempPath, path);
+            if (File.Exists(path)) File.Replace(tempPath, path, null);
+            else File.Move(tempPath, path);
         }
 
         private static void DeleteOperation(CompileOperationState state)
@@ -957,6 +966,7 @@ namespace UnityMcp.AgentBridge
     internal sealed class CompileOperationState
     {
         public string commandId;
+        public string editorSession;
         public string tool;
         public string projectRoot;
         public string tempRoot;
@@ -1019,6 +1029,11 @@ namespace UnityMcp.AgentBridge
         public int errorCount;
         public int warningCount;
         public int diagnosticSampleCount;
+        public int inlineErrorCount;
+        public int diagnosticLimit;
+        public bool diagnosticsTruncated;
+        public bool diagnosticsComplete;
+        public string diagnosticSource;
         public CompileDiagnosticSample[] diagnosticSamples = Array.Empty<CompileDiagnosticSample>();
         public bool isCompiling;
         public int observedEpochAtStart;
@@ -1049,6 +1064,9 @@ namespace UnityMcp.AgentBridge
     [Serializable]
     internal sealed class CompileReport
     {
+        public string schemaVersion = "1.0";
+        public string payloadVersion = CompileMetrics.ContractVersion;
+        public string generatedAt = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
         public string contractVersion;
         public string commandId;
         public int observedEpochAtStart;

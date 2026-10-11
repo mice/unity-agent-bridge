@@ -199,7 +199,11 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
             var reportRootWithSeparator = reportRoot.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal)
                 ? reportRoot
                 : reportRoot + Path.DirectorySeparatorChar;
-            if (!combinedPath.StartsWith(reportRootWithSeparator, StringComparison.OrdinalIgnoreCase))
+            var durableCompileRoot = Path.Combine(projectRoot, "Library", "AgentBridge", "compile-reports") + Path.DirectorySeparatorChar;
+            var durableTaskRoot = Path.Combine(projectRoot, "Library", "AgentBridge", "mcp-task-reports") + Path.DirectorySeparatorChar;
+            if (!combinedPath.StartsWith(reportRootWithSeparator, StringComparison.OrdinalIgnoreCase) &&
+                !combinedPath.StartsWith(durableCompileRoot, StringComparison.OrdinalIgnoreCase) &&
+                !combinedPath.StartsWith(durableTaskRoot, StringComparison.OrdinalIgnoreCase))
             {
                 failure = UnityQueriesResult.InvalidArgs("AGENTBRIDGE_REPORT_PATH_OUTSIDE_ROOT", "reportPath must resolve within the Agent Bridge report root.");
                 return false;

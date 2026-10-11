@@ -6,6 +6,9 @@ namespace UnityAgentBridge.Mcp;
 public sealed class McpTaskExecutionCoordinator
 {
     private readonly McpTaskAdapter _adapter;
+    private McpTaskStore? _store;
+
+    internal void AttachStore(McpTaskStore store) => _store = store;
 
     public McpTaskExecutionCoordinator(McpTaskAdapter adapter)
     {
@@ -17,19 +20,23 @@ public sealed class McpTaskExecutionCoordinator
     internal async Task CreateAsync(string mcpTaskId, McpTaskExecutionContext.PendingTaskRequest request, CancellationToken cancellationToken)
     {
         if (!Supports(request)) return;
+        if (_adapter.HasBinding(mcpTaskId)) return;
         var taskType = request.AgentTaskType;
-        var response = await _adapter.CreateForExternalTaskAsync(mcpTaskId, taskType, request.StructuredPayload, request.TimeoutMs, cancellationToken);
-        if (!_adapter.HasBinding(mcpTaskId))
+        try
         {
-            throw new InvalidOperationException(response["errorMessage"]?.GetValue<string>() ?? "Unity AgentTask creation failed.");
+            await _adapter.CreateForExternalTaskAsync(mcpTaskId, taskType, request.StructuredPayload, request.TimeoutMs, cancellationToken);
         }
+        catch (Exception exception) when ((exception is TimeoutException or IOException) && _adapter.HasDispatch(mcpTaskId))
+        { /* The store reconciles the original journal; never invoke the ordinary path. */ }
     }
 
     public Task<JsonObject> QueryAsync(string mcpTaskId, CancellationToken cancellationToken)
-        => _adapter.GetAsync(mcpTaskId, cancellationToken);
+        => _adapter.ReconcileAsync(mcpTaskId, cancellationToken);
 
     public Task<JsonObject> WaitForTerminalAsync(string mcpTaskId, CancellationToken cancellationToken)
-        => _adapter.WaitForTerminalAsync(mcpTaskId, cancellationToken);
+        => _store is null ? _adapter.WaitForTerminalAsync(mcpTaskId, cancellationToken) : _store.WaitForTerminalAsync(mcpTaskId, cancellationToken);
+
+    internal void DeleteTracking(string mcpTaskId) => _adapter.DeleteTracking(mcpTaskId);
 
     public async Task<string> CancelAsync(string mcpTaskId, CancellationToken cancellationToken)
     {

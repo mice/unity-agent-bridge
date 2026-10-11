@@ -8,12 +8,14 @@ public sealed class McpTaskBindingStore
 {
     public const int CurrentVersion = 1;
     private readonly string _root;
+    private readonly McpTaskPersistence _persistence;
 
     public McpTaskBindingStore(string projectPath)
     {
         if (string.IsNullOrWhiteSpace(projectPath)) throw new ArgumentException("Project path is required.", nameof(projectPath));
-        _root = Path.Combine(Path.GetFullPath(projectPath), "Temp", "AgentBridge", "mcp-task-mappings");
-        Directory.CreateDirectory(_root);
+        _persistence = new McpTaskPersistence(projectPath);
+        _root = _persistence.DirectoryFor("mcp-task-mappings");
+        _persistence.ImportOnce("mcp-task-mappings", (source, destination) => File.Copy(source, destination));
     }
 
     public void Save(McpTaskBinding binding)
@@ -21,29 +23,22 @@ public sealed class McpTaskBindingStore
         if (binding is null) throw new ArgumentNullException(nameof(binding));
         if (binding.Version != CurrentVersion || string.IsNullOrWhiteSpace(binding.ProjectIdentity) || string.IsNullOrWhiteSpace(binding.McpTaskId) || string.IsNullOrWhiteSpace(binding.AgentTaskId))
             throw new InvalidDataException("Invalid MCP task binding.");
-        var path = PathFor(binding.ProjectIdentity, binding.McpTaskId);
-        var temp = path + ".tmp-" + Guid.NewGuid().ToString("N");
-        File.WriteAllText(temp, JsonSerializer.Serialize(binding));
-        File.Move(temp, path, true);
+        using var lease = _persistence.Enter();
+        McpTaskPersistence.Write(PathFor(binding.ProjectIdentity, binding.McpTaskId), binding);
     }
 
     public McpTaskBinding? Load(string projectIdentity, string mcpTaskId)
     {
         var path = PathFor(projectIdentity, mcpTaskId);
-        if (!File.Exists(path)) return null;
-        try
-        {
-            var binding = JsonSerializer.Deserialize<McpTaskBinding>(File.ReadAllText(path));
-            if (binding is null || binding.Version != CurrentVersion ||
+        using var lease = _persistence.Enter();
+        var binding = McpTaskPersistence.Read<McpTaskBinding>(path);
+        if (binding is null) return null;
+        if (binding.Version != CurrentVersion) throw new InvalidDataException("MCP_TASK_BINDING_VERSION: " + path);
+        if (
                 !string.Equals(binding.ProjectIdentity, projectIdentity, StringComparison.Ordinal) ||
                 !string.Equals(binding.McpTaskId, mcpTaskId, StringComparison.Ordinal) ||
                 string.IsNullOrWhiteSpace(binding.AgentTaskId)) return null;
-            return binding;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
+        return binding;
     }
 
     public McpTaskBinding? FindByMcpTaskId(string mcpTaskId)
@@ -64,6 +59,12 @@ public sealed class McpTaskBindingStore
         }
 
         return null;
+    }
+
+    internal void Delete(string projectIdentity, string mcpTaskId)
+    {
+        using var lease = _persistence.Enter();
+        File.Delete(PathFor(projectIdentity, mcpTaskId));
     }
 
     private string PathFor(string projectIdentity, string mcpTaskId)

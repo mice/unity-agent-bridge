@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "unity.compile structured result (compile.v1)",
+  "description": "Normalized structuredContent of an ordinary unity_project_compile CallToolResult or a completed task's CallToolResult. The task handle and JSON-RPC errors are separate envelopes. Compiler diagnostics use compile.v1; failures before diagnostics are available use the unsuccessful fallback branch.",
+  "type": "object",
+  "required": ["success"],
+  "additionalProperties": true,
+  "properties": {
+    "schemaVersion": { "const": "1.0" },
+    "commandId": { "type": "string", "minLength": 1 },
+    "tool": { "type": "string" },
+    "success": { "type": "boolean" },
+    "status": { "type": "string", "enum": ["pending", "running", "resuming", "success", "failed", "timeout", "blocked", "unsupported", "invalid_args", "exception", "cancelled"] },
+    "startedAt": { "type": ["string", "null"] },
+    "finishedAt": { "type": ["string", "null"] },
+    "durationMs": { "type": "integer", "minimum": 0 },
+    "summary": { "type": ["string", "null"] },
+    "errors": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/error" } },
+    "warnings": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/warning" } },
+    "logs": { "type": "array", "items": { "$ref": "#/$defs/log" } },
+    "metrics": { "type": "object" },
+    "changedFiles": { "type": "array", "items": { "type": "string" } },
+    "reportPath": { "type": ["string", "null"], "description": "Project-relative full or partial compiler report. Modern tasks may return a retained Library/AgentBridge/mcp-task-reports copy." },
+    "reportRetention": {
+      "type": "object", "required": ["available"],
+      "properties": { "available": { "type": "boolean" }, "owned": { "type": "boolean" }, "reason": { "type": "string" } }
+    },
+    "taskId": { "type": "string" },
+    "agentTaskId": { "type": ["string", "null"], "description": "Native identity, or null when creation was rejected before registration." },
+    "state": { "type": ["string", "null"], "description": "Native lifecycle state when a native task exists." },
+    "resultKind": { "type": ["string", "null"] },
+    "dispatchCommandId": { "type": "string" },
+    "errorCode": { "type": ["string", "null"] },
+    "errorMessage": { "type": ["string", "null"] },
+    "resolvedCliPath": { "type": "string" },
+    "cliMode": { "type": "string" },
+    "cliWarnings": { "type": "array", "items": { "type": "string" } },
+    "packageVersion": { "type": "string" },
+    "runtimeVersion": { "type": "string" },
+    "protocolVersion": { "type": "string" },
+    "runtimeMode": { "type": "string" }
+  },
+  "anyOf": [
+    {
+      "description": "Completed compiler observation, including compiler failures, timeouts and Editor interruption with partial diagnostics.",
+      "required": ["schemaVersion", "commandId", "tool", "status", "startedAt", "finishedAt", "durationMs", "summary", "errors", "warnings", "logs", "metrics", "changedFiles", "reportPath"],
+      "properties": {
+        "tool": { "const": "unity.compile" },
+        "status": { "enum": ["success", "failed", "timeout", "exception"] },
+        "errors": { "items": { "required": ["code", "message", "file", "line", "column"] } },
+        "metrics": { "$ref": "#/$defs/compileMetrics" }
+      },
+      "allOf": [
+        { "if": { "properties": { "success": { "const": true } } }, "then": { "properties": { "status": { "const": "success" }, "errors": { "maxItems": 0 }, "metrics": { "properties": { "errorCount": { "const": 0 }, "diagnosticsComplete": { "const": true } } } } }, "else": { "properties": { "status": { "enum": ["failed", "timeout", "exception"] } } } },
+        { "if": { "properties": { "status": { "enum": ["timeout", "exception"] } } }, "then": { "properties": { "metrics": { "properties": { "diagnosticsComplete": { "const": false } } } } } }
+      ]
+    },
+    {
+      "description": "Validation, transport, dispatch or recovery failure before compiler diagnostics are available. It must never impersonate a successful compile or bypass validation of compile.v1 metrics.",
+      "properties": { "success": { "const": false }, "metrics": { "not": { "anyOf": [{ "required": ["contractVersion"] }, { "required": ["errorCount"] }, { "required": ["warningCount"] }, { "required": ["diagnosticsComplete"] }, { "required": ["diagnosticSamples"] }] } } },
+      "anyOf": [
+        { "required": ["errors"], "properties": { "errors": { "minItems": 1 } } },
+        { "required": ["errorCode"], "properties": { "errorCode": { "type": "string", "minLength": 1 } } },
+        { "required": ["summary"], "properties": { "summary": { "type": "string", "minLength": 1 } } }
+      ]
+    }
+  ],
+  "$defs": {
+    "error": {
+      "type": "object", "required": ["code", "message"],
+      "properties": {
+        "code": { "type": ["string", "null"] }, "message": { "type": ["string", "null"] },
+        "file": { "type": ["string", "null"], "description": "Compiler source path when known; no invented path for locationless diagnostics." },
+        "line": { "type": "integer", "description": "Compiler line; nonpositive values mean unavailable." },
+        "column": { "type": "integer", "description": "Compiler column; nonpositive values mean unavailable." }
+      }
+    },
+    "warning": {
+      "type": "object", "required": ["code", "message"],
+      "properties": { "code": { "type": ["string", "null"] }, "message": { "type": ["string", "null"] } }
+    },
+    "log": {
+      "type": "object", "required": ["level", "message", "timestamp"],
+      "properties": { "level": { "type": ["string", "null"] }, "message": { "type": ["string", "null"] }, "timestamp": { "type": ["string", "null"] } }
+    },
+    "diagnosticSample": {
+      "allOf": [{ "$ref": "#/$defs/error" }],
+      "required": ["severity", "file", "line", "column"],
+      "properties": { "severity": { "enum": ["error", "warning"] } }
+    },
+    "compileMetrics": {
+      "type": "object",
+      "required": ["contractVersion", "errorCount", "warningCount", "diagnosticSampleCount", "inlineErrorCount", "diagnosticLimit", "diagnosticsTruncated", "diagnosticsComplete", "diagnosticSource", "diagnosticSamples", "isCompiling", "observedEpochAtStart", "targetEpoch", "completedEpoch", "compileEpoch", "lifecycleStage", "timeoutReason", "reloadRestored", "unknownEpochRestored", "lastTransition", "lastTransitionAtUtc", "details", "followUp"],
+      "properties": {
+        "contractVersion": { "const": "compile.v1" },
+        "errorCount": { "type": "integer", "minimum": 0, "description": "Total collected compiler errors before truncation." },
+        "warningCount": { "type": "integer", "minimum": 0, "description": "Total collected warnings, separate from errors." },
+        "diagnosticSampleCount": { "type": "integer", "minimum": 0, "maximum": 20 },
+        "inlineErrorCount": { "type": "integer", "minimum": 0, "maximum": 20, "description": "Number of entries returned in errors." },
+        "diagnosticLimit": { "const": 20 },
+        "diagnosticsTruncated": { "type": "boolean", "description": "Collected errors plus warnings exceed the shared 20-entry sample limit. errors and warnings are independently bounded at 20." },
+        "diagnosticsComplete": { "type": "boolean", "description": "False on timeout/interruption; zero observed errors does not establish a clean completed compile." },
+        "diagnosticSource": { "const": "compiler_callbacks" },
+        "diagnosticSamples": { "type": "array", "maxItems": 20, "items": { "$ref": "#/$defs/diagnosticSample" } },
+        "isCompiling": { "type": "boolean" },
+        "observedEpochAtStart": { "type": "integer", "minimum": 0 },
+        "targetEpoch": { "type": "integer", "minimum": 0 },
+        "completedEpoch": { "type": "integer", "minimum": 0 },
+        "compileEpoch": { "type": "integer", "minimum": 0 },
+        "lifecycleStage": { "type": "string" },
+        "timeoutReason": { "type": "string" },
+        "reloadRestored": { "type": "boolean" },
+        "unknownEpochRestored": { "type": "boolean" },
+        "lastTransition": { "type": "string" },
+        "lastTransitionAtUtc": { "type": "string" },
+        "details": {
+          "type": "object", "required": ["available", "reportPath", "recommendedRead", "recommendedPointers"],
+          "properties": {
+            "available": { "type": "boolean" }, "reportPath": { "type": ["string", "null"] }, "recommendedRead": { "type": "boolean" },
+            "recommendedPointers": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "followUp": {
+          "type": "object", "required": ["recommended", "options"],
+          "properties": {
+            "recommended": { "type": "boolean" },
+            "options": { "type": "array", "maxItems": 3, "items": {
+              "type": "object", "required": ["tool", "reason", "args"],
+              "properties": { "tool": { "type": "string" }, "reason": { "type": "string" }, "args": { "type": "object" } }
+            } }
+          }
+        }
+      }
+    }
+  }
+}

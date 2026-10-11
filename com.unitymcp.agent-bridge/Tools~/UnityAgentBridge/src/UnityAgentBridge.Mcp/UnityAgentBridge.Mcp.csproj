@@ -6,10 +6,10 @@
     <Deterministic>true</Deterministic>
     <AssemblyName>UnityAgentBridge.Mcp</AssemblyName>
     <RootNamespace>UnityAgentBridge.Mcp</RootNamespace>
-    <Version>1.4.0</Version>
-    <AssemblyVersion>1.4.0.0</AssemblyVersion>
-    <FileVersion>1.4.0.0</FileVersion>
-    <InformationalVersion>1.4.0</InformationalVersion>
+    <Version>1.4.1</Version>
+    <AssemblyVersion>1.4.1.0</AssemblyVersion>
+    <FileVersion>1.4.1.0</FileVersion>
+    <InformationalVersion>1.4.1</InformationalVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Schemas\unity.compile.result.schema.json" LogicalName="UnityAgentBridge.Mcp.CompileResultSchema.json" />
     <ProjectReference Include="..\UnityAgentBridge.ExternalBridgeClientCore\UnityAgentBridge.ExternalBridgeClientCore.csproj" />
   </ItemGroup>
 </Project>

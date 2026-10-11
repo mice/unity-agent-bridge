@@ -15,7 +15,7 @@ public sealed class McpServerRuntimeTests
             "..", "..", "..", "..",
             "UnityAgentBridge.Cli",
             "bin",
-            "Debug",
+            new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name,
             "net8.0",
             "win-x64",
             "UnityAgentBridge.Cli.dll"));

@@ -69,9 +69,19 @@ public sealed class McpServerService
             _stageLogger.Write("mcp.validate", commandId, toolName, "ok", "Arguments accepted.");
             _stageLogger.Write("mcp.invoke_core", commandId, toolName, "started", "Invoking ExternalBridgeClientCore.");
             var mappedTaskId = McpTaskExecutionContext.CurrentTaskId;
-            var resultJson = mappedTaskId is not null && _taskCoordinator is not null && _taskCoordinator.IsMapped(mappedTaskId)
-                ? (await _taskCoordinator.WaitForTerminalAsync(mappedTaskId, cancellationToken)).ToJsonString()
-                : await definition.InvokeAsync(argumentsJson, cancellationToken);
+            string resultJson;
+            if (mappedTaskId is not null)
+            {
+                var pending = McpTaskExecutionContext.ConsumePending();
+                if (_taskCoordinator is null || pending is null || !_taskCoordinator.Supports(pending))
+                    throw new InvalidOperationException("No execution coordinator is available for the allocated MCP task.");
+                await _taskCoordinator.CreateAsync(mappedTaskId, pending, cancellationToken);
+                resultJson = (await _taskCoordinator.WaitForTerminalAsync(mappedTaskId, cancellationToken)).ToJsonString();
+            }
+            else
+            {
+                resultJson = await definition.InvokeAsync(argumentsJson, cancellationToken);
+            }
             var status = ReadStatus(resultJson);
             if (RequiresWaitStage(definition, toolName))
             {
@@ -114,6 +124,9 @@ public sealed class McpServerService
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            // The SDK owns background cancellation. Do not turn a cancelled wait
+            // into a completed tool result while its Unity operation is still active.
+            if (McpTaskExecutionContext.CurrentTaskId is not null) throw;
             const string message = "The MCP request was cancelled.";
             _stageLogger.Write("mcp.return_response", commandId, toolName, "cancelled", message);
             return CreateErrorResult(commandId, toolName, "cancelled", message);
@@ -126,30 +139,14 @@ public sealed class McpServerService
         }
         finally
         {
-            if (McpTaskExecutionContext.CurrentTaskId is not null)
-                McpTaskExecutionContext.Clear();
+            McpTaskExecutionContext.Clear();
         }
     }
 
     internal static CallToolResult AdaptResult(string rawJson, McpHostDiagnostics diagnostics)
     {
         var structured = JsonNode.Parse(rawJson)?.AsObject() ?? new JsonObject();
-        InjectDiagnostics(structured, diagnostics);
-        var normalizedJson = structured.ToJsonString(JsonOptions);
-        var status = structured["status"]?.GetValue<string>() ?? string.Empty;
-
-        return new CallToolResult
-        {
-            Content =
-            [
-                new TextContentBlock
-                {
-                    Text = normalizedJson
-                }
-            ],
-            StructuredContent = JsonSerializer.SerializeToElement(structured, JsonOptions),
-            IsError = status != "success"
-        };
+        return McpToolResultConverter.Convert(structured, diagnostics);
     }
 
     private static string SerializeArguments(IDictionary<string, JsonElement>? arguments)
@@ -164,17 +161,6 @@ public sealed class McpServerService
                 pair => pair.Key,
                 pair => JsonSerializer.Deserialize<JsonElement>(pair.Value.GetRawText(), JsonOptions)),
             JsonOptions);
-    }
-
-    private static void InjectDiagnostics(JsonObject structured, McpHostDiagnostics diagnostics)
-    {
-        structured["resolvedCliPath"] = diagnostics.ResolvedCliPath;
-        structured["cliMode"] = diagnostics.CliMode;
-        structured["cliWarnings"] = new JsonArray(diagnostics.CliWarnings.Select(w => (JsonNode?)JsonValue.Create(w)).ToArray());
-        structured["packageVersion"] = RuntimeIdentity.PackageVersion;
-        structured["runtimeVersion"] = RuntimeIdentity.RuntimeVersion;
-        structured["protocolVersion"] = RuntimeIdentity.ProtocolVersion;
-        structured["runtimeMode"] = RuntimeIdentity.RuntimeMode;
     }
 
     private static string ReadStatus(string rawJson)

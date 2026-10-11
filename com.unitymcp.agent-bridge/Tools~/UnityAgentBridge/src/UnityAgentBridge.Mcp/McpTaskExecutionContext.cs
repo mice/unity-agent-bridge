@@ -33,7 +33,7 @@ internal static class McpTaskExecutionContext
         public string? McpTaskId { get; set; }
 
         public bool IsEditModeTest => string.Equals(ToolName, "unity_tests_run_edit_mode", StringComparison.Ordinal);
-        public bool IsCompile => string.Equals(ToolName, "unity_compile", StringComparison.Ordinal);
+        public bool IsCompile => string.Equals(ToolName, "unity_project_compile", StringComparison.Ordinal);
         public bool IsPlayModeTest => string.Equals(ToolName, "unity_tests_run_play_mode", StringComparison.Ordinal);
         public bool IsVerifiedCompileFailureAnalysis => string.Equals(ToolName, "unity_analysis_compile_failure", StringComparison.Ordinal);
         public bool IsVerifiedAssetProblemAnalysis => string.Equals(ToolName, "unity_analysis_asset_problem", StringComparison.Ordinal);

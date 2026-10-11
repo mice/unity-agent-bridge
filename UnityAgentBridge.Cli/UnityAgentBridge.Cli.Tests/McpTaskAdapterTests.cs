@@ -11,7 +11,7 @@ public sealed class McpTaskAdapterTests
     [TestMethod]
     public void PendingTaskRequestRecognizesCompileAndPlayModeOperations()
     {
-        var compile = new McpTaskExecutionContext.PendingTaskRequest("unity_compile", "{\"timeoutMs\":321}");
+        var compile = new McpTaskExecutionContext.PendingTaskRequest("unity_project_compile", "{\"timeoutMs\":321}");
         Assert.IsTrue(compile.IsCompile);
         Assert.IsTrue(compile.IsAgentTaskOperation);
         Assert.AreEqual(321, compile.TimeoutMs);
@@ -66,7 +66,7 @@ public sealed class McpTaskAdapterTests
     }
 
     [TestMethod]
-    public void CorruptBindingIsTreatedAsMissing()
+    public void CorruptBindingFailsExplicitlyWithoutAuthorizingNewDispatch()
     {
         var root = Path.Combine(Path.GetTempPath(), "McpTaskAdapterTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "Assets"));
@@ -75,9 +75,9 @@ public sealed class McpTaskAdapterTests
         {
             var store = new McpTaskBindingStore(root);
             store.Save(new McpTaskBinding(root, "mcp-corrupt", "agent-1", null));
-            var mappingPath = Directory.EnumerateFiles(Path.Combine(root, "Temp", "AgentBridge", "mcp-task-mappings"), "*.json").Single();
+            var mappingPath = Directory.EnumerateFiles(Path.Combine(root, "Library", "AgentBridge", "mcp-task-mappings"), "*.json").Single();
             File.WriteAllText(mappingPath, "{not-json");
-            Assert.IsNull(store.Load(root, "mcp-corrupt"));
+            StringAssert.Contains(Assert.ThrowsException<InvalidDataException>(() => store.Load(root, "mcp-corrupt")).Message, "MCP_TASK_RECORD_CORRUPT");
         }
         finally { Directory.Delete(root, true); }
     }
@@ -92,7 +92,7 @@ public sealed class McpTaskAdapterTests
         {
             var store = new McpTaskBindingStore(root);
             store.Save(new McpTaskBinding(root, "mcp-mismatch", "agent-1", null));
-            var mappingPath = Directory.EnumerateFiles(Path.Combine(root, "Temp", "AgentBridge", "mcp-task-mappings"), "*.json").Single();
+            var mappingPath = Directory.EnumerateFiles(Path.Combine(root, "Library", "AgentBridge", "mcp-task-mappings"), "*.json").Single();
             File.WriteAllText(mappingPath, JsonSerializer.Serialize(new McpTaskBinding("different-project", "mcp-mismatch", "agent-1", null)));
             Assert.IsNull(store.Load(root, "mcp-mismatch"));
         }

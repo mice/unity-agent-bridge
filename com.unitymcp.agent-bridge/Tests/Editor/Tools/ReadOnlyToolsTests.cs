@@ -21,10 +21,14 @@ namespace UnityMcp.AgentBridge.Tests
         private readonly List<string> _reportPaths = new List<string>();
         private readonly List<string> _assetPathsToDelete = new List<string>();
         private readonly List<GameObject> _runtimeObjectsToDestroy = new List<GameObject>();
+        private readonly List<AgentBridgeSettings> _settingsToDestroy = new List<AgentBridgeSettings>();
 
         [TearDown]
         public void TearDown()
         {
+            foreach (var settings in _settingsToDestroy)
+                if (settings != null) UnityEngine.Object.DestroyImmediate(settings);
+            _settingsToDestroy.Clear();
             Selection.activeObject = null;
             Selection.objects = Array.Empty<UnityEngine.Object>();
             foreach (var reportPath in _reportPaths)
@@ -2024,10 +2028,10 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var settingsLoad = AgentBridgeSettingsLoader.Load();
             var settings = settingsLoad.Settings ?? AgentBridgeSettingsLoader.CreateDefaultSettings();
-            if (!AssetDatabase.Contains(settings))
-            {
-                settings.hideFlags = HideFlags.DontUnloadUnusedAsset;
-            }
+            // Opening a scene can unload settings assets. Each test owns a stable copy.
+            if (AssetDatabase.Contains(settings)) settings = UnityEngine.Object.Instantiate(settings);
+            settings.hideFlags = HideFlags.HideAndDontSave;
+            _settingsToDestroy.Add(settings);
 
             return new AgentToolContext
             {

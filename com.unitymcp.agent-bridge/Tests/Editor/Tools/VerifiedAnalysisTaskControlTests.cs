@@ -3,6 +3,7 @@ using System.Linq;
 using System.IO;
 using UnityEngine;
 using UnityMcp.AgentTaskCore;
+using UnityMcp.AgentRuntime;
 
 namespace UnityMcp.AgentBridge.Tests
 {
@@ -10,15 +11,10 @@ namespace UnityMcp.AgentBridge.Tests
     {
         // TestRecord: Documentation~/AgentBridge/test_records/AGB_262.md
         [Test, Category("AGB_262")]
-        public void InvalidProjectSettingsRejectBothAnalysisTasksWithQueryableFailure()
+        public void ProviderConfigurationFailureRejectsBothAnalysisTasksWithQueryableIdentity()
         {
-            var path = Path.Combine(Directory.GetParent(Application.dataPath).FullName,
-                "Library", "AgentBridge", "mcp-editor-settings.json");
-            var original = File.Exists(path) ? File.ReadAllBytes(path) : null;
-            try
+            using (AgentRunnerProviderRegistry.Register(new InvalidConfigurationProvider()))
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(path));
-                File.WriteAllText(path, "{\"piTools\":[\"bash\"]}");
                 foreach (var taskType in new[] { AgentTaskVerifiedAnalysisExecutionService.TaskType,
                     AgentTaskVerifiedAnalysisExecutionService.AssetTaskType })
                 {
@@ -36,11 +32,13 @@ namespace UnityMcp.AgentBridge.Tests
                     Assert.That(query.ErrorCode, Is.EqualTo("PI_CONFIGURATION_INVALID"));
                 }
             }
-            finally
-            {
-                if (original == null) File.Delete(path);
-                else File.WriteAllBytes(path, original);
-            }
+        }
+
+        private sealed class InvalidConfigurationProvider : IAgentRunnerProvider
+        {
+            public string Id => "fixture-invalid-configuration";
+            public System.Collections.Generic.IEnumerable<string> TemplateIds => new[] { "unity_compile_failure_analysis", "unity_asset_problem_analysis" };
+            public IAgentRunnerFactory Prepare(AgentRunnerPolicy policy) => throw new AgentProviderException("PI_CONFIGURATION_INVALID", "Fixture provider rejected its captured configuration.");
         }
 
         // TestRecord: Documentation~/Testing/Unit/AgentRuntime/AGB_250.md

@@ -9,6 +9,12 @@ namespace UnityMcp.AgentBridge
         public static ToolResult FromSnapshot(AgentTaskSnapshot snapshot, AgentCommand command, string tool)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
+            if (snapshot.IsTerminal && snapshot.Result?.Payload is ToolResult toolPayload)
+            {
+                var preserved = Newtonsoft.Json.JsonConvert.DeserializeObject<ToolResult>(JsonUtil.SerializeObject(toolPayload));
+                if (command != null) preserved.commandId = command.commandId;
+                return preserved;
+            }
             var result = new ToolResult
             {
                 commandId = command?.commandId,
@@ -28,8 +34,9 @@ namespace UnityMcp.AgentBridge
                     break;
                 case AgentTaskState.Completed:
                     var domainFailure = snapshot.Result != null && snapshot.Result.Kind == AgentTaskResultKind.DomainFailure;
-                    result.success = !domainFailure;
-                    result.status = domainFailure ? ToolResultStatus.Failed : ToolResultStatus.Success;
+                    var timedOut = snapshot.Result != null && snapshot.Result.Kind == AgentTaskResultKind.TimedOut;
+                    result.success = snapshot.Result == null || snapshot.Result.Kind == AgentTaskResultKind.Succeeded;
+                    result.status = timedOut ? ToolResultStatus.Timeout : domainFailure ? ToolResultStatus.Failed : ToolResultStatus.Success;
                     result.summary = string.IsNullOrWhiteSpace(snapshot.Result?.Reason) ? "Agent task completed." : snapshot.Result.Reason;
                     if (snapshot.Result?.Payload != null)
                     {

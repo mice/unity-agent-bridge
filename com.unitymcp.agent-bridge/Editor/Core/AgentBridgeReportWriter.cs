@@ -72,7 +72,9 @@ namespace UnityMcp.AgentBridge
                 return;
             }
 
-            var reportsDirectory = GetReportRootAbsolutePath(settings);
+            var reportsDirectory = string.Equals(prefix, "compile", StringComparison.Ordinal)
+                ? Path.Combine(projectRoot, "Library", "AgentBridge", "compile-reports")
+                : GetReportRootAbsolutePath(settings);
             Directory.CreateDirectory(reportsDirectory);
 
             var fileName = prefix + "_" + commandId + ".json";

@@ -34,6 +34,7 @@ public static class McpServerRuntime
         builder.Services.AddSingleton(taskAdapter);
         builder.Services.AddSingleton(taskCoordinator);
         builder.Services.AddSingleton(taskStore);
+        builder.Services.AddHostedService<McpTaskMaintenanceService>();
         builder.Services.AddSingleton<McpServerService>();
         builder.Services.AddMcpServer(options =>
             {
@@ -62,7 +63,14 @@ public static class McpServerRuntime
                 if (definition?.SupportsTaskExecution == true)
                 {
                     var arguments = context.Params?.Arguments ?? new Dictionary<string, JsonElement>();
-                    McpTaskExecutionContext.Prepare(context.Params?.Name ?? string.Empty, JsonSerializer.Serialize(arguments));
+                    var argumentsJson = JsonSerializer.Serialize(arguments);
+                    try { McpArgumentValidator.ValidateOrThrow(definition.ProtocolTool.Name, definition.SchemaJson, argumentsJson); }
+                    catch (McpArgumentValidationException)
+                    {
+                        McpTaskExecutionContext.Clear();
+                        return McpTaskExecutionMode.Synchronous;
+                    }
+                    McpTaskExecutionContext.Prepare(context.Params?.Name ?? string.Empty, argumentsJson);
                 }
                 return definition?.SupportsTaskExecution == true
                     ? McpTaskExecutionMode.Optional

@@ -174,7 +174,7 @@ public sealed class McpCompatibilityTests
     }
 
     [TestMethod]
-    public async Task StandardTaskAugmentedToolCallSupportsGetAndCancel()
+    public async Task QuickQueryRemainsOrdinaryWhenTasksAreRequested()
     {
         var projectRoot = CreateUnityProject();
         await using var server = await McpServerSession.StartAsync(projectRoot, initialize: false);
@@ -193,16 +193,10 @@ public sealed class McpCompatibilityTests
             ["arguments"] = new JObject(),
             ["_meta"] = taskMeta
         });
-        var created = (JObject?)call["result"] ?? throw new AssertFailedException($"Task call did not return a result: {call}");
-        StringAssert.StartsWith(created.Value<string>("taskId") ?? string.Empty, "mcp-");
-        Assert.AreEqual("task", created.Value<string>("resultType"));
-
-        var taskId = created.Value<string>("taskId")!;
-        var get = await server.SendRequestAsync("tasks/get", new JObject { ["taskId"] = taskId, ["_meta"] = taskMeta });
-        Assert.AreEqual("working", ((JObject?)get["result"])!.Value<string>("status"));
-
-        var cancel = await server.SendRequestAsync("tasks/cancel", new JObject { ["taskId"] = taskId, ["_meta"] = taskMeta });
-        Assert.IsNotNull(cancel["result"]);
+        var result = (JObject?)call["result"] ?? throw new AssertFailedException($"Call did not return a result: {call}");
+        Assert.IsNull(result["taskId"]);
+        Assert.AreEqual("complete", result.Value<string>("resultType"));
+        Assert.IsNotNull(result["content"]);
     }
 
     [TestMethod]
@@ -252,7 +246,7 @@ public sealed class McpCompatibilityTests
     private static void AssertNormalizedCompatibility(string baselinePath, ModelContextProtocol.Protocol.CallToolResult response)
     {
         var baseline = JObject.Parse(File.ReadAllText(baselinePath));
-        var expected = NormalizeResponse((JObject)baseline["response"]!);
+        var expected = NormalizeResponse((JObject)baseline["response"]!, historical: true);
         var actual = NormalizeResponse(ToComparableResponse(response));
 
         Assert.IsTrue(JToken.DeepEquals(expected, actual),
@@ -262,16 +256,17 @@ public sealed class McpCompatibilityTests
     private static void AssertNormalizedCompatibility(string baselinePath, JObject response)
     {
         var baseline = JObject.Parse(File.ReadAllText(baselinePath));
-        var expected = NormalizeResponse((JObject)baseline["response"]!);
+        var expected = NormalizeResponse((JObject)baseline["response"]!, historical: true);
         var actual = NormalizeResponse((JObject)response.DeepClone());
 
         Assert.IsTrue(JToken.DeepEquals(expected, actual),
             $"Normalized MCP response mismatch for '{Path.GetFileName(baselinePath)}'.{Environment.NewLine}Expected: {expected}{Environment.NewLine}Actual:   {actual}");
     }
 
-    private static JObject NormalizeResponse(JObject response)
+    private static JObject NormalizeResponse(JObject response, bool historical = false)
     {
         var clone = (JObject)response.DeepClone();
+        if (historical) UpdateHistoricalVersions(clone["structuredContent"] as JObject);
         NormalizeToken(clone["structuredContent"]);
         if (clone["content"] is JArray content)
         {
@@ -280,6 +275,7 @@ public sealed class McpCompatibilityTests
                 if (item["text"] is JValue textValue && textValue.Value is string text)
                 {
                     var parsed = JObject.Parse(text);
+                    if (historical) UpdateHistoricalVersions(parsed);
                     NormalizeToken(parsed);
                     item["text"] = parsed.ToString(Newtonsoft.Json.Formatting.None);
                 }
@@ -287,6 +283,15 @@ public sealed class McpCompatibilityTests
         }
 
         return clone;
+    }
+
+    private static void UpdateHistoricalVersions(JObject? payload)
+    {
+        if (payload is null) return;
+        // The immutable Node fixtures describe 1.0.0. Compare their fields against
+        // the current release identity while still checking actual response values.
+        if (payload["packageVersion"] is not null) payload["packageVersion"] = RuntimeIdentity.PackageVersion;
+        if (payload["runtimeVersion"] is not null) payload["runtimeVersion"] = RuntimeIdentity.RuntimeVersion;
     }
 
     private static void NormalizeToken(JToken? token)
@@ -409,7 +414,7 @@ public sealed class McpCompatibilityTests
                 "..", "..", "..", "..",
                 "UnityAgentBridge.Cli",
                 "bin",
-                "Debug",
+                new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name,
                 "net8.0",
                 "win-x64",
                 "UnityAgentBridge.Cli.dll"));

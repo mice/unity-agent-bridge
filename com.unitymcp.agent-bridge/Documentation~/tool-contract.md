@@ -86,6 +86,9 @@ Rules:
 ### `unity.compile`
 
 - Args schema: `schemas/unity.compile.args.schema.json`
+- Result schema: `schemas/unity.compile.result.schema.json` (self-contained JSON Schema 2020-12, also exposed as `unity_project_compile.outputSchema` by MCP `tools/list`).
+- Input remains the empty object `{}`. The output schema describes normalized `CallToolResult.structuredContent` for ordinary calls and the completed Tasks result; it does not describe the initial task handle or JSON-RPC error envelope.
+- Completed compiler observations require `compile.v1` metrics. Failures before diagnostics are available use an explicit unsuccessful branch without invented compiler counts. Invalid-argument errors without structured content remain MCP error results.
 - Side effect: `validate`
 - Reload behavior: yes; result may pass through `running` / `resuming`
 - Typical terminal statuses:
@@ -99,6 +102,11 @@ Rules:
   - `warningCount`
   - `diagnosticSampleCount`
   - `diagnosticSamples[]`
+  - `inlineErrorCount` (number of returned errors)
+  - `diagnosticLimit = 20`
+  - `diagnosticsTruncated` (total errors plus warnings exceed the shared sample limit; error and warning arrays are also independently bounded at 20)
+  - `diagnosticsComplete` (false for timeout/interruption, even when no errors have been observed)
+  - `diagnosticSource = compiler_callbacks`
   - `isCompiling`
   - `observedEpochAtStart`
   - `targetEpoch`
@@ -112,8 +120,14 @@ Rules:
   - `lastTransitionAtUtc`
   - `details`
   - `followUp`
-- Errors:
-  - compiler diagnostics populate bounded `errors[].code/file/line/column`
+- Errors and warnings:
+  - compiler diagnostics populate bounded `errors[].code/message/file/line/column` directly; absent source paths are null and nonpositive locations mean unavailable
+  - `warnings[].code/message` is separate; location-bearing warning samples are available in `metrics.diagnosticSamples` and the full report
+  - `errorCount` and `warningCount` describe all collected diagnostics before truncation; historical Console errors are excluded
+- Task metadata:
+  - completed tasks may additionally carry `taskId`, `agentTaskId`, `state`, `resultKind` and `reportRetention`
+  - task completion is `completed` for compiler success and compiler failure; the enclosing `CallToolResult.isError` distinguishes the business outcome
+  - `reportRetention.available=false` marks an unavailable retained copy; shared/original report ownership is separate
 - Follow-up policy:
   - clean success with zero errors and zero warnings returns `followUp.recommended = false`
   - failed compile or warning-bearing compile recommends `unity.read_report` before any manual console read

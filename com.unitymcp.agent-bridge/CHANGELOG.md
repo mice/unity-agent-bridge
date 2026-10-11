@@ -6,6 +6,23 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-11
+
+### Fixed
+
+- Publish the complete compile structured-result JSON Schema through MCP `outputSchema`, including diagnostic bounds, completeness, report/task metadata and pre-diagnostic failure shapes; synchronize package documentation and embedded runtime resources.
+- Return standard immutable MCP task results: business failures complete with `isError=true`, while protocol execution errors remain failed. Validate inputs before allocation/dispatch and prevent ordinary fallback or replay after interrupted creation.
+- Retain project-bound task identities, dispatch correlation and terminal reports in Library across host restart and compile domain reload. Bound observation/recovery deadlines, admission, record size and terminal storage with startup/periodic cleanup.
+- Preserve unsupported Unity compile/test cancellation as an explicit disposition. Persist accepted cancellation intent so SDK wait cancellation cannot produce duplicate native cancellation or replace a terminal result.
+- Return current compiler errors directly with code/message/file/line/column, separate warning/count/epoch metadata, explicit truncation and retained readable reports. Historical Console errors no longer contaminate compile results; timeout/interruption retains partial diagnostics and checks deadlines in completion callbacks as well as Editor updates.
+- Reattach supported EditMode runs and expose explicit stale PlayMode recovery when the runner handle is unavailable, without launching a replacement run.
+- Prevent concurrent stage-log writes or an unavailable log file from failing tool execution or replacing a task's durable result.
+
+### Compatibility
+
+- Keep SDK 2.2.0, existing public tool inputs, ordinary/down-level calls and legacy endpoints. Limit modern Tasks to compile, test and enabled fixed analysis tools; quick queries and helpers remain ordinary.
+- Optional Pi keeps its existing plugin version and installation boundary. Rebuild the local runtime from matching core source. See `Documentation~/mcp-tasks-1.4.1.md` for retention, cancellation and result handling.
+
 ## [1.4.0] - 2026-10-11
 
 ### Added

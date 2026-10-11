@@ -7,6 +7,7 @@ public sealed class McpStageLogger
 {
     private const string LogVersion = "1.0";
     private const string SchemaVersion = "1.0";
+    private static readonly object WriteGate = new();
     private readonly string _logPath;
 
     public McpStageLogger(string logPath)
@@ -16,12 +17,6 @@ public sealed class McpStageLogger
 
     public void Write(string stage, string commandId, string tool, string status, string message)
     {
-        var directory = Path.GetDirectoryName(_logPath);
-        if (!string.IsNullOrWhiteSpace(directory))
-        {
-            Directory.CreateDirectory(directory);
-        }
-
         var payload = new
         {
             logVersion = LogVersion,
@@ -34,6 +29,20 @@ public sealed class McpStageLogger
             message
         };
 
-        File.AppendAllText(_logPath, JsonSerializer.Serialize(payload) + Environment.NewLine, Encoding.UTF8);
+        lock (WriteGate)
+        {
+            try
+            {
+                var directory = Path.GetDirectoryName(_logPath);
+                if (!string.IsNullOrWhiteSpace(directory)) Directory.CreateDirectory(directory);
+                File.AppendAllText(_logPath, JsonSerializer.Serialize(payload) + Environment.NewLine, Encoding.UTF8);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                // Stage logging is best effort. Another host may briefly own the
+                // file; an unavailable diagnostic sink must not fail the tool or
+                // replace its durable terminal result. The next write retries.
+            }
+        }
     }
 }

@@ -83,6 +83,9 @@ namespace UnityMcp.AgentTaskCore
         public static AgentTaskResult TimedOut(string reason = null) =>
             new AgentTaskResult(AgentTaskResultKind.TimedOut, reason, null);
 
+        public static AgentTaskResult TimedOut(string reason, object payload) =>
+            new AgentTaskResult(AgentTaskResultKind.TimedOut, reason, payload);
+
         public static AgentTaskResult Cancelled(string reason = null) =>
             new AgentTaskResult(AgentTaskResultKind.Cancelled, reason, null);
     }

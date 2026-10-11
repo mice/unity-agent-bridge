@@ -295,13 +295,18 @@ public static class McpToolCatalog
 
     private static ToolMetadata CreateForwardedToolMetadata(string title, string description, string schemaJson, string bridgeTool, int defaultTimeoutMs)
     {
-        return CreateToolMetadata(McpToolNameMapper.ToCanonicalMcpName(bridgeTool), title, description, schemaJson, bridgeTool, defaultTimeoutMs, true, true);
+        var name = McpToolNameMapper.ToCanonicalMcpName(bridgeTool);
+        return CreateToolMetadata(name, title, description, schemaJson, bridgeTool, defaultTimeoutMs, true, SupportsTasks(name));
     }
 
     private static ToolMetadata CreateForwardedToolMetadata(string mcpName, string title, string description, string schemaJson, string bridgeTool, int defaultTimeoutMs)
     {
-        return CreateToolMetadata(mcpName, title, description, schemaJson, bridgeTool, defaultTimeoutMs, true, true);
+        return CreateToolMetadata(mcpName, title, description, schemaJson, bridgeTool, defaultTimeoutMs, true, SupportsTasks(mcpName));
     }
+
+    private static bool SupportsTasks(string name) => name is
+        "unity_project_compile" or "unity_tests_run_edit_mode" or "unity_tests_run_play_mode" or
+        "unity_analysis_compile_failure" or "unity_analysis_asset_problem";
 
     private static McpToolDefinition CreateDefinition(ToolMetadata metadata)
     {
@@ -313,6 +318,7 @@ public static class McpToolCatalog
                 Title = metadata.Title,
                 Description = metadata.Description,
                 InputSchema = JsonDocument.Parse(metadata.SchemaJson).RootElement.Clone(),
+                OutputSchema = metadata.BridgeTool == "unity.compile" ? McpCompileResultSchema.Value : null,
                 Meta = metadata.SupportsTaskExecution
                     ? new JsonObject { ["execution"] = new JsonObject { ["taskSupport"] = "optional" } }
                     : null
