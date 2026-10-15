@@ -21,51 +21,83 @@ namespace UnityMcp.AgentBridge
         private const int MaxTimeoutMs = 90000;
         private const int MaxEvidenceItems = 16;
         private const int MaxEvidenceBytes = 131072;
-        private static readonly AgentTaskManager Manager = new AgentTaskManager(idFactory: () => new AgentTaskId("analysis-" + Guid.NewGuid().ToString("N")));
-        private static readonly Dictionary<string, AgentTaskId> Tasks = new Dictionary<string, AgentTaskId>(StringComparer.Ordinal);
-
-        private static readonly Dictionary<string, AgentRunnerProviderRegistration> Owners = new Dictionary<string, AgentRunnerProviderRegistration>(StringComparer.Ordinal);
-
-        static AgentTaskVerifiedAnalysisExecutionService()
-        {
-            EditorApplication.update += AdvanceTasks;
-            AgentRunnerProviderRegistry.Retired += CancelOwnedTasks;
-        }
-
         public static AgentTaskControlResponse Control(AgentTaskControlRequest request)
         {
-            if (request == null) return Error("INVALID_REQUEST", "Request is required.");
-            if (request.Operation == AgentTaskControlProtocol.Create) return Create(request);
-            if (!TryGetId(request.AgentTaskId, out var id)) return Error("INVALID_TASK_ID", "Analysis task ID is required.");
-            if (request.Operation == AgentTaskControlProtocol.Cancel)
-            {
-                var disposition = Manager.Cancel(id);
-                return new AgentTaskControlResponse
-                {
-                    Success = disposition != AgentTaskCancellationDisposition.NotFound,
-                    Cancellation = disposition,
-                    Snapshot = Manager.Get(id),
-                    AgentTaskId = id.Value
-                };
-            }
-
-            var snapshot = Manager.Get(id);
-            return snapshot == null ? Error("NOT_FOUND", "Analysis task was not found.") : Project(snapshot, id.Value);
+            if (request?.Operation == AgentTaskControlProtocol.Create) return Create(request);
+            return AgentTaskTemplateExecutionService.Control(request);
         }
 
         private static AgentTaskControlResponse Create(AgentTaskControlRequest request)
         {
-            var parsed = ParseRequest(request.Payload, string.Equals(request.TaskType, AssetTaskType, StringComparison.Ordinal));
+            return AgentTaskTemplateExecutionService.Control(new AgentTaskControlRequest
+            {
+                Operation = AgentTaskControlProtocol.Create, TaskType = AgentTaskTemplateExecutionService.TaskType,
+                Payload = JsonConvert.SerializeObject(new { templateId = request.TaskType == AssetTaskType ? UnityAssetAnalystSpecialistFactory.TemplateId : UnityProgrammerSpecialistFactory.TemplateId,
+                    inputs = AgentTaskTemplateCatalog.ParseObject(request.Payload) })
+            });
+        }
+
+        public static void RegisterTemplateExecutors()
+        {
+            AgentTaskTemplateExecutors.Register(new BuiltinExecutor(false));
+            AgentTaskTemplateExecutors.Register(new BuiltinExecutor(true));
+        }
+
+        public static IEnumerable<AgentTaskTemplateDefinition> TemplateDefinitions()
+        {
+            foreach (var asset in new[] { false, true })
+            {
+                var id = asset ? UnityAssetAnalystSpecialistFactory.TemplateId : UnityProgrammerSpecialistFactory.TemplateId;
+                yield return new AgentTaskTemplateDefinition(id, asset ? "Unity Asset Problem Analysis" : "Unity Compile Failure Analysis",
+                    "Analyze bounded evidence using the registered verified Specialist.", true, "builtin." + id,
+                    AgentTaskTemplateCatalog.AnalysisInputSchema, BuiltinOutputSchema(), "{}", "builtin", "1",
+                    asset ? "unity.analysis.asset_problem" : "unity.analysis.compile_failure");
+            }
+        }
+
+        private static string BuiltinOutputSchema()
+        {
+            var claim = JObject.Parse("{\"type\":\"object\",\"properties\":{\"Text\":{\"type\":\"string\"},\"EvidenceIds\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"Confidence\":{\"type\":\"number\",\"minimum\":0,\"maximum\":1}},\"required\":[\"Text\",\"EvidenceIds\",\"Confidence\"],\"additionalProperties\":false}");
+            var properties = new JObject();
+            foreach (var key in new[] { "Facts", "Hypotheses", "Impact", "Recommendations", "VerificationPlan" }) properties[key] = new JObject { ["type"] = "array", ["items"] = claim.DeepClone() };
+            properties["RootCause"] = claim.DeepClone();
+            properties["SchemaVersion"] = new JObject { ["type"] = "integer" };
+            var result = new JObject { ["type"] = "object", ["properties"] = properties, ["required"] = new JArray(properties.Properties().Select(p => p.Name)), ["additionalProperties"] = false };
+            return new JObject { ["type"] = "object", ["properties"] = new JObject
+            {
+                ["schemaVersion"] = new JObject { ["type"] = "integer" }, ["templateId"] = new JObject { ["type"] = "string" },
+                ["specialistId"] = new JObject { ["type"] = "string" }, ["problemId"] = new JObject { ["type"] = "string" },
+                ["evidenceIds"] = new JObject { ["type"] = "array", ["items"] = new JObject { ["type"] = "string" } }, ["result"] = result
+            }, ["required"] = new JArray("schemaVersion", "templateId", "specialistId", "problemId", "evidenceIds", "result"), ["additionalProperties"] = false }.ToString(Formatting.None);
+        }
+
+        private sealed class BuiltinExecutor : IAgentTaskTemplateExecutor
+        {
+            private readonly bool asset;
+            public BuiltinExecutor(bool asset) { this.asset = asset; }
+            public string Id => "builtin." + (asset ? UnityAssetAnalystSpecialistFactory.TemplateId : UnityProgrammerSpecialistFactory.TemplateId);
+            public string ConfigurationSchemaJson => "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}";
+            public string Validate(AgentTaskTemplateDefinition definition)
+            {
+                if (definition.Source != "builtin") return "EXECUTOR_BUILTIN_ONLY";
+                return AgentRunnerProviderRegistry.TryResolve(definition.Id, out var owner, out var error) ? null : error.Code + ": " + error.Message;
+            }
+            public IAgentRunnerFactory Prepare(AgentTaskTemplateAdmission admission) => PrepareBuiltin(admission.InputsJson, asset);
+        }
+
+        private static IAgentRunnerFactory PrepareBuiltin(string payload, bool asset)
+        {
+            var parsed = ParseRequest(payload, asset);
             if (!parsed.IsValid)
             {
-                return CreateRejected(parsed.Errors[0]);
+                throw new AgentProviderException(parsed.Errors[0].Code, parsed.Errors[0].Message);
             }
 
             var input = parsed.Value;
             var root = Directory.GetParent(Application.dataPath)?.FullName;
-            if (string.IsNullOrWhiteSpace(root)) return Error("PROJECT_ROOT_UNAVAILABLE", "Unity project root could not be resolved.");
+            if (string.IsNullOrWhiteSpace(root)) throw new AgentProviderException("PROJECT_ROOT_UNAVAILABLE", "Unity project root could not be resolved.");
             if (!AgentRunnerProviderRegistry.TryResolve(input.Template.Template.Id, out var owner, out var unavailable))
-                return CreateRejected(new ValidationError(unavailable.Code, unavailable.Message));
+                throw new AgentProviderException(unavailable.Code, unavailable.Message);
             IAgentRunnerFactory factory;
             try
             {
@@ -76,71 +108,12 @@ namespace UnityMcp.AgentBridge
                     capability.Tools, capability.Paths.ReadFolders, capability.Paths.DenyFolders);
                 factory = owner.Provider.Prepare(policy) ?? throw new InvalidOperationException("Provider returned no runner factory.");
             }
-            catch (AgentProviderException exception) { return CreateRejected(new ValidationError(exception.Code, exception.Message)); }
-            catch (Exception exception) { return CreateRejected(new ValidationError("AGENT_PROVIDER_CONFIGURATION_INVALID", exception.Message)); }
+            catch (AgentProviderException) { throw; }
+            catch (Exception exception) { throw new AgentProviderException("AGENT_PROVIDER_CONFIGURATION_INVALID", exception.Message); }
             var evidence = LoadEvidence(input.Request, root, input.Template);
             var evidenceValidation = IntelligentAnalysisValidator.ValidateEvidence(evidence, input.Template.EffectiveCapability, input.Template.Template.RequiredEvidenceKinds);
-            if (!evidenceValidation.IsValid) return CreateRejected(evidenceValidation.Errors[0]);
-            var service = new AgentService(Manager, new VerifiedAnalysisRunnerFactory(input, root, factory));
-            try
-            {
-                var handle = service.Run(new AgentRunRequest(BuildPrompt(input), root));
-                Tasks[handle.TaskId.Value] = handle.TaskId;
-                Owners[handle.TaskId.Value] = owner;
-                return Project(handle.Snapshot, handle.TaskId.Value);
-            }
-            catch (Exception exception)
-            {
-                return Error("ANALYSIS_CREATE_FAILED", exception.Message);
-            }
-        }
-
-        private static AgentTaskControlResponse CreateRejected(ValidationError error)
-        {
-            // Creation succeeds and the terminal validation failure is projected through the normal task binding.
-            var rejectedId = Manager.Register(new RejectedAnalysisTask(error));
-            Tasks[rejectedId.Value] = rejectedId;
-            Manager.Start(rejectedId);
-            var snapshot = Manager.Get(rejectedId);
-            return new AgentTaskControlResponse
-            {
-                Success = false,
-                ErrorCode = error.Code,
-                ErrorMessage = error.Message,
-                AgentTaskId = rejectedId.Value,
-                Snapshot = snapshot
-            };
-        }
-
-        private static void AdvanceTasks()
-        {
-            foreach (var id in new List<AgentTaskId>(Tasks.Values))
-            {
-                var snapshot = Manager.Get(id);
-                if (snapshot != null && snapshot.State == AgentTaskState.Running) Manager.Advance(id);
-            }
-        }
-
-        private static void CancelOwnedTasks(AgentRunnerProviderRegistration owner)
-        {
-            foreach (var pair in Owners.Where(item => ReferenceEquals(item.Value, owner)).ToArray())
-            {
-                if (Tasks.TryGetValue(pair.Key, out var id)) Manager.Cancel(id);
-            }
-        }
-
-        private static AgentTaskControlResponse Project(AgentTaskSnapshot snapshot, string id)
-        {
-            var result = snapshot?.Result?.Payload as AgentRunResult;
-            return new AgentTaskControlResponse
-            {
-                Success = snapshot != null && snapshot.State != AgentTaskState.Failed,
-                ErrorCode = snapshot?.Error?.Code,
-                ErrorMessage = snapshot?.Error?.Message,
-                Snapshot = snapshot,
-                AgentTaskId = id,
-                ResultPayloadJson = result == null ? null : result.Output
-            };
+            if (!evidenceValidation.IsValid) throw new AgentProviderException(evidenceValidation.Errors[0].Code, evidenceValidation.Errors[0].Message);
+            return new VerifiedAnalysisRunnerFactory(input, root, factory);
         }
 
         private static ValidationResult<AnalysisInput> ParseRequest(string payload, bool assetAnalysis)
@@ -203,15 +176,6 @@ namespace UnityMcp.AgentBridge
                    "Every material claim must cite one or more supplied evidence IDs. Problem ID: " + JsonConvert.ToString(input.Request.ProblemId) + ".";
         }
 
-        private static bool TryGetId(string value, out AgentTaskId id)
-        {
-            try { id = new AgentTaskId(value); return true; }
-            catch (ArgumentException) { id = default(AgentTaskId); return false; }
-        }
-
-        private static AgentTaskControlResponse Error(string code, string message)
-            => new AgentTaskControlResponse { Success = false, ErrorCode = code, ErrorMessage = message };
-
         private sealed class AnalysisInput
         {
             public AnalysisInput(AnalysisRequest request, int timeoutMs, RegisteredAnalysisTemplate template, bool assetAnalysis)
@@ -261,7 +225,7 @@ namespace UnityMcp.AgentBridge
             {
                 var validation = IntelligentAnalysisValidator.ValidateEvidence(evidence, input.Template.EffectiveCapability, input.Template.Template.RequiredEvidenceKinds);
                 if (!validation.IsValid) { context.Fail(new AgentRunError(validation.Errors[0].Code, validation.Errors[0].Message)); return; }
-                inner.Start(new AgentRunRequest(request.Task + " Evidence: " + SerializeEvidence(evidence), root), new ResultContext(context, evidence, input));
+                inner.Start(new AgentRunRequest(BuildPrompt(input) + " Evidence: " + SerializeEvidence(evidence), root), new ResultContext(context, evidence, input));
             }
             public void Advance(IAgentRunnerContext context) => inner.Advance(new ResultContext(context, evidence, input));
             public void RequestCancellation(IAgentRunnerContext context) => inner.RequestCancellation(new ResultContext(context, evidence, input));
@@ -297,16 +261,6 @@ namespace UnityMcp.AgentBridge
             }
             public void Fail(AgentRunError error) => inner.Fail(error);
             public void Cancel(AgentRunResult result = null) => inner.Cancel(result);
-        }
-
-        private sealed class RejectedAnalysisTask : IAgentTask
-        {
-            private readonly ValidationError error;
-            public RejectedAnalysisTask(ValidationError error) { this.error = error; }
-            public bool CanCancel => false;
-            public void Start(IAgentTaskContext context) => context.Fail(new AgentTaskError(error.Code, error.Message));
-            public void Advance(IAgentTaskContext context) { }
-            public void RequestCancellation(IAgentTaskContext context) { }
         }
 
         private static EvidenceBundle LoadEvidence(AnalysisRequest request, string root, RegisteredAnalysisTemplate template)

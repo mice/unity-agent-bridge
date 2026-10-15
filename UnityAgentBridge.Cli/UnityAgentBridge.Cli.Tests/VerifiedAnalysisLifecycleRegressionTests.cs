@@ -265,6 +265,22 @@ public sealed class VerifiedAnalysisLifecycleRegressionTests
     }
 
     [TestMethod]
+    public async Task RejectedCreationWithoutNativeAllocationRetainsResultAcrossAdapterRestart()
+    {
+        await using var scope = new QueueFixture(failed: true) { RejectWithoutIdentity = true };
+        var created = await scope.Adapter.CreateAsync("analysis_compile_failure", "{}", CancellationToken.None);
+        var id = created["taskId"]!.GetValue<string>();
+        Assert.IsTrue(created["creationRejected"]!.GetValue<bool>());
+        Assert.IsFalse(scope.Adapter.HasBinding(id));
+        var restarted = new McpTaskAdapter(new ExternalBridgeClient(), scope.Paths, scope.Root);
+        var result = await restarted.ResultAsync(id, CancellationToken.None);
+        Assert.AreEqual("FORBIDDEN_OVERRIDE", result["errorCode"]!.GetValue<string>());
+        Assert.AreEqual(id, result["taskId"]!.GetValue<string>());
+        Assert.AreEqual(1, scope.CreateCount);
+        Assert.AreEqual(0, scope.QueryCount);
+    }
+
+    [TestMethod]
     public async Task SynchronousFixedToolUsesStringPayloadAndWaitsForTerminal()
     {
         await using var scope = new QueueFixture();
@@ -321,6 +337,7 @@ public sealed class VerifiedAnalysisLifecycleRegressionTests
         private readonly Task worker;
         private readonly bool failed;
         public bool TransportFailure { get; set; }
+        public bool RejectWithoutIdentity { get; set; }
         public string Root { get; } = Path.Combine(Path.GetTempPath(), "VerifiedAnalysisLifecycle", Guid.NewGuid().ToString("N"));
         public QueuePaths Paths { get; }
         public McpTaskAdapter Adapter { get; }
@@ -385,7 +402,7 @@ public sealed class VerifiedAnalysisLifecycleRegressionTests
                     if (operation == "cancel") CancelCount++;
                     var completed = operation != "create" && QueryCount >= 4 && !Hold;
                     var projection = new JsonObject {
-                        ["success"] = !failed, ["agentTaskId"] = "analysis-fixture",
+                        ["success"] = !failed, ["agentTaskId"] = RejectWithoutIdentity ? null : "analysis-fixture",
                         ["state"] = SupportsCancellation && CancelCount > 0 ? "Cancelled" : failed ? "Failed" : completed ? "Completed" : "Running",
                         ["resultKind"] = completed ? "Succeeded" : null,
                         ["errorCode"] = failed ? "FORBIDDEN_OVERRIDE" : null,

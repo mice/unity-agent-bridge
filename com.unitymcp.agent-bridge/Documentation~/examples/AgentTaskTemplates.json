@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "templates": [
+    {
+      "id": "project.issue_analysis",
+      "displayName": "Project issue analysis",
+      "description": "Summarize the supplied issue text without reading project files.",
+      "enabled": true,
+      "executorId": "com.unitymcp.pi-agent.prompt.v1",
+      "inputSchema": {
+        "type": "object",
+        "properties": { "issue": { "type": "string", "minLength": 1, "maxLength": 4096 } },
+        "required": ["issue"],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": { "summary": { "type": "string", "minLength": 1, "maxLength": 4096 } },
+        "required": ["summary"],
+        "additionalProperties": false
+      },
+      "execution": {
+        "prompt": "Summarize the issue supplied as JSON data. Return JSON only with a summary string.",
+        "timeoutMs": 30000,
+        "maxTurns": 2,
+        "maxOutputBytes": 32768
+      }
+    }
+  ]
+}

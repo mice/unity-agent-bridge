@@ -17,6 +17,14 @@ public sealed class McpTaskExecutionCoordinator
 
     internal bool Supports(McpTaskExecutionContext.PendingTaskRequest request) => request?.IsAgentTaskOperation == true;
 
+    internal async Task ValidateAsync(McpTaskExecutionContext.PendingTaskRequest? request, CancellationToken cancellationToken)
+    {
+        if (request?.IsTemplateRun != true) return;
+        var response = await _adapter.ValidateTemplateAsync(request.StructuredPayload, cancellationToken);
+        if (response["success"]?.GetValue<bool>() != true)
+            throw new ArgumentException(response["errorMessage"]?.GetValue<string>() ?? "Template admission failed.");
+    }
+
     internal async Task CreateAsync(string mcpTaskId, McpTaskExecutionContext.PendingTaskRequest request, CancellationToken cancellationToken)
     {
         if (!Supports(request)) return;

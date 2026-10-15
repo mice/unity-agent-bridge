@@ -14,6 +14,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../../com.unitymcp.agent-bridge/Runtime/AgentTaskCore/*.cs" Link="TemplateContracts/%(Filename)%(Extension)" />
+    <Compile Include="../../com.unitymcp.agent-bridge/Runtime/AgentRuntimeAbstractions/Runtime/*.cs" Link="TemplateContracts/%(Filename)%(Extension)" />
+    <Compile Include="../../com.unitymcp.agent-bridge/Runtime/AgentIntelligentAnalysis/Runtime/*.cs" Link="TemplateContracts/%(Filename)%(Extension)" />
+    <Compile Include="../../com.unitymcp.agent-bridge/Editor/AgentRuntime/Bridge/AgentTaskTemplate*.cs" Link="TemplateContracts/%(Filename)%(Extension)" />
+    <Compile Include="../../com.unitymcp.agent-bridge/Editor/AgentRuntime/Bridge/AgentTaskVerifiedAnalysisExecutionService.cs" Link="TemplateContracts/AgentTaskVerifiedAnalysisExecutionService.cs" />
     <ProjectReference Include="..\UnityAgentBridge.Cli\UnityAgentBridge.Cli.csproj" />
     <ProjectReference Include="..\UnityAgentBridge.ExternalBridgeClientCore\UnityAgentBridge.ExternalBridgeClientCore.csproj" />
     <ProjectReference Include="..\UnityAgentBridge.RoslynCompiler\UnityAgentBridge.RoslynCompiler.csproj" />

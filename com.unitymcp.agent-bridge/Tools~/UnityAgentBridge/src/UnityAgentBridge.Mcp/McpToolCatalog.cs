@@ -138,6 +138,8 @@ public static class McpToolCatalog
 
     private static IEnumerable<ToolMetadata> CreateUnityBridgeForwardedTools()
     {
+        yield return CreateForwardedToolMetadata("Unity Agent Task Templates", "Discover built-in and configured task templates, including availability diagnostics.", """{"type":"object","properties":{},"additionalProperties":false}""", "unity.agent_task_template.list", 10000);
+        yield return CreateForwardedToolMetadata("Unity Run Agent Task Template", "Run a registered, available task template with validated business inputs.", """{"type":"object","properties":{"templateId":{"type":"string","minLength":1,"maxLength":128},"inputs":{"type":"object","additionalProperties":{}}},"required":["templateId","inputs"],"additionalProperties":false}""", "unity.agent_task_template.run", 90000);
         yield return CreateForwardedToolMetadata("Unity Ping", "Call unity.ping through the Unity Agent Bridge CLI.", """{"type":"object","properties":{},"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false}""", "unity.ping", 5000);
         yield return CreateForwardedToolMetadata("Unity Compile", "Call unity.compile through the Unity Agent Bridge CLI.", """{"type":"object","properties":{},"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false}""", "unity.compile", 60000);
         yield return CreateForwardedToolMetadata("Unity Console", "Call unity.get_console through the Unity Agent Bridge CLI.", """{"type":"object","properties":{"types":{"minItems":1,"maxItems":3,"type":"array","items":{"type":"string","enum":["error","warning","info"]}},"count":{"type":"integer","minimum":0,"maximum":1000},"filter":{"type":"string"},"timeoutMs":{"type":"integer","minimum":1,"maximum":9007199254740991}},"required":["types"],"$schema":"http://json-schema.org/draft-07/schema#","additionalProperties":false}""", "unity.get_console", 10000);
@@ -306,7 +308,7 @@ public static class McpToolCatalog
 
     private static bool SupportsTasks(string name) => name is
         "unity_project_compile" or "unity_tests_run_edit_mode" or "unity_tests_run_play_mode" or
-        "unity_analysis_compile_failure" or "unity_analysis_asset_problem";
+        "unity_analysis_compile_failure" or "unity_analysis_asset_problem" or "unity_agent_task_template_run";
 
     private static McpToolDefinition CreateDefinition(ToolMetadata metadata)
     {
@@ -333,11 +335,12 @@ public static class McpToolCatalog
                 var client = new ExternalBridgeClient();
                 var queuePaths = McpToolRuntimeContext.QueuePaths ?? throw new InvalidOperationException("MCP queue paths were not initialized.");
                 var commandId = client.CreateCommandId();
-                if (metadata.Name is "unity_analysis_compile_failure" or "unity_analysis_asset_problem")
+                if (metadata.Name is "unity_analysis_compile_failure" or "unity_analysis_asset_problem" or "unity_agent_task_template_run")
                 {
                     var adapter = new McpTaskAdapter(client, queuePaths, queuePaths.ProjectPath);
-                    var taskType = metadata.Name == "unity_analysis_asset_problem" ? "analysis_asset_problem" : "analysis_compile_failure";
+                    var taskType = metadata.Name == "unity_agent_task_template_run" ? "template_run" : metadata.Name == "unity_analysis_asset_problem" ? "analysis_asset_problem" : "analysis_compile_failure";
                     var created = await adapter.CreateAsync(taskType, argumentsJson, cancellationToken);
+                    if (created["creationRejected"]?.GetValue<bool>() == true) return created.ToJsonString();
                     var taskId = created["taskId"]?.GetValue<string>();
                     if (string.IsNullOrWhiteSpace(taskId)) return created.ToJsonString();
                     return (await adapter.WaitForTerminalAsync(taskId, cancellationToken)).ToJsonString();

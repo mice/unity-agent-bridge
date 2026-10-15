@@ -88,7 +88,7 @@ namespace UnityMcp.AgentBridge
 
         public IReadOnlyList<ToolDescriptor> ListTools()
         {
-            return _tools.Values.Select(tool => tool.Descriptor).OrderBy(descriptor => descriptor.Name, StringComparer.Ordinal).ToArray();
+            return _tools.Values.Select(tool => tool.Descriptor).Where(descriptor => descriptor.Name != "unity.agent_task_control").OrderBy(descriptor => descriptor.Name, StringComparer.Ordinal).ToArray();
         }
 
         private static void ValidateDescriptor(ToolDescriptor descriptor, string paramName)

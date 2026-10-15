@@ -51,6 +51,8 @@ public sealed class McpToolCatalogTests
     {
         var expectedNames = new[]
         {
+            "unity_agent_task_template_list",
+            "unity_agent_task_template_run",
             "unity_project_compile",
             "unity_console_get",
             "unity_editor_get_state",
@@ -73,7 +75,7 @@ public sealed class McpToolCatalogTests
             .ToArray();
 
         CollectionAssert.AreEqual(expectedNames.OrderBy(name => name, StringComparer.Ordinal).ToArray(), actualNames);
-        Assert.AreEqual(13, actualNames.Length);
+        Assert.AreEqual(15, actualNames.Length);
         Assert.IsFalse(actualNames.Any(name => name.Contains("__", StringComparison.Ordinal)));
     }
 

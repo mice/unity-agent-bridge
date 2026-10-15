@@ -31,9 +31,17 @@ public sealed class McpTaskAdapter
 
     public async Task<JsonObject> CreateAsync(string taskType, string payload, CancellationToken cancellationToken)
     {
+        if (taskType == "template_run")
+        {
+            var validation = await ValidateTemplateAsync(payload, cancellationToken);
+            if (validation["success"]?.GetValue<bool>() != true) { validation["creationRejected"] = true; return validation; }
+        }
         var mcpId = "mcp-" + Guid.NewGuid().ToString("N");
         return await CreateForExternalTaskAsync(mcpId, taskType, payload, 0, cancellationToken);
     }
+
+    public Task<JsonObject> ValidateTemplateAsync(string payload, CancellationToken cancellationToken)
+        => SendAsync("validate", null, "template_run", payload, 0, cancellationToken);
 
     public async Task<JsonObject> CreateForExternalTaskAsync(string mcpId, string taskType, string payload, int timeoutMs, CancellationToken cancellationToken)
     {
@@ -100,7 +108,10 @@ public sealed class McpTaskAdapter
     }
 
     public Task<JsonObject> GetAsync(string mcpTaskId, CancellationToken cancellationToken) => SendMappedAsync("query", mcpTaskId, cancellationToken);
-    public Task<JsonObject> ResultAsync(string mcpTaskId, CancellationToken cancellationToken) => SendMappedAsync("result", mcpTaskId, cancellationToken);
+    public Task<JsonObject> ResultAsync(string mcpTaskId, CancellationToken cancellationToken)
+        => !HasBinding(mcpTaskId) && HasDispatch(mcpTaskId)
+            ? ReconcileAsync(mcpTaskId, cancellationToken)
+            : SendMappedAsync("result", mcpTaskId, cancellationToken);
 
     public bool HasBinding(string mcpTaskId) => _bindings.Load(_projectIdentity, mcpTaskId) is not null;
 

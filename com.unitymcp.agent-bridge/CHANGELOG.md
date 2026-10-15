@@ -6,6 +6,25 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-15
+
+### Added
+
+- Discover built-in and independent project templates through `unity.agent_task_template.list`; disabled/unavailable definitions remain visible with source, schemas, versions and actionable diagnostics, without requiring Pi.
+- Execute registered definitions through task-capable `unity.agent_task_template.run` with strict templateId/inputs admission. Load versioned `ProjectSettings/AgentTaskTemplates.json` manually and reject unknown schemas, conflicting IDs and unsupported executor settings.
+- Register provider-neutral executors and explicitly support configured prompts through the optional Pi plugin within captured provider budgets and an empty file-read scope.
+
+### Changed
+
+- Route the two unchanged dedicated analysis tools/IDs through the common admission, executor and output-validation pipeline. Reload configuration for new admissions while existing tasks retain immutable definition/input/authority snapshots and results.
+- Keep internal task control out of public MCP and ordinary command discovery. Preserve rejected creation results through the durable dispatch journal without allocating an internal task or replaying work.
+
+### Compatibility
+
+- Rebuild the matching 1.4.2 local runtime and restart MCP. Existing analysis inputs/results and ordinary, modern and legacy task workflows remain compatible; SDK remains 2.2.0.
+- Rebuild the optional Pi plugin from workbench v1.4.2 source when using project-defined templates; this source snapshot requires the new Agent Bridge 1.4.2 executor contracts. Configuration UI and live model validation are outside this release.
+- Source-only publication continues: no generated executable, DLL or binary archive is uploaded. See `Documentation~/AgentTaskTemplates.md` for configuration and schema limits.
+
 ## [1.4.1] - 2026-10-11
 
 ### Fixed

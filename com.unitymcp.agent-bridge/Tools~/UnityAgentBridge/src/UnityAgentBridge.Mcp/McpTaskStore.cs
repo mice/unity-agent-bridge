@@ -34,19 +34,20 @@ public sealed class McpTaskStore : IMcpTaskStore
 
     public event Action<InputResponseReceivedEventArgs>? InputResponseReceived;
 
-    public Task<McpTaskInfo> CreateTaskAsync(CancellationToken cancellationToken)
+    public async Task<McpTaskInfo> CreateTaskAsync(CancellationToken cancellationToken)
     {
+        var pending = McpTaskExecutionContext.ConsumePending();
+        if (coordinator is not null) await coordinator.ValidateAsync(pending, cancellationToken);
         using var lease = persistence.Enter(cancellationToken);
         if (ReadRecords().Count(record => !IsTerminal(record.Task.Status)) >= policy.MaxActiveRecords)
             throw new McpProtocolException("MCP_TASK_CAPACITY: Too many active tasks; existing tracking is preserved.", McpErrorCode.InternalError);
         var now = clock.GetUtcNow();
-        var pending = McpTaskExecutionContext.ConsumePending();
         var task = new McpTaskInfo("mcp-" + Guid.NewGuid().ToString("N"), McpTaskStatus.Working, now, now,
             null, 250, "Allocated; awaiting validated execution.", null, null, new Dictionary<string, InputRequest>());
         var window = pending?.TimeoutMs > 0 ? TimeSpan.FromMilliseconds(Math.Min((long)pending.TimeoutMs + 30000, 86400000)) : policy.DefaultExecutionWindow;
         Save(new(Version, persistence.ProjectPath, task, now + window));
         if (pending is not null) pending.McpTaskId = task.TaskId;
-        return Task.FromResult(task);
+        return task;
     }
 
     public async Task<McpTaskInfo?> GetTaskAsync(string taskId, CancellationToken cancellationToken)

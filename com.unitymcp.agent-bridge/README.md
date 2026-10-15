@@ -120,3 +120,7 @@ Lua tools are delivered separately by `com.unitymcp.lua-gc-lint`. Install that U
 - Keep package-facing integration guidance under `Documentation~/`.
 - Keep repository acceptance reports under `Documentation~/AgentBridge/acceptance/`.
 - Update the relevant implementation-plan status row in the same change that adds or revises acceptance evidence.
+
+## Task template entrypoints
+
+See [Agent task templates](Documentation~/AgentTaskTemplates.md) for combined discovery, ID execution and manual project configuration with registered executors. Pi remains optional.
