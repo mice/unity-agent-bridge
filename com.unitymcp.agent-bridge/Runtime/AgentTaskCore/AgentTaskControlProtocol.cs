@@ -30,6 +30,7 @@ namespace UnityMcp.AgentTaskCore
         public string ErrorMessage { get; set; }
         public string AgentTaskId { get; set; }
         public AgentTaskSnapshot Snapshot { get; set; }
+        public AgentExecutionObservation Execution { get; set; }
         public AgentTaskCancellationDisposition? Cancellation { get; set; }
         public string State { get; set; }
         public string ResultKind { get; set; }
@@ -82,7 +83,7 @@ namespace UnityMcp.AgentTaskCore
             var request = value as AgentTaskControlRequest;
             if (request != null) return "{\"version\":" + request.Version + ",\"operation\":" + StringValue(request.Operation) + ",\"projectIdentity\":" + StringValue(request.ProjectIdentity) + ",\"agentTaskId\":" + StringValue(request.AgentTaskId) + ",\"taskType\":" + StringValue(request.TaskType) + ",\"payload\":" + StringValue(request.Payload) + ",\"timeoutMs\":" + request.TimeoutMs + "}";
             var response = value as AgentTaskControlResponse;
-            if (response != null) return "{\"version\":" + response.Version + ",\"success\":" + (response.Success ? "true" : "false") + ",\"errorCode\":" + StringValue(response.ErrorCode) + ",\"errorMessage\":" + StringValue(response.ErrorMessage) + ",\"agentTaskId\":" + StringValue(response.AgentTaskId ?? (response.Snapshot == null ? null : response.Snapshot.Id.Value)) + ",\"state\":" + StringValue(response.Snapshot == null ? response.State : response.Snapshot.State.ToString()) + ",\"resultKind\":" + StringValue(response.Snapshot?.Result?.Kind.ToString() ?? response.ResultKind) + ",\"resultReason\":" + StringValue(response.Snapshot?.Result?.Reason ?? response.ResultReason) + ",\"resultPayloadJson\":" + StringValue(response.ResultPayloadJson) + ",\"cancellation\":" + StringValue(response.Cancellation?.ToString()) + ",\"cancellationRequested\":" + (response.Snapshot != null && response.Snapshot.CancellationRequested ? "true" : "false") + ",\"createdAt\":" + StringValue(response.Snapshot == null ? null : response.Snapshot.CreatedAt.ToString("O")) + ",\"terminalAt\":" + StringValue(response.Snapshot?.TerminalAt?.ToString("O")) + "}";
+            if (response != null) return "{\"version\":" + response.Version + ",\"success\":" + (response.Success ? "true" : "false") + ",\"errorCode\":" + StringValue(response.ErrorCode) + ",\"errorMessage\":" + StringValue(response.ErrorMessage) + ",\"agentTaskId\":" + StringValue(response.AgentTaskId ?? (response.Snapshot == null ? null : response.Snapshot.Id.Value)) + ",\"state\":" + StringValue(response.Snapshot == null ? response.State : response.Snapshot.State.ToString()) + ",\"resultKind\":" + StringValue(response.Snapshot?.Result?.Kind.ToString() ?? response.ResultKind) + ",\"resultReason\":" + StringValue(response.Snapshot?.Result?.Reason ?? response.ResultReason) + ",\"resultPayloadJson\":" + StringValue(response.ResultPayloadJson) + ",\"cancellation\":" + StringValue(response.Cancellation?.ToString()) + ",\"cancellationRequested\":" + (response.Snapshot != null && response.Snapshot.CancellationRequested ? "true" : "false") + ",\"createdAt\":" + StringValue(response.Snapshot == null ? null : response.Snapshot.CreatedAt.ToString("O")) + ",\"terminalAt\":" + StringValue(response.Snapshot?.TerminalAt?.ToString("O")) + ",\"execution\":" + SerializeExecution(response.Snapshot?.Execution ?? response.Execution ?? AgentExecutionObservation.Unknown) + "}";
             throw new ArgumentException("Unsupported control message type.", nameof(value));
         }
 
@@ -122,7 +123,8 @@ namespace UnityMcp.AgentTaskCore
                 ResultKind = ReadString(value, "resultKind"),
                 ResultReason = ReadString(value, "resultReason"),
                 ResultPayloadJson = ReadString(value, "resultPayloadJson"),
-                Cancellation = ParseCancellation(ReadString(value, "cancellation"))
+                Cancellation = ParseCancellation(ReadString(value, "cancellation")),
+                Execution = ParseExecution(value)
             };
             response.AgentTaskId = ReadString(value, "agentTaskId");
             if (!string.IsNullOrEmpty(response.AgentTaskId))
@@ -149,9 +151,33 @@ namespace UnityMcp.AgentTaskCore
                 }
                 response.Snapshot = new AgentTaskSnapshot(new AgentTaskId(response.AgentTaskId), state, result,
                     null, ReadString(value, "cancellationRequested") == "true", createdAt,
-                    hasTerminal ? terminalAt : (DateTimeOffset?)null);
+                    hasTerminal ? terminalAt : (DateTimeOffset?)null, response.Execution);
             }
             return response;
+        }
+
+        private static string SerializeExecution(AgentExecutionObservation value) =>
+            "{\"schemaVersion\":1,\"stage\":" + StringValue(value.Stage) + ",\"providerId\":" + StringValue(value.ProviderId) +
+            ",\"processStarted\":" + (value.ProcessStarted.HasValue ? (value.ProcessStarted.Value ? "true" : "false") : "null") +
+            ",\"processStartedAt\":" + StringValue(value.ProcessStartedAt) + ",\"processId\":" + (value.ProcessId?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null") +
+            ",\"guardReadyAt\":" + StringValue(value.GuardReadyAt) + ",\"promptSubmittedAt\":" + StringValue(value.PromptSubmittedAt) +
+            ",\"terminalAt\":" + StringValue(value.TerminalAt) + ",\"exitCode\":" + (value.ExitCode?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null") + "}";
+
+        private static AgentExecutionObservation ParseExecution(string json)
+        {
+            var marker = "\"execution\":";
+            // The execution object is serialized last and contains only fixed scalar fields.
+            var start = json.LastIndexOf(marker, StringComparison.Ordinal);
+            if (start < 0) return AgentExecutionObservation.Unknown;
+            var body = json.Substring(start + marker.Length);
+            if (!body.StartsWith("{", StringComparison.Ordinal)) return AgentExecutionObservation.Unknown;
+            var started = ReadString(body, "processStarted");
+            int pid, exit;
+            return new AgentExecutionObservation(ReadString(body, "stage"), ReadString(body, "providerId"),
+                started == "true" ? true : started == "false" ? false : (bool?)null,
+                ReadString(body, "processStartedAt"), int.TryParse(ReadString(body, "processId"), out pid) ? pid : (int?)null,
+                ReadString(body, "guardReadyAt"), ReadString(body, "promptSubmittedAt"), ReadString(body, "terminalAt"),
+                int.TryParse(ReadString(body, "exitCode"), out exit) ? exit : (int?)null);
         }
 
         private static AgentTaskCancellationDisposition? ParseCancellation(string value)

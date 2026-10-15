@@ -17,7 +17,11 @@ namespace UnityMcp.AgentBridge
         private static readonly AgentTaskControlCodec Codec = new AgentTaskControlCodec();
         internal static string Root => Path.Combine(Directory.GetParent(Application.dataPath).FullName, "Library", "AgentBridge");
         internal static readonly string EditorSession = System.Diagnostics.Process.GetCurrentProcess().Id + ":" + System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks;
-        static AgentTaskDurableResults() => EditorApplication.update += Maintain;
+        static AgentTaskDurableResults()
+        {
+            AgentTaskTemplateExecutionService.ConfigurePersistence(Save, id => Read(id));
+            EditorApplication.update += Maintain;
+        }
 
         internal static AgentTaskControlResponse Save(AgentTaskControlResponse response)
         {

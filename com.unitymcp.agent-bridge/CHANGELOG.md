@@ -6,6 +6,21 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.4.3-rc.1] - 2026-10-16
+
+### Fixed
+
+- Accept genuine compile-tool report references from durable compile and MCP-retained report storage in both template and dedicated analysis entrypoints. Preserve legacy references and citation identity while rejecting ambiguous, malformed, oversized or escaping evidence before runner startup.
+
+### Added
+
+- Add provider-neutral execution observations to task snapshots, persisted results and MCP lifecycle projection. Distinguish admission rejection, process startup, guard readiness, prompt submission and terminal outcome; unsupported legacy observations remain unknown.
+- Matching optional Pi plugin source captures actual task-owned child PID/timestamps and retains startup milestones across success, failure, timeout and cancellation. Readiness version probes do not count as execution.
+
+### Release status
+
+- RC candidate only. Stable 1.4.3 requires candidate validation and separate maintainer promotion. Source-only publication; generated runtime/plugin binaries remain local.
+
 ## [1.4.2] - 2026-10-15
 
 ### Added

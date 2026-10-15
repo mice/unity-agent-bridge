@@ -205,7 +205,7 @@ namespace UnityMcp.AgentBridge
             }
         }
 
-        private sealed class VerifiedAnalysisRunner : IAgentRunner
+        private sealed class VerifiedAnalysisRunner : IAgentRunner, IAgentExecutionObservable
         {
             private readonly EvidenceBundle evidence;
             private readonly AnalysisInput input;
@@ -220,6 +220,7 @@ namespace UnityMcp.AgentBridge
                 inner = runner ?? throw new InvalidOperationException("Provider returned no runner.");
             }
 
+            public AgentExecutionObservation Execution => (inner as IAgentExecutionObservable)?.Execution ?? AgentExecutionObservation.Unknown;
             public bool CanCancel => inner.CanCancel;
             public void Start(AgentRunRequest request, IAgentRunnerContext context)
             {
@@ -274,12 +275,13 @@ namespace UnityMcp.AgentBridge
                 if (path == null || !File.Exists(path)) { complete = false; continue; }
                 try
                 {
+                    if (new FileInfo(path).Length > MaxEvidenceBytes - total) { complete = false; continue; }
                     var bytes = File.ReadAllBytes(path);
                     total += bytes.Length;
                     if (total > MaxEvidenceBytes) { complete = false; continue; }
                     var text = File.ReadAllText(path);
                     var report = JObject.Parse(text);
-                    if (report["contractVersion"] == null || report["diagnostics"] == null) { complete = false; continue; }
+                    if (report["contractVersion"]?.Type != JTokenType.String || string.IsNullOrWhiteSpace(report.Value<string>("contractVersion")) || report["diagnostics"] is not JArray || (!template.Template.RequiredEvidenceKinds.Contains(UnityAssetAnalystSpecialistFactory.AssetReportEvidenceKind) && report.Value<string>("contractVersion") != "compile.v1" && report.Value<string>("contractVersion") != "1.0")) { complete = false; continue; }
                     items.Add(string.Equals(template.Template.RequiredEvidenceKinds.FirstOrDefault(), UnityAssetAnalystSpecialistFactory.AssetReportEvidenceKind, StringComparison.Ordinal)
                         ? UnityAssetEvidence.Create(id, MakeProjectRelative(root, path), text.Length > 32768 ? text.Substring(0, 32768) : text, bytes.Length)
                         : UnityCompileEvidence.Create(id, MakeProjectRelative(root, path), text.Length > 32768 ? text.Substring(0, 32768) : text, bytes.Length));
@@ -291,13 +293,32 @@ namespace UnityMcp.AgentBridge
 
         private static string ResolveEvidencePath(string root, string id)
         {
-            if (string.IsNullOrWhiteSpace(id) || id.IndexOf("..", StringComparison.Ordinal) >= 0 || Path.IsPathRooted(id)) return null;
+            if (string.IsNullOrWhiteSpace(id) || Path.IsPathRooted(id) || id.IndexOf(':') >= 0) return null;
             var normalized = id.Replace('\\', '/');
-            var reportRoot = Path.GetFullPath(Path.Combine(root, "Temp", "AgentBridge", "reports"));
-            var candidate = normalized.StartsWith("Temp/AgentBridge/reports/", StringComparison.Ordinal)
-                ? Path.GetFullPath(Path.Combine(root, normalized.Replace('/', Path.DirectorySeparatorChar)))
-                : Path.GetFullPath(Path.Combine(reportRoot, normalized.EndsWith(".json", StringComparison.Ordinal) ? normalized : "compile_" + normalized + ".json"));
-            return candidate.StartsWith(reportRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal) ? candidate : null;
+            if (normalized.Split('/').Any(segment => segment == ".." || segment == "." || segment.Length == 0)) return null;
+            var roots = new[] { "Temp/AgentBridge/reports", "Library/AgentBridge/compile-reports", "Library/AgentBridge/mcp-task-reports" };
+            var explicitRoot = roots.FirstOrDefault(r => normalized.StartsWith(r + "/", StringComparison.Ordinal));
+            if (explicitRoot != null)
+                return SafeEvidencePath(root, explicitRoot, normalized);
+            if (normalized.Contains("/")) return null;
+            var file = normalized.EndsWith(".json", StringComparison.Ordinal) ? normalized : "compile_" + normalized + ".json";
+            var candidates = roots.Select(r => SafeEvidencePath(root, r, r + "/" + file)).Where(path => path != null && File.Exists(path)).ToArray();
+            return candidates.Length == 1 ? candidates[0] : null;
+        }
+
+        private static string SafeEvidencePath(string projectRoot, string ownedRoot, string relative)
+        {
+            var project = Path.GetFullPath(projectRoot);
+            var reportRoot = Path.GetFullPath(Path.Combine(project, ownedRoot));
+            var path = Path.GetFullPath(Path.Combine(project, relative));
+            if (!path.EndsWith(".json", StringComparison.Ordinal) || !path.StartsWith(reportRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return null;
+            // Reject links on every descendant, including owned-root ancestors, before reading bytes.
+            for (var current = path; !string.Equals(current, project, StringComparison.OrdinalIgnoreCase); current = Path.GetDirectoryName(current))
+            {
+                if (current == null) return null;
+                if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) return null;
+            }
+            return path;
         }
 
         private static string MakeProjectRelative(string root, string path) => new Uri(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar).MakeRelativeUri(new Uri(path)).ToString().Replace('\\', '/');

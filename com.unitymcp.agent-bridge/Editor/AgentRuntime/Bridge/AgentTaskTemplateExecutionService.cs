@@ -14,6 +14,11 @@ namespace UnityMcp.AgentBridge
     public static class AgentTaskTemplateExecutionService
     {
         public const string TaskType = "template_run";
+        private static Func<AgentTaskControlResponse, AgentTaskControlResponse> retainTerminal = response => response;
+        private static Func<string, AgentTaskControlResponse> readTerminal = id => null;
+        // The host supplies storage; this neutral bridge assembly never references host internals.
+        public static void ConfigurePersistence(Func<AgentTaskControlResponse, AgentTaskControlResponse> save, Func<string, AgentTaskControlResponse> read)
+        { retainTerminal = save ?? throw new ArgumentNullException(nameof(save)); readTerminal = read ?? throw new ArgumentNullException(nameof(read)); }
         private static readonly AgentTaskManager Manager = new AgentTaskManager(idFactory: () => new AgentTaskId("template-" + Guid.NewGuid().ToString("N")));
         private static readonly Dictionary<string, AgentTaskTemplateExecutorRegistration> Owners = new Dictionary<string, AgentTaskTemplateExecutorRegistration>(StringComparer.Ordinal);
         private static readonly Dictionary<string, AgentTaskTemplateAdmission> Admissions = new Dictionary<string, AgentTaskTemplateAdmission>(StringComparer.Ordinal);
@@ -23,15 +28,16 @@ namespace UnityMcp.AgentBridge
             EditorApplication.update += () =>
             {
                 foreach (var id in Owners.Keys.ToArray())
-                    if (Manager.Get(new AgentTaskId(id))?.State == AgentTaskState.Running) Manager.Advance(new AgentTaskId(id));
+                    if (Manager.Get(new AgentTaskId(id))?.State == AgentTaskState.Running)
+                    { Manager.Advance(new AgentTaskId(id)); Project(id); }
             };
             AgentTaskTemplateExecutors.Retired += owner =>
             {
-                foreach (var pair in Owners.Where(p => ReferenceEquals(p.Value, owner)).ToArray()) Manager.Cancel(new AgentTaskId(pair.Key));
+                foreach (var pair in Owners.Where(p => ReferenceEquals(p.Value, owner)).ToArray()) { Manager.Cancel(new AgentTaskId(pair.Key)); Project(pair.Key); }
             };
             AgentRunnerProviderRegistry.Retired += owner =>
             {
-                foreach (var pair in Admissions.Where(p => owner.TemplateIds.Contains(p.Value.Definition.Id)).ToArray()) Manager.Cancel(new AgentTaskId(pair.Key));
+                foreach (var pair in Admissions.Where(p => owner.TemplateIds.Contains(p.Value.Definition.Id)).ToArray()) { Manager.Cancel(new AgentTaskId(pair.Key)); Project(pair.Key); }
             };
         }
         public static string ProjectRoot => Directory.GetParent(Application.dataPath).FullName;
@@ -64,17 +70,17 @@ namespace UnityMcp.AgentBridge
                 }
                 return Project(id.Value);
             }
-            catch (AgentProviderException exception) { return Error(exception.Code, exception.Message); }
-            catch (Exception exception) { return Error("TEMPLATE_ADMISSION_FAILED", exception.Message); }
+            catch (AgentProviderException exception) { return Error(exception.Code, exception.Message, request?.Operation == AgentTaskControlProtocol.Create || request?.Operation == "validate"); }
+            catch (Exception exception) { return Error("TEMPLATE_ADMISSION_FAILED", exception.Message, request?.Operation == AgentTaskControlProtocol.Create || request?.Operation == "validate"); }
         }
-        private static AgentTaskControlResponse Error(string code, string message) => new AgentTaskControlResponse { Success = false, ErrorCode = code, ErrorMessage = message };
+        private static AgentTaskControlResponse Error(string code, string message, bool beforeCreate = false) => new AgentTaskControlResponse { Success = false, ErrorCode = code, ErrorMessage = message, Execution = beforeCreate ? AgentExecutionObservation.NotStarted : AgentExecutionObservation.Unknown };
         private static AgentTaskControlResponse Project(string id)
         {
             var snapshot = Manager.Get(new AgentTaskId(id));
-            if (snapshot == null) return Error("NOT_FOUND", "Template task was not found.");
-            return new AgentTaskControlResponse { Success = snapshot.State != AgentTaskState.Failed, ErrorCode = snapshot.Error?.Code,
+            if (snapshot == null) return readTerminal(id) ?? new AgentTaskControlResponse { Success = false, ErrorCode = "NOT_FOUND", ErrorMessage = "Template task was not found." };
+            return retainTerminal(new AgentTaskControlResponse { Success = snapshot.State != AgentTaskState.Failed, ErrorCode = snapshot.Error?.Code,
                 ErrorMessage = snapshot.Error?.Message, AgentTaskId = id, Snapshot = snapshot,
-                ResultPayloadJson = (snapshot.Result?.Payload as AgentRunResult)?.Output };
+                ResultPayloadJson = (snapshot.Result?.Payload as AgentRunResult)?.Output });
         }
         private sealed class OutputFactory : IAgentRunnerFactory
         {
@@ -83,11 +89,12 @@ namespace UnityMcp.AgentBridge
             public OutputFactory(IAgentRunnerFactory factory, AgentTaskTemplateAdmission admission) { this.factory = factory; this.admission = admission; }
             public IAgentRunner Create(AgentRunRequest request) => new OutputRunner(factory.Create(request), admission);
         }
-        private sealed class OutputRunner : IAgentRunner
+        private sealed class OutputRunner : IAgentRunner, IAgentExecutionObservable
         {
             private readonly IAgentRunner runner;
             private readonly AgentTaskTemplateAdmission admission;
             public OutputRunner(IAgentRunner runner, AgentTaskTemplateAdmission admission) { this.runner = runner; this.admission = admission; }
+            public AgentExecutionObservation Execution => (runner as IAgentExecutionObservable)?.Execution ?? AgentExecutionObservation.Unknown;
             public bool CanCancel => runner.CanCancel;
             public void Start(AgentRunRequest request, IAgentRunnerContext context) => runner.Start(request, new OutputContext(context, admission));
             public void Advance(IAgentRunnerContext context) => runner.Advance(new OutputContext(context, admission));

@@ -96,8 +96,8 @@ public sealed class McpTaskStore : IMcpTaskStore
                 if (status is "completed" or "failed")
                     record = Complete(record, McpTaskStatus.Completed, McpToolResultConverter.Serialize(projection), null, "Operation completed.");
                 else if (status == "cancelled")
-                    record = Complete(record, McpTaskStatus.Cancelled, null, null, "Unity execution cancelled.");
-                else record = record with { Task = record.Task with { LastUpdatedAt = now, StatusMessage = "Unity operation is running." } };
+                    record = Complete(record, McpTaskStatus.Cancelled, McpToolResultConverter.Serialize(projection), null, "Unity execution cancelled.");
+                else record = record with { Task = record.Task with { LastUpdatedAt = now, StatusMessage = projection["execution"] is JsonObject execution ? "Execution: " + execution.ToJsonString() : "Unity operation is running." } };
             }
             Save(record);
             return record.Task;
@@ -117,7 +117,9 @@ public sealed class McpTaskStore : IMcpTaskStore
             if (task.Status == McpTaskStatus.Failed)
                 throw new McpProtocolException(task.Error?.GetProperty("message").GetString() ?? "Task failed.", McpErrorCode.InternalError);
             if (task.Status == McpTaskStatus.Cancelled)
-                return new JsonObject { ["taskId"] = taskId, ["state"] = "Cancelled", ["status"] = "cancelled", ["success"] = false };
+                return task.Result.HasValue
+                    ? JsonNode.Parse(task.Result.Value.GetRawText())?["structuredContent"]?.AsObject() ?? new JsonObject { ["taskId"] = taskId, ["state"] = "Cancelled", ["status"] = "cancelled", ["success"] = false }
+                    : new JsonObject { ["taskId"] = taskId, ["state"] = "Cancelled", ["status"] = "cancelled", ["success"] = false };
             await Task.Delay(250, token).ConfigureAwait(false);
         }
     }

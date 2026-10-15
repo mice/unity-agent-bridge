@@ -74,7 +74,7 @@ public sealed class McpTaskAdapter
         _bindings.Save(new McpTaskBinding(_projectIdentity, dispatch.McpTaskId, agentId, dispatch.CommandId));
         var state = response["state"]?.GetValue<string>();
         var status = string.Equals(state, "Failed", StringComparison.OrdinalIgnoreCase) ? "failed" : string.Equals(state, "Cancelled", StringComparison.OrdinalIgnoreCase) ? "cancelled" : "working";
-        return new JsonObject { ["success"] = status == "working", ["taskId"] = dispatch.McpTaskId, ["status"] = status, ["pollIntervalMs"] = 250 };
+        return new JsonObject { ["success"] = status == "working", ["taskId"] = dispatch.McpTaskId, ["status"] = status, ["pollIntervalMs"] = 250, ["execution"] = response["execution"]?.DeepClone() ?? UnknownExecution() };
     }
 
     internal bool HasDispatch(string taskId) => _dispatches.Load(_projectIdentity, taskId) is not null;
@@ -190,7 +190,9 @@ public sealed class McpTaskAdapter
         if (envelope is null) return Error("INVALID_RESPONSE", "Unity returned an invalid task response.");
         var embedded = envelope["metricsObjectJson"]?.GetValue<string>();
         var response = !string.IsNullOrWhiteSpace(embedded) ? JsonNode.Parse(embedded)?.AsObject() : envelope["metrics"]?.AsObject();
-        return response ?? envelope;
+        var result = response ?? envelope;
+        result["execution"] ??= UnknownExecution();
+        return result;
     }
 
     private static string MapStatus(JsonObject response)
@@ -199,8 +201,10 @@ public sealed class McpTaskAdapter
         return state?.ToLowerInvariant() switch { "completed" => "completed", "failed" => "failed", "cancelled" => "cancelled", "created" or "running" => "working", _ => response["success"]?.GetValue<bool>() == false ? "failed" : "working" };
     }
 
-    private static JsonObject Error(string code, string message) => new() { ["success"] = false, ["errorCode"] = code, ["errorMessage"] = message, ["status"] = "failed" };
+    private static JsonObject UnknownExecution() => new() { ["schemaVersion"] = 1, ["stage"] = "unknown", ["processStarted"] = null };
+
+    private static JsonObject Error(string code, string message) => new() { ["success"] = false, ["errorCode"] = code, ["errorMessage"] = message, ["status"] = "failed", ["execution"] = UnknownExecution() };
 
     internal static JsonObject ObservationError(string code, string message, string taskId) => new()
-    { ["success"] = false, ["errorCode"] = code, ["errorMessage"] = message, ["status"] = "observation_failed", ["observationFailure"] = true, ["taskId"] = taskId };
+    { ["success"] = false, ["errorCode"] = code, ["errorMessage"] = message, ["status"] = "observation_failed", ["observationFailure"] = true, ["taskId"] = taskId, ["execution"] = UnknownExecution() };
 }

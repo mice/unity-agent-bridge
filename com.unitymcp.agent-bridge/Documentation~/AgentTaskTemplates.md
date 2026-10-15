@@ -1,5 +1,9 @@
 # Agent task templates
 
+## Patch — 1.4.3-rc.1 evidence and execution observations
+
+Current compile report paths can be used directly as evidence, including durable and MCP-retained reports. Runner startup, guard readiness and prompt submission are separately observable through MCP task lifecycle responses. See [Runner execution observations](RunnerExecutionObservability.md). Readiness alone does not establish execution.
+
 Implementation: `unify-agent-task-template-entrypoints` (TEMPLATE-001).
 
 `unity.agent_task_template.list` is an ordinary empty-object query. Its MCP name is

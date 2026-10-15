@@ -3,7 +3,7 @@ using UnityMcp.AgentTaskCore;
 
 namespace UnityMcp.AgentRuntime
 {
-    public sealed class AgentExecutionTask : IAgentTask
+    public sealed class AgentExecutionTask : IAgentTask, IAgentExecutionObservable
     {
         private readonly AgentRunRequest request;
         private readonly IAgentRunner runner;
@@ -14,6 +14,7 @@ namespace UnityMcp.AgentRuntime
             this.runner = runner ?? throw new ArgumentNullException(nameof(runner));
         }
 
+        public AgentExecutionObservation Execution => (runner as IAgentExecutionObservable)?.Execution ?? AgentExecutionObservation.Unknown;
         public bool CanCancel => runner.CanCancel;
         public void Start(IAgentTaskContext context) => runner.Start(request, new RunnerContext(request, context));
         public void Advance(IAgentTaskContext context) => runner.Advance(new RunnerContext(request, context));

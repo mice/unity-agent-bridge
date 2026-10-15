@@ -169,7 +169,7 @@ namespace UnityMcp.AgentTaskCore
             public bool CancellationRequested;
             public DateTimeOffset? TerminalAt;
             public bool IsTerminal => State == AgentTaskState.Completed || State == AgentTaskState.Failed || State == AgentTaskState.Cancelled;
-            public AgentTaskSnapshot Snapshot => new AgentTaskSnapshot(Id, State, Result, Error, CancellationRequested, CreatedAt, TerminalAt);
+            public AgentTaskSnapshot Snapshot => new AgentTaskSnapshot(Id, State, Result, Error, CancellationRequested, CreatedAt, TerminalAt, (Task as IAgentExecutionObservable)?.Execution);
         }
 
         private sealed class Context : IAgentTaskContext

@@ -90,10 +90,42 @@ namespace UnityMcp.AgentTaskCore
             new AgentTaskResult(AgentTaskResultKind.Cancelled, reason, null);
     }
 
+    // Optional observation seam shared by tasks and runners. Missing support means unknown.
+    public interface IAgentExecutionObservable
+    {
+        AgentExecutionObservation Execution { get; }
+    }
+
+    public sealed class AgentExecutionObservation
+    {
+        public AgentExecutionObservation(string stage = "unknown", string providerId = null,
+            bool? processStarted = null, string processStartedAt = null, int? processId = null,
+            string guardReadyAt = null, string promptSubmittedAt = null, string terminalAt = null, int? exitCode = null)
+        {
+            Stage = stage; ProviderId = providerId; ProcessStarted = processStarted;
+            ProcessStartedAt = processStartedAt; ProcessId = processId; GuardReadyAt = guardReadyAt;
+            PromptSubmittedAt = promptSubmittedAt; TerminalAt = terminalAt; ExitCode = exitCode;
+        }
+        public int SchemaVersion => 1;
+        public string Stage { get; }
+        public string ProviderId { get; }
+        public bool? ProcessStarted { get; }
+        public string ProcessStartedAt { get; }
+        public int? ProcessId { get; }
+        public string GuardReadyAt { get; }
+        public string PromptSubmittedAt { get; }
+        public string TerminalAt { get; }
+        public int? ExitCode { get; }
+        public AgentExecutionObservation Terminal(string utc) => new AgentExecutionObservation("terminal", ProviderId,
+            ProcessStarted, ProcessStartedAt, ProcessId, GuardReadyAt, PromptSubmittedAt, utc, ExitCode);
+        public static AgentExecutionObservation Unknown => new AgentExecutionObservation();
+        public static AgentExecutionObservation NotStarted => new AgentExecutionObservation("not_started", processStarted: false);
+    }
+
     public sealed class AgentTaskSnapshot
     {
         internal AgentTaskSnapshot(AgentTaskId id, AgentTaskState state, AgentTaskResult result, AgentTaskError error,
-            bool cancellationRequested, DateTimeOffset createdAt, DateTimeOffset? terminalAt)
+            bool cancellationRequested, DateTimeOffset createdAt, DateTimeOffset? terminalAt, AgentExecutionObservation execution = null)
         {
             Id = id;
             State = state;
@@ -102,8 +134,10 @@ namespace UnityMcp.AgentTaskCore
             CancellationRequested = cancellationRequested;
             CreatedAt = createdAt;
             TerminalAt = terminalAt;
+            Execution = execution ?? AgentExecutionObservation.Unknown;
         }
 
+        public AgentExecutionObservation Execution { get; }
         public AgentTaskId Id { get; }
         public AgentTaskState State { get; }
         public AgentTaskResult Result { get; }
