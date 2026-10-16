@@ -1,6 +1,13 @@
 {
   "versions": [
     {
+      "version": "1.4.3-rc.2",
+      "tag": "v1.4.3-rc.2",
+      "artifactUrl": "",
+      "sourceArchiveUrl": "https://github.com/mice/unity-agent-bridge/archive/refs/tags/v1.4.3-rc.2.zip",
+      "commitSha": "ebe50e192b799d6a9508b2cbc884bba6e11983f9"
+    },
+    {
       "version": "1.4.3-rc.1",
       "tag": "v1.4.3-rc.1",
       "artifactUrl": "",
