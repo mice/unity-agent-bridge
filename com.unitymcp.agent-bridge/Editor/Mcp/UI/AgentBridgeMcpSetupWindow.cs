@@ -339,14 +339,16 @@ namespace UnityMcp.AgentBridge.Mcp
                     EditorGUILayout.TextField("Download Cache", Path.Combine(projectRoot, "Temp", "AgentBridge"));
                 }
 
-                var publishedVersions = new MachineRuntimeLocator().ListPublishedVersions(settings);
+                var publishedLocator = new MachineRuntimeLocator();
+                var publishedVersions = publishedLocator.ListPublishedVersions(settings);
+                foreach (var diagnostic in publishedLocator.Diagnostics) EditorGUILayout.HelpBox(diagnostic, MessageType.Warning);
                 var versionOptions = new string[publishedVersions.Count + 1];
                 versionOptions[0] = "(select published version)";
                 for (var index = 0; index < publishedVersions.Count; index++)
                 {
                     var publishedVersion = publishedVersions[index];
                     versionOptions[index + 1] = publishedVersion.Tag + " — " +
-                        (publishedVersion.IsInstalled ? "installed" : "download required");
+                        (!publishedVersion.IsAvailable ? "unavailable" : publishedVersion.IsInstalled ? "installed" : "download required");
                 }
 
                 var selectedPublishedIndex = 0;
@@ -1021,7 +1023,7 @@ namespace UnityMcp.AgentBridge.Mcp
 
         internal static bool CanDownloadAndInstall(PublishedMachineRuntimeVersion release)
         {
-            if (release == null || string.IsNullOrWhiteSpace(release.Version))
+            if (release == null || !release.IsAvailable || string.IsNullOrWhiteSpace(release.Version))
             {
                 return false;
             }

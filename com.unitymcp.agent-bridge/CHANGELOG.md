@@ -6,6 +6,13 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.4.3-rc.2] - 2026-10-16
+
+### Fixed
+
+- Discover the installed immutable tag's runtime from validated Unity Git package identity even when its bundled catalog omits itself. Reconcile source conflicts and reject mismatched immutable cache reuse; honor custom machine roots during installation.
+- Filter lower-base RCs after merging every publication source and fallback. Retain same-base candidates, supported stable releases, installed-version management and exact pins; expose catalog/identity diagnostics.
+
 ## [1.4.3-rc.1] - 2026-10-16
 
 ### Fixed

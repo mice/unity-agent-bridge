@@ -95,7 +95,7 @@ namespace UnityMcp.AgentBridge.Mcp
             IProgress<MachineRuntimeDownloadProgress> progress,
             CancellationToken cancellationToken)
         {
-            if (release == null || string.IsNullOrWhiteSpace(release.Version))
+            if (release == null || !release.IsAvailable || string.IsNullOrWhiteSpace(release.Version))
             {
                 return MachineRuntimeDownloadResult.Fail("release_missing", "Select a published runtime version first.");
             }
@@ -127,6 +127,15 @@ namespace UnityMcp.AgentBridge.Mcp
                         return MachineRuntimeDownloadResult.Fail(
                             "cached_artifact_version_mismatch",
                             "Cached runtime archive does not match selected version " + release.Version + ": " + cachedArchive);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(release.CommitSha))
+                    {
+                        var cachedIdentity = ReadCachedArtifactManifest(cachedArchive);
+                        if (!string.Equals(cachedIdentity.commitSha, release.CommitSha, StringComparison.OrdinalIgnoreCase) ||
+                            !string.Equals(cachedIdentity.gitTag, release.Tag, StringComparison.Ordinal))
+                            return MachineRuntimeDownloadResult.Fail("cached_artifact_identity_mismatch",
+                                "Cached runtime source identity differs from the selected release; the immutable cache was not changed.");
                     }
 
                     expectedSha256 = ComputeSha256(cachedArchive);
@@ -234,7 +243,7 @@ namespace UnityMcp.AgentBridge.Mcp
                         "Machine runtime manager is missing: " + managerScript);
                 }
 
-                var managerRoot = MachineRuntimeLocator.ResolveDefaultManagerRoot();
+                var managerRoot = MachineRuntimeLocator.ResolveManagerRoot(settings);
                 var powerShell = ResolvePowerShellExecutable();
                 var request = new ProcessExecutionRequest
                 {
@@ -598,6 +607,9 @@ namespace UnityMcp.AgentBridge.Mcp
         }
 
         private static string ReadCachedArtifactVersion(string archivePath)
+            => ReadCachedArtifactManifest(archivePath).version.Trim();
+
+        private static CachedReleaseManifest ReadCachedArtifactManifest(string archivePath)
         {
             using (var archive = ZipFile.OpenRead(archivePath))
             {
@@ -616,7 +628,7 @@ namespace UnityMcp.AgentBridge.Mcp
                         throw new InvalidDataException("release-manifest.json does not contain a version.");
                     }
 
-                    return manifest.version.Trim();
+                    return manifest;
                 }
             }
         }
@@ -654,6 +666,8 @@ namespace UnityMcp.AgentBridge.Mcp
         private sealed class CachedReleaseManifest
         {
             public string version;
+            public string gitTag;
+            public string commitSha;
         }
 
         private sealed class SourceBuildResult

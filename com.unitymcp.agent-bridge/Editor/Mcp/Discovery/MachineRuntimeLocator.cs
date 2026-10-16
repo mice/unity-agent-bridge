@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor.PackageManager;
 using UnityEngine;
 
@@ -14,6 +15,19 @@ namespace UnityMcp.AgentBridge.Mcp
         public string SourceArchiveUrl { get; set; } = string.Empty;
         public string CommitSha { get; set; } = string.Empty;
         public bool IsInstalled { get; set; }
+        public bool IsAvailable { get; set; } = true;
+        public string Diagnostic { get; set; } = string.Empty;
+        public string Provenance { get; set; } = string.Empty;
+    }
+
+    internal sealed class InstalledRuntimePackageIdentity
+    {
+        public string Version { get; set; } = string.Empty;
+        public string PackageId { get; set; } = string.Empty;
+        public string Revision { get; set; } = string.Empty;
+        public string CommitSha { get; set; } = string.Empty;
+        public string PackageRoot { get; set; } = string.Empty;
+        public bool IsGit { get; set; }
     }
 
     internal sealed class MachineRuntimeLocator
@@ -21,6 +35,31 @@ namespace UnityMcp.AgentBridge.Mcp
         internal const string MachineMode = "machine";
         internal const string RuntimeSelectionFileName = "runtime-selection.json";
         internal const string MinimumPublishedRuntimeVersion = "1.2.12-rc.2";
+
+        private readonly Func<InstalledRuntimePackageIdentity> readPackage;
+        private readonly Func<string, IReadOnlyList<PublishedMachineRuntimeVersion>> readCatalog;
+        private readonly List<string> diagnostics = new List<string>();
+        internal IReadOnlyList<string> Diagnostics => diagnostics.AsReadOnly();
+
+        internal MachineRuntimeLocator() : this(null, null) { }
+
+        internal MachineRuntimeLocator(Func<InstalledRuntimePackageIdentity> readPackage,
+            Func<string, IReadOnlyList<PublishedMachineRuntimeVersion>> readCatalog = null)
+        {
+            this.readPackage = readPackage ?? ReadInstalledPackage;
+            this.readCatalog = readCatalog;
+        }
+
+        private static InstalledRuntimePackageIdentity ReadInstalledPackage()
+        {
+            var package = PackageInfo.FindForAssembly(typeof(MachineRuntimeLocator).Assembly);
+            if (package == null) return null;
+            return new InstalledRuntimePackageIdentity { Version = package.version, PackageId = package.packageId,
+                Revision = package.git?.revision ?? string.Empty, CommitSha = package.git?.hash ?? string.Empty,
+                PackageRoot = package.resolvedPath, IsGit = package.source == PackageSource.Git };
+        }
+
+        private void Diagnose(string message) { if (diagnostics.Count < 32 && !diagnostics.Contains(message)) diagnostics.Add(message); }
 
         public string ResolveRoot(McpEditorSettings settings)
         {
@@ -99,112 +138,110 @@ namespace UnityMcp.AgentBridge.Mcp
 
         internal IReadOnlyList<PublishedMachineRuntimeVersion> ListPublishedVersions(McpEditorSettings settings)
         {
-            if (settings == null)
-            {
-                return Array.Empty<PublishedMachineRuntimeVersion>();
-            }
-
+            diagnostics.Clear();
+            if (settings == null) return Array.Empty<PublishedMachineRuntimeVersion>();
             var managerRoot = ResolveManagerRoot(settings);
-            var releasesRoot = Path.Combine(managerRoot, "releases");
-            if (!Directory.Exists(releasesRoot))
-            {
-                return IsDefaultManagerRoot(managerRoot)
-                    ? new List<PublishedMachineRuntimeVersion>(ReadPackagedPublishedVersions(managerRoot))
-                    : Array.Empty<PublishedMachineRuntimeVersion>();
-            }
-
-            var publishedVersions = new List<PublishedMachineRuntimeVersion>();
+            InstalledRuntimePackageIdentity package = null;
+            try { package = readPackage(); }
+            catch { Diagnose("RUNTIME_PACKAGE_IDENTITY_UNAVAILABLE: Installed package metadata could not be read."); }
+            var rows = new List<PublishedMachineRuntimeVersion>();
             try
             {
-                foreach (var releaseRoot in Directory.GetDirectories(releasesRoot))
+                foreach (var row in readCatalog != null ? readCatalog(managerRoot) : ReadPackagedPublishedVersions(managerRoot, package))
+                    if (row != null) { row.Provenance = "packaged-catalog"; rows.Add(row); }
+            }
+            catch { Diagnose("RUNTIME_CATALOG_UNREADABLE: Packaged catalog could not be read."); }
+            ReadMachinePublishedVersions(managerRoot, rows);
+            var self = CreateSelfVersion(package);
+            if (self != null) rows.Add(self);
+            else Diagnose("RUNTIME_PACKAGE_IDENTITY_UNVERIFIED: A self-release requires the expected repository, exact version tag and full resolved commit SHA.");
+
+            var valid = rows.Where(row => IsSupportedPublishedVersion(row.Version)).ToArray();
+            var merged = new List<PublishedMachineRuntimeVersion>();
+            foreach (var group in valid.GroupBy(row => row.Version, StringComparer.Ordinal))
+            {
+                var candidates = group.ToArray();
+                var authoritative = candidates.FirstOrDefault(row => row.Provenance == "installed-package");
+                var identities = candidates.Where(HasCompleteSourceIdentity).Select(row => row.Tag + ":" + row.CommitSha.ToLowerInvariant()).Distinct(StringComparer.Ordinal).ToArray();
+                var selected = authoritative ?? candidates.OrderByDescending(HasCompleteSourceIdentity)
+                    .ThenBy(row => row.Tag, StringComparer.Ordinal).ThenBy(row => row.CommitSha, StringComparer.Ordinal).First();
+                if (identities.Length > 1)
                 {
-                    var version = Path.GetFileName(releaseRoot);
-                    if (!IsSupportedPublishedVersion(version))
-                    {
-                        continue;
-                    }
-
-                    var manifestPath = Path.Combine(releaseRoot, "release-manifest.json");
-                    if (!File.Exists(manifestPath))
-                    {
-                        continue;
-                    }
-
-                    var manifest = JsonUtility.FromJson<ReleaseManifestFile>(File.ReadAllText(manifestPath));
-                    if (manifest == null || !string.Equals(manifest.version?.Trim(), version, StringComparison.Ordinal))
-                    {
-                        continue;
-                    }
-
-                    var tag = !string.IsNullOrWhiteSpace(manifest.tag)
-                        ? manifest.tag.Trim()
-                        : !string.IsNullOrWhiteSpace(manifest.gitTag) ? manifest.gitTag.Trim() : "v" + version;
-                    var sourceArchiveUrl = CreateGitHubSourceArchiveUrl(tag);
-                    var artifactUrl = NormalizeArtifactUrl(version, manifest.artifactUrl);
-                    if (string.Equals(manifest.buildOrigin, "git-tag-source", StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(artifactUrl, sourceArchiveUrl, StringComparison.OrdinalIgnoreCase))
-                    {
-                        artifactUrl = string.Empty;
-                    }
-
-                    publishedVersions.Add(new PublishedMachineRuntimeVersion
-                    {
-                        Version = version,
-                        Tag = tag,
-                        ArtifactUrl = artifactUrl,
-                        SourceArchiveUrl = sourceArchiveUrl,
-                        CommitSha = manifest.commitSha?.Trim() ?? string.Empty,
-                        IsInstalled = IsUsableInstalledVersion(Path.Combine(managerRoot, "versions", version), version),
-                    });
+                    selected.Diagnostic = "RUNTIME_SOURCE_IDENTITY_CONFLICT: Release metadata disagrees about this version's immutable source.";
+                    selected.IsAvailable = authoritative != null;
+                    Diagnose(selected.Version + ": " + selected.Diagnostic);
                 }
-            }
-            catch (IOException)
-            {
-                return Array.Empty<PublishedMachineRuntimeVersion>();
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return Array.Empty<PublishedMachineRuntimeVersion>();
-            }
-
-            if (IsDefaultManagerRoot(managerRoot))
-            {
-                MergePackagedPublishedVersions(managerRoot, publishedVersions);
+                if (!string.Equals(selected.Tag, "v" + selected.Version, StringComparison.Ordinal) ||
+                    string.IsNullOrWhiteSpace(selected.ArtifactUrl) && !HasCompleteSourceIdentity(selected))
+                {
+                    selected.IsAvailable = false;
+                    selected.Diagnostic = "RUNTIME_SOURCE_IDENTITY_INVALID: A source-only release requires an exact tag, approved source URL and full commit SHA.";
+                    Diagnose(selected.Version + ": " + selected.Diagnostic);
+                }
+                selected.Provenance = string.Join(",", candidates.Select(row => row.Provenance).Distinct().OrderBy(value => value, StringComparer.Ordinal));
+                selected.IsInstalled = selected.IsAvailable && IsUsableInstalledVersion(Path.Combine(managerRoot, "versions", selected.Version), selected.Version,
+                    HasValidCommitSha(selected.CommitSha) ? selected.CommitSha : null);
+                merged.Add(selected);
             }
 
-            publishedVersions.Sort((left, right) => CompareSemanticVersionsDescending(left.Version, right.Version));
-            return publishedVersions;
+            var hasThreshold = TryBaseVersion(package?.Version, out var threshold);
+            if (!hasThreshold) Diagnose("RUNTIME_PACKAGE_VERSION_INVALID: RC choices are withheld because the installed package base version is unavailable.");
+            var visible = merged.Where(row => !IsReleaseCandidate(row.Version) || hasThreshold &&
+                TryBaseVersion(row.Version, out var candidateBase) && candidateBase.CompareTo(threshold) >= 0).ToList();
+            visible.Sort((left, right) => CompareSemanticVersionsDescending(left.Version, right.Version));
+            return visible;
         }
 
-        private static void MergePackagedPublishedVersions(
-            string managerRoot,
-            List<PublishedMachineRuntimeVersion> publishedVersions)
+        private PublishedMachineRuntimeVersion CreateSelfVersion(InstalledRuntimePackageIdentity package)
         {
-            foreach (var packagedVersion in ReadPackagedPublishedVersions(managerRoot))
+            if (package == null || !package.IsGit || !IsSupportedPublishedVersion(package.Version) || !HasValidCommitSha(package.CommitSha) ||
+                package.Revision != "v" + package.Version) return null;
+            var suffix = "https://github.com/mice/unity-agent-bridge.git?path=/com.unitymcp.agent-bridge#" + package.Revision;
+            if (package.PackageId != "com.unitymcp.agent-bridge@git+" + suffix && package.PackageId != "com.unitymcp.agent-bridge@" + suffix) return null;
+            return new PublishedMachineRuntimeVersion { Version = package.Version, Tag = package.Revision,
+                SourceArchiveUrl = CreateGitHubSourceArchiveUrl(package.Revision), CommitSha = package.CommitSha.ToLowerInvariant(), Provenance = "installed-package" };
+        }
+
+        private void ReadMachinePublishedVersions(string managerRoot, List<PublishedMachineRuntimeVersion> rows)
+        {
+            var releasesRoot = Path.Combine(managerRoot, "releases");
+            if (!Directory.Exists(releasesRoot)) return;
+            string[] directories;
+            try { directories = Directory.GetDirectories(releasesRoot); }
+            catch { Diagnose("RUNTIME_MACHINE_CATALOG_UNREADABLE: Machine releases could not be enumerated."); return; }
+            foreach (var directory in directories)
             {
-                var existingIndex = -1;
-                for (var index = 0; index < publishedVersions.Count; index++)
+                var version = Path.GetFileName(directory);
+                if (!IsSupportedPublishedVersion(version)) continue;
+                var path = Path.Combine(directory, "release-manifest.json");
+                if (!File.Exists(path)) continue;
+                try
                 {
-                    if (string.Equals(publishedVersions[index].Version, packagedVersion.Version, StringComparison.Ordinal))
-                    {
-                        existingIndex = index;
-                        break;
-                    }
+                    var manifest = JsonUtility.FromJson<ReleaseManifestFile>(File.ReadAllText(path));
+                    if (manifest == null || manifest.version?.Trim() != version) { Diagnose(version + ": RUNTIME_MACHINE_MANIFEST_INVALID"); continue; }
+                    var tag = !string.IsNullOrWhiteSpace(manifest.tag) ? manifest.tag.Trim() : !string.IsNullOrWhiteSpace(manifest.gitTag) ? manifest.gitTag.Trim() : "v" + version;
+                    var source = CreateGitHubSourceArchiveUrl(tag);
+                    var artifact = NormalizeArtifactUrl(version, manifest.artifactUrl);
+                    if (manifest.buildOrigin == "git-tag-source" || string.Equals(artifact, source, StringComparison.OrdinalIgnoreCase)) artifact = string.Empty;
+                    rows.Add(new PublishedMachineRuntimeVersion { Version = version, Tag = tag, ArtifactUrl = artifact,
+                        SourceArchiveUrl = source, CommitSha = manifest.commitSha?.Trim() ?? string.Empty, Provenance = "machine-manifest" });
                 }
-
-                if (existingIndex < 0)
-                {
-                    publishedVersions.Add(packagedVersion);
-                    continue;
-                }
-
-                if (!HasValidCommitSha(publishedVersions[existingIndex].CommitSha))
-                {
-                    packagedVersion.IsInstalled = publishedVersions[existingIndex].IsInstalled;
-                    publishedVersions[existingIndex] = packagedVersion;
-                }
+                catch { Diagnose(version + ": RUNTIME_MACHINE_MANIFEST_UNREADABLE"); }
             }
         }
+
+        private static bool HasCompleteSourceIdentity(PublishedMachineRuntimeVersion row) =>
+            HasValidCommitSha(row.CommitSha) && row.Tag == "v" + row.Version &&
+            (row.SourceArchiveUrl == CreateGitHubSourceArchiveUrl(row.Tag) ||
+             row.SourceArchiveUrl == "https://github.com/mice/unity-agent-bridge/archive/" + row.CommitSha + ".zip");
+
+        private static bool TryBaseVersion(string value, out Version version)
+        {
+            version = null;
+            return IsSupportedSemanticVersion(value) && Version.TryParse(value.Split('-')[0], out version);
+        }
+
+        private static bool IsReleaseCandidate(string value) => System.Text.RegularExpressions.Regex.IsMatch(value ?? string.Empty, "-rc\\.[0-9]+$");
 
         private static bool HasValidCommitSha(string value)
         {
@@ -224,27 +261,15 @@ namespace UnityMcp.AgentBridge.Mcp
             return true;
         }
 
-        private static bool IsDefaultManagerRoot(string managerRoot)
-        {
-            return !string.IsNullOrWhiteSpace(managerRoot) &&
-                   string.Equals(
-                       Path.GetFullPath(managerRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                       Path.GetFullPath(ResolveDefaultManagerRoot()).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
-                       StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static IEnumerable<PublishedMachineRuntimeVersion> ReadPackagedPublishedVersions(string managerRoot)
+        private IEnumerable<PublishedMachineRuntimeVersion> ReadPackagedPublishedVersions(string managerRoot, InstalledRuntimePackageIdentity identity)
         {
             var catalogPath = string.Empty;
             try
             {
-                var packageInfo = PackageInfo.FindForAssembly(typeof(MachineRuntimeLocator).Assembly);
-                if (packageInfo != null && !string.IsNullOrWhiteSpace(packageInfo.resolvedPath))
-                {
-                    catalogPath = Path.Combine(packageInfo.resolvedPath, "Documentation~", "published-runtime-versions.json");
-                }
+                if (!string.IsNullOrWhiteSpace(identity?.PackageRoot))
+                    catalogPath = Path.Combine(identity.PackageRoot, "Documentation~", "published-runtime-versions.json");
 
-                if (!File.Exists(catalogPath))
+                if (string.IsNullOrWhiteSpace(catalogPath))
                 {
                     var toolsRoot = McpPathResolver.TryResolvePackageToolsRoot();
                     var packageRoot = string.IsNullOrWhiteSpace(toolsRoot)
@@ -258,11 +283,13 @@ namespace UnityMcp.AgentBridge.Mcp
             }
             catch
             {
+                Diagnose("RUNTIME_CATALOG_UNREADABLE: Using bounded historical fallback metadata.");
                 return CreateBuiltInPublishedVersions(managerRoot);
             }
 
             if (!File.Exists(catalogPath))
             {
+                Diagnose("RUNTIME_CATALOG_UNREADABLE: Using bounded historical fallback metadata.");
                 return CreateBuiltInPublishedVersions(managerRoot);
             }
 
@@ -271,6 +298,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 var catalog = JsonUtility.FromJson<PublishedRuntimeCatalogFile>(File.ReadAllText(catalogPath));
                 if (catalog?.versions == null)
                 {
+                    Diagnose("RUNTIME_CATALOG_UNREADABLE: Using bounded historical fallback metadata.");
                     return CreateBuiltInPublishedVersions(managerRoot);
                 }
 
@@ -300,6 +328,7 @@ namespace UnityMcp.AgentBridge.Mcp
             }
             catch
             {
+                Diagnose("RUNTIME_CATALOG_UNREADABLE: Using bounded historical fallback metadata.");
                 return CreateBuiltInPublishedVersions(managerRoot);
             }
         }
@@ -443,7 +472,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 "UnityAgentBridge");
         }
 
-        private static string ResolveManagerRoot(McpEditorSettings settings)
+        internal static string ResolveManagerRoot(McpEditorSettings settings)
         {
             if (!string.IsNullOrWhiteSpace(settings.MachineRuntimeRoot))
             {
@@ -519,7 +548,8 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             return System.Text.RegularExpressions.Regex.IsMatch(
                 value ?? string.Empty,
-                "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?$");
+                "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?$") &&
+                Version.TryParse(value.Split('-')[0], out _);
         }
 
         private static bool IsSupportedPublishedVersion(string value)
@@ -528,7 +558,7 @@ namespace UnityMcp.AgentBridge.Mcp
                    CompareSemanticVersionsDescending(value, MinimumPublishedRuntimeVersion) <= 0;
         }
 
-        private static bool IsUsableInstalledVersion(string versionRoot, string version)
+        private static bool IsUsableInstalledVersion(string versionRoot, string version, string expectedCommit = null)
         {
             var manifestPath = Path.Combine(versionRoot, "release-manifest.json");
             if (!File.Exists(manifestPath) || string.IsNullOrWhiteSpace(FindRuntimeExecutablePath(Path.Combine(versionRoot, "runtime"))))
@@ -539,7 +569,8 @@ namespace UnityMcp.AgentBridge.Mcp
             try
             {
                 var manifest = JsonUtility.FromJson<ReleaseManifestFile>(File.ReadAllText(manifestPath));
-                return manifest != null && string.Equals(manifest.version?.Trim(), version, StringComparison.Ordinal);
+                return manifest != null && string.Equals(manifest.version?.Trim(), version, StringComparison.Ordinal) &&
+                    (expectedCommit == null || string.Equals(manifest.commitSha, expectedCommit, StringComparison.OrdinalIgnoreCase));
             }
             catch
             {

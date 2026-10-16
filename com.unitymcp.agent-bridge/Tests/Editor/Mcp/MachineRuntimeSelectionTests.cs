@@ -168,7 +168,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             CreatePublishedMachineRuntimeVersion(managerRoot, "1.2.13", "v1.2.13", "https://example.invalid/1.2.13.zip", "1.2.12");
             CreateMachineRuntimeVersion(managerRoot, "1.2.12-rc.2");
 
-            var versions = new MachineRuntimeLocator().ListPublishedVersions(new McpEditorSettings
+            var versions = new MachineRuntimeLocator(() => new InstalledRuntimePackageIdentity { Version = "1.2.12-rc.6" }, _ => Array.Empty<PublishedMachineRuntimeVersion>()).ListPublishedVersions(new McpEditorSettings
             {
                 RuntimeMode = "machine",
                 MachineRuntimeRoot = managerRoot,
@@ -223,7 +223,8 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                 var managerRoot = Path.Combine(_tempDirectory, "UnityAgentBridge");
                 Environment.SetEnvironmentVariable("UNITY_AGENT_BRIDGE_HOME", managerRoot);
 
-                var versions = new MachineRuntimeLocator().ListPublishedVersions(new McpEditorSettings
+                var versions = new MachineRuntimeLocator(() => new InstalledRuntimePackageIdentity { Version = "1.2.12-rc.6" },
+                    _ => MachineRuntimeLocator.CreateBuiltInPublishedVersions(managerRoot)).ListPublishedVersions(new McpEditorSettings
                 {
                     RuntimeMode = "machine",
                 });
@@ -261,7 +262,8 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                     commitSha: string.Empty,
                     buildOrigin: "git-tag-source");
 
-                var versions = new MachineRuntimeLocator().ListPublishedVersions(new McpEditorSettings
+                var versions = new MachineRuntimeLocator(() => new InstalledRuntimePackageIdentity { Version = "1.2.12-rc.6" },
+                    _ => MachineRuntimeLocator.CreateBuiltInPublishedVersions(managerRoot)).ListPublishedVersions(new McpEditorSettings
                 {
                     RuntimeMode = "machine",
                 });
@@ -649,6 +651,28 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                     writer.Write("{\"version\":\"" + version + "\"}");
                 }
             }
+        }
+
+        // TestRecord: Documentation~/test_records/AGBM_260.md
+        [TestCase(true), TestCase(false), Category("AGBM_260")]
+        public void MachineRuntimeDownload_CachedSourceIdentityAndCustomRootAreEnforced(bool matching)
+        {
+            var release = CreateSourceBuildRelease();
+            var cacheRoot = Path.Combine(_tempDirectory, "IdentityCache");
+            var versionRoot = Path.Combine(cacheRoot, release.Version); Directory.CreateDirectory(versionRoot);
+            var archivePath = Path.Combine(versionRoot, "unity-agent-bridge-" + release.Version + "-win-x64.zip");
+            using (var archive = ZipFile.Open(archivePath, ZipArchiveMode.Create))
+            using (var writer = new StreamWriter(archive.CreateEntry("release-manifest.json").Open()))
+                writer.Write("{\"version\":\"" + release.Version + "\",\"gitTag\":\"" + release.Tag + "\",\"commitSha\":\"" + (matching ? release.CommitSha : new string('a', 40)) + "\"}");
+            var client = new FakeArtifactClient(); var runner = new RecordingProcessRunner();
+            var customRoot = Path.Combine(_tempDirectory, "IsolatedMachine");
+            var downloader = new MachineRuntimeDownloader(client, runner, new McpPathResolver(), TimeSpan.FromSeconds(5), cacheRoot);
+            var result = downloader.DownloadAndInstallAsync(release, new McpEditorSettings { MachineRuntimeRoot = customRoot }, null, CancellationToken.None).GetAwaiter().GetResult();
+            Assert.That(result.Succeeded, Is.EqualTo(matching));
+            Assert.That(client.FileUrls, Is.Empty);
+            if (matching) Assert.That(runner.Request.Arguments, Does.Contain(customRoot));
+            else { Assert.That(result.Reason, Is.EqualTo("cached_artifact_identity_mismatch")); Assert.That(runner.Requests, Is.Empty); }
+            Assert.That(File.Exists(archivePath), Is.True);
         }
 
         private static PublishedMachineRuntimeVersion CreateSourceBuildRelease()
