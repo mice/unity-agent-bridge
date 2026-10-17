@@ -6,6 +6,13 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.4.3-rc.3] - 2026-10-17
+
+### Fixed
+
+- Deliver completed EditMode test results using the admitted queue path even when Unity unloads transient settings. Retain pending terminal output across write failures and reloads without rerunning tests.
+- Preserve one transient default-settings instance through test-runner asset cleanup and release it on reload or Editor exit.
+
 ## [1.4.3-rc.2] - 2026-10-16
 
 ### Fixed

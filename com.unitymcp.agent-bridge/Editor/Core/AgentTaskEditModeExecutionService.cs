@@ -33,7 +33,7 @@ namespace UnityMcp.AgentBridge
                 var id = Manager.Register(task);
                 var command = new AgentCommand { commandId = "agent-task-" + id.Value, tool = "unity.run_editmode_tests", timeoutMs = timeoutMs, rawArgsJson = request.Payload ?? "{}" };
                 var settings = AgentBridgeSettingsLoader.Load().Settings;
-                Runs[command.commandId] = new ActiveRun { TaskId = id, TestTask = testTask, Command = command, Settings = settings, StartedAt = DateTimeOffset.UtcNow, Deadline = DateTimeOffset.UtcNow.AddMilliseconds(timeoutMs), CompleteQueue = false };
+                Runs[command.commandId] = new ActiveRun { TaskId = id, TestTask = testTask, Command = command, QueueRoot = settings == null ? "Temp/AgentBridge" : settings.tempRoot, StartedAt = DateTimeOffset.UtcNow, Deadline = DateTimeOffset.UtcNow.AddMilliseconds(timeoutMs), CompleteQueue = false };
                 Persist(Runs[command.commandId]);
                 EnsureUpdate();
                 Manager.Start(id);
@@ -74,11 +74,13 @@ namespace UnityMcp.AgentBridge
             public AgentTaskId TaskId;
             public RunEditModeTestsTask TestTask;
             public AgentCommand Command;
-            public AgentBridgeSettings Settings;
+            public string QueueRoot;
             public DateTimeOffset StartedAt;
             public DateTimeOffset Deadline;
             public bool ResultWritten;
             public bool CompleteQueue = true;
+            public ToolResult TerminalResult;
+            public string LastDeliveryError;
         }
 
         private static readonly AgentTaskManager Manager = new AgentTaskManager();
@@ -129,7 +131,7 @@ namespace UnityMcp.AgentBridge
                 TaskId = taskId,
                 TestTask = testTask,
                 Command = command,
-                Settings = settings,
+                QueueRoot = settings.tempRoot,
                 StartedAt = DateTimeOffset.UtcNow,
                 Deadline = DateTimeOffset.UtcNow.AddMilliseconds(effectiveTimeout),
             };
@@ -183,12 +185,17 @@ namespace UnityMcp.AgentBridge
         {
             foreach (var run in Runs.Values.ToList())
             {
+                if (run.TerminalResult != null)
+                {
+                    TryDeliverTerminal(run, run.TerminalResult);
+                    continue;
+                }
                 var snapshot = Manager.Get(run.TaskId);
                 if (snapshot != null && snapshot.State == AgentTaskState.Running)
                     Manager.Advance(run.TaskId);
                 snapshot = Manager.Get(run.TaskId);
                 if (snapshot != null && snapshot.IsTerminal && !run.ResultWritten)
-                    WriteTerminalResult(run, AgentTaskToolResultAdapter.FromSnapshot(snapshot, run.Command, run.Command.tool));
+                    TryDeliverTerminal(run, AgentTaskToolResultAdapter.FromSnapshot(snapshot, run.Command, run.Command.tool));
             }
             Manager.Cleanup();
         }
@@ -196,15 +203,43 @@ namespace UnityMcp.AgentBridge
         private static void WriteTerminalResult(ActiveRun run, ToolResult result)
         {
             if (run.ResultWritten) return;
-            AgentTaskDurableResults.Save(ProjectControlResponse(Manager.Get(run.TaskId), run.TaskId.Value));
-            run.ResultWritten = true;
-            if (run.CompleteQueue && run.Settings != null)
+            run.TerminalResult = result;
+            Persist(run);
+            var snapshot = Manager.Get(run.TaskId);
+            if (snapshot != null) ProjectControlResponse(snapshot, run.TaskId.Value);
+            if (run.CompleteQueue)
             {
-                var queue = new AgentCommandQueue(Directory.GetParent(Application.dataPath).FullName, run.Settings.tempRoot);
+                var queue = new AgentCommandQueue(Directory.GetParent(Application.dataPath).FullName, run.QueueRoot);
                 queue.Complete(run.Command.commandId, result);
             }
+            run.ResultWritten = true;
             Runs.Remove(run.Command.commandId);
-            DeleteState(run.Command.commandId, run.Settings.tempRoot);
+            DeleteState(run.Command.commandId);
+        }
+
+        private static void TryDeliverTerminal(ActiveRun run, ToolResult result)
+        {
+            try { WriteTerminalResult(run, result); }
+            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
+            {
+                if (run.LastDeliveryError != exception.Message)
+                    Debug.LogWarning("AGENT_TASK_EDITMODE_DELIVERY_PENDING: " + run.Command.commandId + ": " + exception.Message);
+                run.LastDeliveryError = exception.Message;
+            }
+        }
+
+        internal static ToolResult ProjectRetainedResult(AgentTaskControlResponse retained, AgentCommand command)
+        {
+            var result = AgentTaskToolResultAdapter.FromSnapshot(retained.Snapshot, command, command.tool);
+            if (!string.IsNullOrWhiteSpace(retained.ResultPayloadJson)) result.metricsObjectJson = retained.ResultPayloadJson;
+            if (!string.IsNullOrWhiteSpace(retained.ErrorCode))
+            {
+                result.summary = retained.ErrorMessage ?? result.summary;
+                result.errors.Clear();
+                result.errors.Add(new ToolError { code = retained.ErrorCode, message = result.summary });
+                if (retained.ErrorCode == "AGENT_TASK_TIMEOUT") result.status = ToolResultStatus.Timeout;
+            }
+            return result;
         }
 
         private static void RestorePersistedRuns()
@@ -224,11 +259,23 @@ namespace UnityMcp.AgentBridge
                     try { state = JsonConvert.DeserializeObject<ActiveRunState>(File.ReadAllText(path, Utf8NoBom)); }
                     catch (Exception exception) { Debug.LogWarning("AGENT_TASK_EDITMODE_RECORD_CORRUPT: " + path + ": " + exception.Message); continue; }
                     if (state == null || string.IsNullOrWhiteSpace(state.commandId) || string.IsNullOrWhiteSpace(state.agentTaskId)) continue;
-                    if (AgentTaskDurableResults.Read(state.agentTaskId) != null) { File.Delete(path); continue; }
                     AgentCommand command;
                     if (!JsonUtil.TryDeserializeArgs<AgentCommand>(state.commandJson ?? "{}", out command, out _)) continue;
                     command.commandId = state.commandId;
                     command.tool = string.IsNullOrWhiteSpace(command.tool) ? "unity.run_editmode_tests" : command.tool;
+                    var retained = AgentTaskDurableResults.Read(state.agentTaskId);
+                    var terminal = !string.IsNullOrWhiteSpace(state.terminalResultJson)
+                        ? JsonConvert.DeserializeObject<ToolResult>(state.terminalResultJson)
+                        : retained?.Snapshot?.IsTerminal == true ? ProjectRetainedResult(retained, command) : null;
+                    if (terminal != null)
+                    {
+                        var completed = new ActiveRun { TaskId = new AgentTaskId(state.agentTaskId), Command = command,
+                            QueueRoot = state.queueRoot ?? tempRoot, StartedAt = state.startedAtUtc, Deadline = state.deadlineUtc,
+                            CompleteQueue = state.completeQueue ?? true, TerminalResult = terminal };
+                        Runs[command.commandId] = completed;
+                        TryDeliverTerminal(completed, terminal);
+                        continue;
+                    }
                     if (!JsonUtil.TryDeserializeArgs<UnityTestRunArgs>(command.rawArgsJson ?? "{}", out var args, out _)) args = new UnityTestRunArgs();
                     var filter = UnityTestOperationManager.CreateRunnerFilter(TestMode.EditMode, args);
                     var task = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), filter);
@@ -238,13 +285,13 @@ namespace UnityMcp.AgentBridge
                     if (state.version > 1 || (!string.IsNullOrEmpty(state.editorSession) && state.editorSession != AgentTaskDurableResults.EditorSession) || !CanReattachRun(state.runGuid))
                     {
                         Manager.Fail(taskId, new AgentTaskError("AGENT_TASK_RECOVERY_STALE", "The Unity Test Runner no longer has an active run handle after domain reload."));
-                        var stale = new ActiveRun { TaskId = taskId, Command = command, Settings = settings, StartedAt = state.startedAtUtc, Deadline = state.deadlineUtc, ResultWritten = false, CompleteQueue = state.completeQueue ?? true };
+                        var stale = new ActiveRun { TaskId = taskId, Command = command, QueueRoot = state.queueRoot ?? tempRoot, StartedAt = state.startedAtUtc, Deadline = state.deadlineUtc, ResultWritten = false, CompleteQueue = state.completeQueue ?? true };
                         Runs[command.commandId] = stale;
-                        WriteTerminalResult(stale, AgentTaskToolResultAdapter.FromSnapshot(Manager.Get(taskId), command, command.tool));
+                        TryDeliverTerminal(stale, AgentTaskToolResultAdapter.FromSnapshot(Manager.Get(taskId), command, command.tool));
                         continue;
                     }
                     task.Reattach(Manager.GetContext(taskId), state.runGuid);
-                    Runs[command.commandId] = new ActiveRun { TaskId = taskId, TestTask = task, Command = command, Settings = settings, StartedAt = state.startedAtUtc, Deadline = state.deadlineUtc, CompleteQueue = state.completeQueue ?? true };
+                    Runs[command.commandId] = new ActiveRun { TaskId = taskId, TestTask = task, Command = command, QueueRoot = state.queueRoot ?? tempRoot, StartedAt = state.startedAtUtc, Deadline = state.deadlineUtc, CompleteQueue = state.completeQueue ?? true };
                 }
             }
             catch (Exception exception) { Debug.LogWarning("AGENT_TASK_EDITMODE_RESTORE_FAILED: " + exception.Message); }
@@ -261,14 +308,16 @@ namespace UnityMcp.AgentBridge
                 {
                     version = 1, editorSession = AgentTaskDurableResults.EditorSession,
                     completeQueue = run.CompleteQueue,
+                    queueRoot = run.QueueRoot,
+                    terminalResultJson = run.TerminalResult == null ? null : JsonConvert.SerializeObject(run.TerminalResult),
                     commandId = run.Command.commandId, agentTaskId = run.TaskId.Value, commandJson = JsonConvert.SerializeObject(run.Command),
                     runGuid = run.TestTask?.RunGuid,
                     effectiveTimeoutMs = (int)Math.Max(0, (run.Deadline - run.StartedAt).TotalMilliseconds),
-                    createdAtUtc = Manager.Get(run.TaskId).CreatedAt, startedAtUtc = run.StartedAt, deadlineUtc = run.Deadline
+                    createdAtUtc = Manager.Get(run.TaskId)?.CreatedAt ?? run.StartedAt, startedAtUtc = run.StartedAt, deadlineUtc = run.Deadline
                 };
                 AgentTaskDurableResults.WriteAtomic(path, JsonConvert.SerializeObject(payload));
             }
-            catch (Exception exception) { throw new IOException("AGENT_TASK_EDITMODE_PERSIST_FAILED", exception); }
+            catch (Exception exception) { throw new IOException("AGENT_TASK_EDITMODE_PERSIST_FAILED: " + exception.Message, exception); }
         }
 
         internal static bool CanReattachRun(string runGuid)
@@ -290,7 +339,7 @@ namespace UnityMcp.AgentBridge
             return false;
         }
 
-        private static void DeleteState(string commandId, string tempRoot)
+        private static void DeleteState(string commandId)
         {
             try
             {
@@ -307,6 +356,8 @@ namespace UnityMcp.AgentBridge
             public int version;
             public string editorSession;
             public bool? completeQueue;
+            public string queueRoot;
+            public string terminalResultJson;
             public string commandId;
             public string agentTaskId;
             public string commandJson;

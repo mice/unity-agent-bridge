@@ -8,6 +8,20 @@ namespace UnityMcp.AgentBridge
 {
     public static class AgentBridgeSettingsLoader
     {
+        private static AgentBridgeSettings transientDefaults;
+
+        static AgentBridgeSettingsLoader()
+        {
+            AssemblyReloadEvents.beforeAssemblyReload += ReleaseTransientDefaults;
+            EditorApplication.quitting += ReleaseTransientDefaults;
+        }
+
+        private static void ReleaseTransientDefaults()
+        {
+            if (transientDefaults != null) UnityEngine.Object.DestroyImmediate(transientDefaults);
+            transientDefaults = null;
+        }
+
         public static SettingsLoadResult Load()
         {
             var canonicalSettings = TryLoadCanonicalAsset();
@@ -19,7 +33,11 @@ namespace UnityMcp.AgentBridge
             var guids = AssetDatabase.FindAssets("t:AgentBridgeSettings");
             if (guids == null || guids.Length == 0)
             {
-                var settings = CreateDefaultSettings();
+                if (transientDefaults == null) transientDefaults = CreateDefaultSettings();
+                var settings = transientDefaults;
+                // The test runner unloads unused assets while restoring scenes.
+                // This transient configuration remains owned by the bridge host.
+                settings.hideFlags = HideFlags.HideAndDontSave;
                 return SettingsLoadResult.StartWithWarning(settings, "AGENTBRIDGE_SETTINGS_MISSING", "AgentBridgeSettings asset was not found. Using defaults.");
             }
 

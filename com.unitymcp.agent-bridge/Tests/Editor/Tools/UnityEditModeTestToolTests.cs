@@ -2,6 +2,9 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityMcp.BuiltInPlugins.TestRunner;
+using System.IO;
+using System.Reflection;
+using UnityMcp.AgentTaskCore;
 
 namespace UnityMcp.AgentBridge.Tests
 {
@@ -241,6 +244,136 @@ namespace UnityMcp.AgentBridge.Tests
             var filter = UnityTestOperationManager.CreateRunnerFilter(TestMode.EditMode, new UnityTestRunArgs { filter = DemoFullName });
             Assert.That(filter.testMode, Is.EqualTo(TestMode.EditMode));
             Assert.That(filter.testNames, Is.EqualTo(new[] { DemoFullName }));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_355.md
+        [Test, Category("AGB_TestTools"), Category("AGB_355")]
+        public void TerminalResult_AfterSettingsDestroyed_CompletesCapturedQueue()
+        {
+            var settings = CreateSettings();
+            settings.tempRoot = "Temp/EditModeQueue-" + System.Guid.NewGuid().ToString("N");
+            var queue = new AgentCommandQueue(Directory.GetParent(Application.dataPath).FullName, settings.tempRoot);
+            var run = CreateTerminalRun(settings.tempRoot, "agb.queue.destroyed");
+            Object.DestroyImmediate(settings);
+            Assert.That(settings == null, Is.True, "Exercise Unity's destroyed-object null semantics.");
+            try
+            {
+                CompleteTerminalRun(run);
+                var path = Path.Combine(queue.OutboxDirectory, "agb.queue.destroyed.result.json");
+                Assert.That(File.Exists(path), Is.True);
+                Assert.That(File.ReadAllText(path), Does.Contain("\"status\":\"success\""));
+            }
+            finally
+            {
+                Directory.Delete(queue.QueueRoot, true);
+            }
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_356.md
+        [Test, Category("AGB_TestTools"), Category("AGB_356")]
+        public void TerminalResult_WhenWriteFails_RemainsRetryable()
+        {
+            var relativeRoot = "Temp/EditModeQueue-" + System.Guid.NewGuid().ToString("N");
+            var queue = new AgentCommandQueue(Directory.GetParent(Application.dataPath).FullName, relativeRoot);
+            var run = CreateTerminalRun(relativeRoot, "agb.queue.retry");
+            Directory.Delete(queue.OutboxDirectory);
+            File.WriteAllText(queue.OutboxDirectory, "Deliberately block this task-owned output directory.");
+            try
+            {
+                Assert.Throws<TargetInvocationException>(() => CompleteTerminalRun(run));
+                Assert.That(run.GetType().GetField("ResultWritten").GetValue(run), Is.False);
+                File.Delete(queue.OutboxDirectory);
+                Directory.CreateDirectory(queue.OutboxDirectory);
+                CompleteTerminalRun(run);
+                Assert.That(File.Exists(Path.Combine(queue.OutboxDirectory, "agb.queue.retry.result.json")), Is.True);
+                Assert.That(run.GetType().GetField("ResultWritten").GetValue(run), Is.True);
+            }
+            finally
+            {
+                Directory.Delete(queue.QueueRoot, true);
+            }
+        }
+
+        private static object CreateTerminalRun(string queueRoot, string commandId)
+        {
+            var type = typeof(AgentTaskEditModeExecutionService).GetNestedType("ActiveRun", BindingFlags.NonPublic);
+            var run = System.Activator.CreateInstance(type, true);
+            type.GetField("TaskId").SetValue(run, new AgentTaskId(System.Guid.NewGuid().ToString("N")));
+            type.GetField("Command").SetValue(run, new AgentCommand { commandId = commandId, tool = "unity.run_editmode_tests" });
+            type.GetField("QueueRoot").SetValue(run, queueRoot);
+            return run;
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_359.md
+        [Test, Category("AGB_TestTools"), Category("AGB_359")]
+        public void TerminalDelivery_ReloadRecoversPersistedResultWithoutRunningTests()
+        {
+            var queue = new AgentCommandQueue(Directory.GetParent(Application.dataPath).FullName,
+                "Temp/EditModeQueue-" + System.Guid.NewGuid().ToString("N"));
+            var commandId = "agb.queue.reload." + System.Guid.NewGuid().ToString("N");
+            var run = CreateTerminalRun(queue.RelativeRoot, commandId);
+            var statePath = Path.Combine(Application.dataPath, "../Library/AgentBridge/agent-task-editmode", commandId + ".task.json");
+            Directory.Delete(queue.OutboxDirectory);
+            File.WriteAllText(queue.OutboxDirectory, "Blocked output fixture");
+            try
+            {
+                Assert.Throws<TargetInvocationException>(() => CompleteTerminalRun(run));
+                Assert.That(File.Exists(statePath), Is.True);
+                File.Delete(queue.OutboxDirectory);
+                RestoreRuns();
+                Assert.That(File.Exists(Path.Combine(queue.OutboxDirectory, commandId + ".result.json")), Is.True);
+                Assert.That(File.Exists(statePath), Is.False);
+            }
+            finally
+            {
+                if (File.Exists(statePath)) File.Delete(statePath);
+                Directory.Delete(queue.QueueRoot, true);
+            }
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_360.md
+        [Test, Category("AGB_TestTools"), Category("AGB_360")]
+        public void LegacyTerminalDelivery_ReloadPreservesDurableMetrics()
+        {
+            var project = Directory.GetParent(Application.dataPath).FullName;
+            var queue = new AgentCommandQueue(project, "Temp/EditModeQueue-" + System.Guid.NewGuid().ToString("N"));
+            var commandId = "agb.queue.legacy." + System.Guid.NewGuid().ToString("N");
+            var taskId = System.Guid.NewGuid().ToString("N");
+            var statePath = Path.Combine(project, "Library/AgentBridge/agent-task-editmode", commandId + ".task.json");
+            var retainedPath = Path.Combine(project, "Library/AgentBridge/agent-task-results", taskId + ".json");
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(statePath));
+                Directory.CreateDirectory(Path.GetDirectoryName(retainedPath));
+                var response = new AgentTaskControlResponse { Success = true, AgentTaskId = taskId, State = "Completed",
+                    ResultKind = "Succeeded", ResultPayloadJson = "{\"tests\":[{\"outcome\":\"Passed\"}]}" };
+                File.WriteAllText(retainedPath, Newtonsoft.Json.JsonConvert.SerializeObject(new { version = 1, project,
+                    response = new AgentTaskControlCodec().SerializeResponse(response) }));
+                File.WriteAllText(statePath, Newtonsoft.Json.JsonConvert.SerializeObject(new { version = 1,
+                    agentTaskId = taskId, commandId, queueRoot = queue.RelativeRoot, completeQueue = true,
+                    commandJson = Newtonsoft.Json.JsonConvert.SerializeObject(new AgentCommand { commandId = commandId, tool = "unity.run_editmode_tests" }) }));
+                RestoreRuns();
+                var result = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(queue.OutboxDirectory, commandId + ".result.json")));
+                Assert.That(result.Value<string>("status"), Is.EqualTo("success"));
+                Assert.That(result["metrics"]?["tests"]?[0]?["outcome"]?.ToString(), Is.EqualTo("Passed"));
+                Assert.That(File.Exists(statePath), Is.False);
+                Assert.That(File.Exists(retainedPath), Is.True);
+            }
+            finally
+            {
+                if (File.Exists(statePath)) File.Delete(statePath);
+                if (File.Exists(retainedPath)) File.Delete(retainedPath);
+                Directory.Delete(queue.QueueRoot, true);
+            }
+        }
+
+        private static void RestoreRuns() => typeof(AgentTaskEditModeExecutionService)
+            .GetMethod("RestorePersistedRuns", BindingFlags.Static | BindingFlags.NonPublic).Invoke(null, null);
+
+        private static void CompleteTerminalRun(object run)
+        {
+            typeof(AgentTaskEditModeExecutionService).GetMethod("WriteTerminalResult", BindingFlags.Static | BindingFlags.NonPublic)
+                .Invoke(null, new[] { run, new ToolResult { success = true, status = ToolResultStatus.Success, summary = "Completed fixture." } });
         }
 
         private void AssertWildcardInvalidArgs(string rawArgsJson)
