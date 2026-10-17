@@ -8,6 +8,10 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [1.4.3-rc.3] - 2026-10-17
 
+### Added
+
+- Copy Download & Install feedback from the MCP setup panel using Copy Error or Copy Message. Include structured failure reason codes and full faulted-task exception details.
+
 ### Fixed
 
 - Deliver completed EditMode test results using the admitted queue path even when Unity unloads transient settings. Retain pending terminal output across write failures and reloads without rerunning tests.

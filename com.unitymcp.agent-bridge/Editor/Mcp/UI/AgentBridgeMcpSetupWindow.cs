@@ -412,6 +412,12 @@ namespace UnityMcp.AgentBridge.Mcp
                 if (!string.IsNullOrWhiteSpace(_runtimeDownloadMessage))
                 {
                     EditorGUILayout.HelpBox(_runtimeDownloadMessage, _runtimeDownloadMessageType);
+                    if (GUILayout.Button(
+                            _runtimeDownloadMessageType == MessageType.Error ? "Copy Error" : "Copy Message",
+                            GUILayout.Width(120f)))
+                    {
+                        EditorGUIUtility.systemCopyBuffer = _runtimeDownloadMessage;
+                    }
                 }
 
                 var effectiveVersion = (_pathResolver ?? new McpPathResolver()).ResolveRuntimeVersion(settings);
@@ -1632,8 +1638,9 @@ namespace UnityMcp.AgentBridge.Mcp
 
             if (completedTask.IsFaulted)
             {
-                var exception = completedTask.Exception != null ? completedTask.Exception.GetBaseException() : null;
-                _runtimeDownloadMessage = exception != null ? exception.Message : "Runtime download failed.";
+                _runtimeDownloadMessage = completedTask.Exception != null
+                    ? completedTask.Exception.ToString()
+                    : "Runtime download failed.";
                 _runtimeDownloadMessageType = MessageType.Error;
                 Repaint();
                 return;
@@ -1652,6 +1659,10 @@ namespace UnityMcp.AgentBridge.Mcp
                 ? (result.Succeeded ? "Runtime downloaded and installed." : "Runtime download failed.")
                 : result.Summary;
             _runtimeDownloadMessageType = result.Succeeded ? MessageType.Info : MessageType.Error;
+            if (!result.Succeeded && !string.IsNullOrWhiteSpace(result.Reason))
+            {
+                _runtimeDownloadMessage += "\nReason: " + result.Reason;
+            }
             if (result.Succeeded)
             {
                 _runtimeDownloadProgress = 1f;
