@@ -20,3 +20,7 @@ The builder uses a unique short `agb-*` directory under the process user-temp ro
 Runtime ZIP entry paths are explicitly normalized to forward slashes for portable payload lookup across PowerShell implementations. The extractor does not use Expand-Archive rollback. Primary extraction/build exceptions remain the operation error. A cleanup problem is reported as `SOURCE_WORKSPACE_CLEANUP_FAILED (secondary)` with the owned workspace path; cleanup never deletes source archives, installed runtimes or unrelated directories, and refuses reparse points. The installer retains both stdout and stderr in failed-build feedback.
 
 These source changes retain package version 1.4.3-rc.3. Implementation does not rewrite the existing RC3 tag or hosted release, edit Windows configuration, or install missing tools automatically.
+
+## Stable promotion — 2026-10-17
+
+The maintainer accepted the repair and authorized stable 1.4.3. The stable package includes these checks and the portable ZIP writer; the RC3 implementation identity described above is historical. Install the v1.4.3 package and matching 1.4.3 runtime separately. Retired 1.4.3 RC tags are no longer fresh-install entrypoints.

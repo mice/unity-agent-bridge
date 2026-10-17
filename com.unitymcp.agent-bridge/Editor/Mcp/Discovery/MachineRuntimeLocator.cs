@@ -185,9 +185,11 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var hasThreshold = TryBaseVersion(package?.Version, out var threshold);
+            var stablePackage = hasThreshold && package.Version.IndexOf('-') < 0;
             if (!hasThreshold) Diagnose("RUNTIME_PACKAGE_VERSION_INVALID: RC choices are withheld because the installed package base version is unavailable.");
             var visible = merged.Where(row => !IsReleaseCandidate(row.Version) || hasThreshold &&
-                TryBaseVersion(row.Version, out var candidateBase) && candidateBase.CompareTo(threshold) >= 0).ToList();
+                TryBaseVersion(row.Version, out var candidateBase) &&
+                (candidateBase.CompareTo(threshold) > 0 || candidateBase.Equals(threshold) && !stablePackage)).ToList();
             visible.Sort((left, right) => CompareSemanticVersionsDescending(left.Version, right.Version));
             return visible;
         }

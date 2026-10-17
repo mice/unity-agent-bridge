@@ -776,6 +776,33 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(runner.Requests.TrueForAll(request => !request.Arguments.Contains("install")), Is.True);
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_265.md
+        [TestCase("1.4.3", false)]
+        [TestCase("1.4.3-rc.3", true)]
+        [Category("AGBM_RuntimeSelection"), Category("AGBM_265")]
+        public void MachineSelection_StableHidesSameBaseRcWithoutChangingInstalledPins(string packageVersion, bool sameBaseVisible)
+        {
+            var root = Path.Combine(_tempDirectory, "Retirement");
+            CreateMachineRuntimeVersion(root, "1.4.3-rc.3");
+            CreatePublishedMachineRuntimeVersion(root, "1.4.3-rc.3", "v1.4.3-rc.3", "https://example.invalid/runtime.zip");
+            var rows = new[] { "1.4.2-rc.9", "1.4.3-rc.1", "1.4.4-rc.1", "1.4.2", "1.4.3" }
+                .Select(version => new PublishedMachineRuntimeVersion
+                {
+                    Version = version, Tag = "v" + version, ArtifactUrl = "https://example.invalid/runtime.zip"
+                }).ToArray();
+            var locator = new MachineRuntimeLocator(() => new InstalledRuntimePackageIdentity { Version = packageVersion }, _ => rows);
+            var settings = new McpEditorSettings { RuntimeMode = "machine", MachineRuntimeRoot = root, RuntimeVersion = "1.4.3-rc.3" };
+            var visible = locator.ListPublishedVersions(settings).Select(row => row.Version).ToArray();
+            Assert.That(visible.Contains("1.4.3-rc.1"), Is.EqualTo(sameBaseVisible));
+            Assert.That(visible.Contains("1.4.3-rc.3"), Is.EqualTo(sameBaseVisible));
+            Assert.That(visible, Does.Not.Contain("1.4.2-rc.9"));
+            Assert.That(visible, Does.Contain("1.4.4-rc.1"));
+            Assert.That(visible, Does.Contain("1.4.2"));
+            Assert.That(locator.ListInstalledVersions(settings), Does.Contain("1.4.3-rc.3"));
+            Assert.That(locator.ResolveRuntimeExecutablePath(settings), Is.Not.Empty);
+            Assert.That(settings.RuntimeVersion, Is.EqualTo("1.4.3-rc.3"));
+        }
+
         private sealed class RecordingProcessRunner : IAsyncProcessRunner
         {
             public ProcessExecutionRequest Request { get; private set; }

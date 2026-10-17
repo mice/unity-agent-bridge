@@ -6,6 +6,18 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-10-17
+
+### Added
+
+- Publish the accepted 1.4.3 fixes as a source-only stable release. Hide the stable package's same-base RC choices, including stale machine metadata, while preserving installed runtimes and exact pins.
+- Copy complete Download & Install error feedback, including available reason codes and exception details.
+
+### Fixed
+
+- Deliver completed EditMode results through the original queue despite settings unloading, output-write failure or reload; preserve terminal evidence without replay.
+- Resolve valid compile-report references and expose provider-neutral execution observations; discover installed tagged-source runtime identities reliably.
+
 ### Fixed
 
 - Check source-install toolchain and writable short workspace prerequisites before downloading source. Avoid project-nested extraction paths on legacy Windows PowerShell and report actionable path-budget failures.
