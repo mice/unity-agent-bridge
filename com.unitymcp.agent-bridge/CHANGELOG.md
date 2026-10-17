@@ -6,6 +6,11 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Fixed
+
+- Check source-install toolchain and writable short workspace prerequisites before downloading source. Avoid project-nested extraction paths on legacy Windows PowerShell and report actionable path-budget failures.
+- Validate archive destinations before extraction and preserve primary extraction/build errors alongside secondary cleanup warnings. Source installation requires no Python dependency.
+
 ## [1.4.3-rc.3] - 2026-10-17
 
 ### Added

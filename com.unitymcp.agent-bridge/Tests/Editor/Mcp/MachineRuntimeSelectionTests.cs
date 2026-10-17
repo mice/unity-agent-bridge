@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
@@ -362,9 +363,10 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(result.Succeeded, Is.True);
             Assert.That(result.Summary, Does.Contain("built from tag source"));
             Assert.That(artifactClient.FileUrls, Is.EqualTo(new[] { "https://example.invalid/archive/refs/tags/v1.2.12-rc.1.zip" }));
-            Assert.That(processRunner.Requests.Count, Is.EqualTo(2));
-            Assert.That(processRunner.Requests[0].Arguments, Does.Contain("-SourceArchivePath"));
-            Assert.That(processRunner.Requests[1].Arguments, Does.Contain("install"));
+            Assert.That(processRunner.Requests.Count, Is.EqualTo(3));
+            Assert.That(processRunner.Requests[0].Arguments, Does.Contain("-PreflightOnly"));
+            Assert.That(processRunner.Requests[1].Arguments, Does.Contain("-SourceArchivePath"));
+            Assert.That(processRunner.Requests[2].Arguments, Does.Contain("install"));
             var versionCacheRoot = Path.Combine(_tempDirectory, "Temp", "AgentBridge", "1.2.12-rc.1");
             Assert.That(File.Exists(Path.Combine(versionCacheRoot, "unity-agent-bridge-1.2.12-rc.1-win-x64.zip.sha256")), Is.True);
             Assert.That(Directory.GetFiles(versionCacheRoot, ".source-build-output-*", SearchOption.TopDirectoryOnly), Is.Empty);
@@ -402,9 +404,10 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(result.Summary, Does.Not.Contain("Binary release unavailable"));
             Assert.That(artifactClient.TextUrl, Is.Empty);
             Assert.That(artifactClient.FileUrls, Is.EqualTo(new[] { "https://example.invalid/archive/refs/tags/v1.2.12-rc.3.zip" }));
-            Assert.That(processRunner.Requests.Count, Is.EqualTo(2));
-            Assert.That(processRunner.Requests[0].Arguments, Does.Contain("-SourceArchivePath"));
-            Assert.That(processRunner.Requests[1].Arguments, Does.Contain("install"));
+            Assert.That(processRunner.Requests.Count, Is.EqualTo(3));
+            Assert.That(processRunner.Requests[0].Arguments, Does.Contain("-PreflightOnly"));
+            Assert.That(processRunner.Requests[1].Arguments, Does.Contain("-SourceArchivePath"));
+            Assert.That(processRunner.Requests[2].Arguments, Does.Contain("install"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_212.md
@@ -443,7 +446,8 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(result.Succeeded, Is.False);
             Assert.That(result.Reason, Is.EqualTo("source_download_failed"));
             Assert.That(result.Summary, Does.Contain("asset unavailable"));
-            Assert.That(processRunner.Request, Is.Null);
+            Assert.That(processRunner.Requests.Count, Is.EqualTo(1));
+            Assert.That(processRunner.Request.Arguments, Does.Contain("-PreflightOnly"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_215.md
@@ -473,7 +477,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
             Assert.That(result.Succeeded, Is.True);
             Assert.That(artifactClient.FileUrls, Is.Empty);
-            Assert.That(processRunner.Requests.Count, Is.EqualTo(2));
+            Assert.That(processRunner.Requests.Count, Is.EqualTo(3));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_216.md
@@ -504,8 +508,8 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(result.Succeeded, Is.False);
             Assert.That(result.Reason, Is.EqualTo("source_build_failed"));
             Assert.That(result.Summary, Does.Contain("compile failed"));
-            Assert.That(processRunner.Requests.Count, Is.EqualTo(1));
-            Assert.That(processRunner.Requests[0].Arguments, Does.Not.Contain("install"));
+            Assert.That(processRunner.Requests.Count, Is.EqualTo(2));
+            Assert.That(processRunner.Requests[1].Arguments, Does.Not.Contain("install"));
         }
 
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_222.md
@@ -721,17 +725,79 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             }
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_263.md
+        [Test]
+        [Category("AGBM_RuntimeSelection")]
+        [Category("AGBM_263")]
+        public void MachineRuntimeDownload_PreflightFailureStopsBeforeSourceTransferAndManager()
+        {
+            var client = new FakeArtifactClient();
+            var runner = new RecordingProcessRunner { PreflightFailure = "SOURCE_WORKSPACE_PATH_TOO_LONG: choose a shorter TEMP/TMP and restart Unity" };
+            var downloader = new MachineRuntimeDownloader(client, runner, new McpPathResolver(),
+                TimeSpan.FromSeconds(5), Path.Combine(_tempDirectory, "cache"));
+            var release = CreateSourceBuildRelease();
+            release.ArtifactUrl = string.Empty;
+            var result = downloader.DownloadAndInstallAsync(release, new McpEditorSettings(), null,
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Reason, Is.EqualTo("source_preflight_failed"));
+            Assert.That(result.Summary, Does.Contain("SOURCE_WORKSPACE_PATH_TOO_LONG"));
+            Assert.That(result.Summary, Does.Contain("restart Unity"));
+            Assert.That(client.FileUrls, Is.Empty);
+            Assert.That(runner.Requests.Count, Is.EqualTo(1));
+            Assert.That(runner.Request.Arguments, Does.Contain("-PreflightOnly"));
+            Assert.That(runner.Request.Arguments, Does.Not.Contain("install"));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_264.md
+        [Test]
+        [Category("AGBM_RuntimeSelection")]
+        [Category("AGBM_264")]
+        public void MachineRuntimeDownload_BuildFailurePreservesBothStreamsAndDoesNotInstall()
+        {
+            var client = new FakeArtifactClient();
+            var runner = new RecordingProcessRunner
+            {
+                SourceBuildFailure = "primary extraction error",
+                SourceBuildStdout = "SOURCE_WORKSPACE_CLEANUP_FAILED (secondary): cleanup warning"
+            };
+            var downloader = new MachineRuntimeDownloader(client, runner, new McpPathResolver(),
+                TimeSpan.FromSeconds(5), Path.Combine(_tempDirectory, "cache"));
+            var release = CreateSourceBuildRelease();
+            release.ArtifactUrl = string.Empty;
+            var result = downloader.DownloadAndInstallAsync(release, new McpEditorSettings(), null,
+                CancellationToken.None).GetAwaiter().GetResult();
+
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Summary, Does.Contain("primary extraction error"));
+            Assert.That(result.Summary, Does.Contain("cleanup warning"));
+            Assert.That(runner.Requests.Count, Is.EqualTo(2));
+            Assert.That(runner.Requests.TrueForAll(request => !request.Arguments.Contains("install")), Is.True);
+        }
+
         private sealed class RecordingProcessRunner : IAsyncProcessRunner
         {
             public ProcessExecutionRequest Request { get; private set; }
             public List<ProcessExecutionRequest> Requests { get; } = new List<ProcessExecutionRequest>();
             public string SourceBuildVersion { get; set; } = string.Empty;
             public string SourceBuildFailure { get; set; } = string.Empty;
+            public string SourceBuildStdout { get; set; } = string.Empty;
+            public string PreflightFailure { get; set; } = string.Empty;
 
             public Task<ProcessExecutionResult> RunAsync(ProcessExecutionRequest request, CancellationToken cancellationToken)
             {
                 Request = request;
                 Requests.Add(request);
+                if (request.Arguments.Contains("-PreflightOnly"))
+                {
+                    return Task.FromResult(new ProcessExecutionResult
+                    {
+                        Outcome = ProcessOutcome.Completed,
+                        ExitCode = string.IsNullOrEmpty(PreflightFailure) ? 0 : 1,
+                        Stderr = PreflightFailure,
+                    });
+                }
                 var outputIndex = -1;
                 for (var index = 0; index < request.Arguments.Count; index++)
                 {
@@ -750,6 +816,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
                             Outcome = ProcessOutcome.Completed,
                             ExitCode = 1,
                             Stderr = SourceBuildFailure,
+                            Stdout = SourceBuildStdout,
                         });
                     }
 

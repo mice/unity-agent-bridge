@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)][string]$SourceArchivePath,
+    [string]$SourceArchivePath,
     [Parameter(Mandatory = $true)][string]$Version,
     [Parameter(Mandatory = $true)][string]$TagName,
     [Parameter(Mandatory = $true)][string]$CommitSha,
@@ -9,17 +9,22 @@ param(
     [string]$SourceArchiveUrl,
     [string]$ArtifactUrl,
     [string]$DotnetPath = 'dotnet',
-    [string]$Rid = 'win-x64'
+    [string]$Rid = 'win-x64',
+    [switch]$PreflightOnly
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'SourceBuildSupport.ps1')
 
 function Resolve-DotnetExecutablePath {
     param([Parameter(Mandatory = $true)][string]$ExecutablePath)
 
-    $command = Get-Command -Name $ExecutablePath -CommandType Application -ErrorAction Stop |
-        Select-Object -First 1
+    try {
+        $command = Get-Command -Name $ExecutablePath -CommandType Application -ErrorAction Stop |
+            Select-Object -First 1
+    }
+    catch { throw "SOURCE_DOTNET_UNAVAILABLE: Install .NET 8 SDK or correct the configured dotnet path, then restart Unity. $ExecutablePath" }
     if ($null -eq $command -or [string]::IsNullOrWhiteSpace($command.Source)) {
         throw "dotnet executable could not be resolved: $ExecutablePath"
     }
@@ -46,7 +51,7 @@ function Resolve-Dotnet8SdkVersion {
     )
     $selected = $versions | Sort-Object -Descending | Select-Object -First 1
     if ($null -eq $selected) {
-        throw '.NET 8 SDK is required to build the runtime from tag source.'
+        throw 'SOURCE_DOTNET8_SDK_MISSING: Install .NET 8 SDK and restart Unity before building the runtime from tag source.'
     }
     return $selected.ToString()
 }
@@ -61,7 +66,6 @@ if ($Rid -ne 'win-x64') {
     throw "Only win-x64 source builds are supported: $Rid"
 }
 
-$sourceArchive = (Resolve-Path -LiteralPath $SourceArchivePath -ErrorAction Stop).Path
 $projectRoot = (Resolve-Path -LiteralPath $UnityProjectPath -ErrorAction Stop).Path
 if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'ProjectSettings') -PathType Container)) {
     throw "Not a Unity project: $projectRoot"
@@ -73,17 +77,31 @@ if (Test-Path -LiteralPath $outputArchive) {
 }
 $outputParent = Split-Path -Parent $outputArchive
 New-Item -ItemType Directory -Path $outputParent -Force | Out-Null
-$workRoot = Join-Path $outputParent ('.source-build-' + [Guid]::NewGuid().ToString('N'))
-$sourceRoot = Join-Path $workRoot 'source'
-$runtimeBuildRoot = Join-Path $workRoot 'runtime-build'
+$workspace = New-AgentBridgeSourceBuildWorkspace
+$workRoot = $workspace.WorkRoot
+$sourceRoot = Join-Path $workRoot 's'
+$runtimeBuildRoot = Join-Path $workRoot 'b'
 $stageRoot = Join-Path $workRoot 'stage'
 
 try {
-    New-Item -ItemType Directory -Path $sourceRoot,$runtimeBuildRoot,$stageRoot -Force | Out-Null
-    Expand-Archive -LiteralPath $sourceArchive -DestinationPath $sourceRoot -Force
-
     $dotnetExecutable = Resolve-DotnetExecutablePath -ExecutablePath $DotnetPath
     $dotnetSdkVersion = Resolve-Dotnet8SdkVersion -ExecutablePath $dotnetExecutable
+    if ($PreflightOnly) {
+        [ordered]@{
+            passed = $true
+            powerShellVersion = $workspace.PowerShellVersion
+            longPathsEnabled = $workspace.LongPathsEnabled
+            extractionPathLimit = $workspace.PathLimit
+            workspace = $workRoot
+            dotnetSdkVersion = $dotnetSdkVersion
+            pythonRequired = $false
+        } | ConvertTo-Json -Compress | Write-Output
+        return
+    }
+    $sourceArchive = (Resolve-Path -LiteralPath $SourceArchivePath -ErrorAction Stop).Path
+    New-Item -ItemType Directory -Path $sourceRoot,$runtimeBuildRoot,$stageRoot -Force | Out-Null
+    Expand-AgentBridgeSourceArchive -ArchivePath $sourceArchive -Destination $sourceRoot -PathLimit $workspace.PathLimit
+
     [ordered]@{
         sdk = [ordered]@{
             version = $dotnetSdkVersion
@@ -182,7 +200,7 @@ try {
         buildOrigin = 'git-tag-source'
     } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $stageRoot 'release-manifest.json') -Encoding utf8
 
-    Compress-Archive -Path (Join-Path $stageRoot '*') -DestinationPath $outputArchive -CompressionLevel Optimal
+    Compress-AgentBridgeRuntimeArchive -SourceDirectory $stageRoot -ArchivePath $outputArchive
     $archiveSha = (Get-FileHash -LiteralPath $outputArchive -Algorithm SHA256).Hash.ToLowerInvariant()
     Set-Content -LiteralPath ($outputArchive + '.sha256') -Value "$archiveSha  $([System.IO.Path]::GetFileName($outputArchive))" -Encoding ascii
     Write-Output ([pscustomobject]@{
@@ -195,7 +213,5 @@ try {
     } | ConvertTo-Json -Compress)
 }
 finally {
-    if (Test-Path -LiteralPath $workRoot) {
-        Remove-Item -LiteralPath $workRoot -Recurse -Force
-    }
+    Remove-AgentBridgeSourceBuildWorkspace -Workspace $workspace
 }

@@ -346,6 +346,40 @@ namespace UnityMcp.AgentBridge.Mcp
                     "The published tag catalog does not contain a valid immutable commit SHA.");
             }
 
+            var toolsRoot = _pathResolver.ResolvePackageToolsRoot(settings);
+            var buildScript = string.IsNullOrWhiteSpace(toolsRoot)
+                ? string.Empty
+                : Path.Combine(toolsRoot, "UnityAgentBridge", "runtime-build", "Build-MachineRuntimeArtifactFromSource.ps1");
+            if (!File.Exists(buildScript))
+            {
+                return SourceBuildResult.Fail("source_builder_missing", "Tag source builder is missing: " + buildScript);
+            }
+            var dotnetPath = settings != null && !string.IsNullOrWhiteSpace(settings.DotnetPath)
+                ? settings.DotnetPath.Trim()
+                : ResolveDotnetExecutable();
+            var powerShell = ResolvePowerShellExecutable();
+            progress?.Report(MachineRuntimeDownloadProgress.Stage("Checking source-build prerequisites", 0.03f));
+            var preflight = await _processRunner.RunAsync(new ProcessExecutionRequest
+            {
+                FilePath = powerShell,
+                Arguments = new[]
+                {
+                    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", buildScript, "-PreflightOnly",
+                    "-Version", release.Version, "-TagName", release.Tag, "-CommitSha", release.CommitSha,
+                    "-OutputArchivePath", Path.Combine(cacheRoot, ".preflight-" + Guid.NewGuid().ToString("N") + ".zip"),
+                    "-UnityProjectPath", _pathResolver.GetProjectRoot(), "-DotnetPath", dotnetPath,
+                },
+                WorkingDirectory = Path.GetDirectoryName(buildScript) ?? toolsRoot,
+                Timeout = _installTimeout,
+                CancellationMode = ProcessCancellationMode.TerminateOnCancel,
+            }, cancellationToken).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (preflight.Outcome != ProcessOutcome.Completed || preflight.ExitCode.GetValueOrDefault(-1) != 0)
+            {
+                return SourceBuildResult.Fail("source_preflight_failed",
+                    "Source-build prerequisites failed before source acquisition. " + GetProcessFailureDetails(preflight));
+            }
+
             var sourceCacheRoot = Path.Combine(cacheRoot, "source");
             Directory.CreateDirectory(sourceCacheRoot);
             var sourceArchive = Path.Combine(
@@ -371,22 +405,10 @@ namespace UnityMcp.AgentBridge.Mcp
                     progress?.Report(MachineRuntimeDownloadProgress.Stage("Using cached tag source", 0.12f));
                 }
 
-                var toolsRoot = _pathResolver.ResolvePackageToolsRoot(settings);
-                var buildScript = string.IsNullOrWhiteSpace(toolsRoot)
-                    ? string.Empty
-                    : Path.Combine(toolsRoot, "UnityAgentBridge", "runtime-build", "Build-MachineRuntimeArtifactFromSource.ps1");
-                if (!File.Exists(buildScript))
-                {
-                    return SourceBuildResult.Fail("source_builder_missing", "Tag source builder is missing: " + buildScript);
-                }
 
                 partialBuiltArchive = Path.Combine(cacheRoot, ".source-build-output-" + Guid.NewGuid().ToString("N") + ".zip");
                 partialBuiltChecksum = partialBuiltArchive + ".sha256";
                 progress?.Report(MachineRuntimeDownloadProgress.Stage("Building runtime from tag source", 0.90f));
-                var dotnetPath = settings != null && !string.IsNullOrWhiteSpace(settings.DotnetPath)
-                    ? settings.DotnetPath.Trim()
-                    : ResolveDotnetExecutable();
-                var powerShell = ResolvePowerShellExecutable();
                 var request = new ProcessExecutionRequest
                 {
                     FilePath = powerShell,
@@ -423,7 +445,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 cancellationToken.ThrowIfCancellationRequested();
                 if (buildResult.Outcome != ProcessOutcome.Completed || buildResult.ExitCode.GetValueOrDefault(-1) != 0)
                 {
-                    var detail = string.IsNullOrWhiteSpace(buildResult.Stderr) ? buildResult.Stdout : buildResult.Stderr;
+                    var detail = GetProcessFailureDetails(buildResult);
                     return SourceBuildResult.Fail(
                         "source_build_failed",
                         "Tag source build failed." + (string.IsNullOrWhiteSpace(detail) ? string.Empty : " " + detail.Trim()));
@@ -472,6 +494,13 @@ namespace UnityMcp.AgentBridge.Mcp
                 TryDeleteFile(partialBuiltArchive);
                 TryDeleteFile(partialBuiltChecksum);
             }
+        }
+
+        private static string GetProcessFailureDetails(ProcessExecutionResult result)
+        {
+            return "Process outcome: " + result.Outcome + "; exit code: " + result.ExitCode + ".\n" +
+                string.Join("\n", new[] { result.Stdout, result.Stderr }
+                .Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()));
         }
 
         private static void TryDeleteFile(string path)
