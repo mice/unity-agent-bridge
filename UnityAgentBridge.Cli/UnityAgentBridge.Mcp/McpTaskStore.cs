@@ -207,13 +207,13 @@ public sealed class McpTaskStore : IMcpTaskStore
         return record;
     }
 
-    internal async Task MaintainAsync(CancellationToken token)
+    internal async Task MaintainAsync(CancellationToken token, Func<string, CancellationToken, Task<McpTaskInfo?>>? observeTask = null)
     {
         string[] active;
         using (persistence.Enter(token)) active = ReadRecords().Where(record => !IsTerminal(record.Task.Status)).Select(record => record.Task.TaskId).ToArray();
         await Parallel.ForEachAsync(active, new ParallelOptions { MaxDegreeOfParallelism = 4, CancellationToken = token }, async (id, ct) =>
         {
-            try { await GetTaskAsync(id, ct).ConfigureAwait(false); }
+            try { await (observeTask is null ? GetTaskAsync(id, ct) : observeTask(id, ct)).ConfigureAwait(false); }
             catch (Exception exception) when (exception is IOException or McpException)
             { Console.Error.WriteLine("MCP task reconciliation: " + exception.Message); }
         });

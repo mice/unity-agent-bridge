@@ -72,6 +72,8 @@ An active legacy record without an Editor-session identity is explicitly unconfi
 
 `projectId` identifies the local project path. `editorSessionId` identifies one Editor process/start instance and survives Domain Reload; restarting the Editor changes it. `connectionId` identifies an MCP host connection and changes on reconnect. Historical bindings retain their original identities.
 
+After reconnecting, querying an old task first must not transfer its connection identity to new work. New calls and submissions use the current host connection in their results and persistent routes; old tasks and reports read with their original task/command handle retain their originating connection. Missing historical connection identities remain unknown. This also applies when histories from several connections and projects are interleaved. Background maintenance observes original bindings without replaying user operations or allocating replacement tasks.
+
 New versioned queue envelopes carry the expected project and Editor-session identities. The receiver checks them before execution and recovery; a replacement Editor rejects commands addressed to its predecessor. Reading an old saved terminal result does not require its session to match the current Editor.
 
 Stopping A's Editor must not stop a host serving B. Project-level Stop excludes a known shared multi-project host; preparing/replacing a runtime in use remains blocked. Review every affected project before an explicit host-level shutdown. A runtime executable's location under A, or A's project hint, is insufficient evidence that the host belongs exclusively to A. With insufficient ownership evidence, inspect the host rather than treating it as a safe project Stop target.

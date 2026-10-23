@@ -9,7 +9,8 @@ namespace UnityAgentBridge.Mcp;
 
 public sealed class McpMultiProjectHost
 {
-    private readonly ConcurrentDictionary<string, Bucket> buckets = new();
+    // Historical observations keep their originating connection; new work uses this host's connection.
+    private readonly ConcurrentDictionary<(string ProjectId, string EditorSessionId, string? ConnectionId), Lazy<Bucket>> buckets = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> connectionGates = new();
     private readonly ConcurrentDictionary<string, bool> connectedSessions = new();
     private readonly McpHostDiagnostics diagnostics;
@@ -30,13 +31,13 @@ public sealed class McpMultiProjectHost
     public McpTaskRouteIndex Index { get; } = new();
     public McpProjectTaskStore Store { get; }
     public sealed record Bucket(ProjectContext Context, ExternalBridgeClient Client, McpTaskAdapter Adapter, McpTaskExecutionCoordinator Coordinator, McpTaskStore Store);
-    public Bucket Get(ProjectContext context) => buckets.GetOrAdd(context.ProjectId + "/" + context.EditorSessionId, _ =>
+    public Bucket Get(ProjectContext context) => buckets.GetOrAdd((context.ProjectId, context.EditorSessionId, context.ConnectionId), _ => new(() =>
     {
         var client = new ExternalBridgeClient { ConnectionId = context.ConnectionId, CommandDispatching = (paths, command) => Index.SaveCommand(command, McpTaskRoute.From(context)) };
         var adapter = new McpTaskAdapter(client, context, Index);
         var coordinator = new McpTaskExecutionCoordinator(adapter);
         return new(context, client, adapter, coordinator, new McpTaskStore(context, coordinator));
-    });
+    })).Value;
     public static ProjectContext Restore(McpTaskRoute route) => new(new ProjectRegistration { projectId = route.ProjectId, projectPath = route.ProjectPath, queueRoot = route.QueueRoot },
         new EditorSessionInfo { projectId = route.ProjectId, editorSessionId = route.EditorSessionId ?? string.Empty }, route.CreateQueuePaths(), route.ConnectionId);
     public ProjectContext Resolve(string tool, JsonObject arguments)
@@ -223,9 +224,12 @@ public sealed class McpMultiProjectHost
     }
     internal async Task MaintainAsync(CancellationToken cancellationToken)
     {
-        foreach (var bucket in buckets.Values)
+        // Persistence is project-scoped, while execution objects are connection-scoped. Scan once
+        // per project and recover every active task through its own durable route, including tasks
+        // from another connection or Editor session not previously queried by this host.
+        foreach (var bucket in buckets.Values.Select(value => value.Value).DistinctBy(value => value.Context.ProjectId).ToArray())
         {
-            try { await bucket.Store.MaintainAsync(cancellationToken); }
+            try { await bucket.Store.MaintainAsync(cancellationToken, Store.GetTaskAsync); }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
             catch (Exception e) { Console.Error.WriteLine("MCP project maintenance " + bucket.Context.ProjectId + ": " + e.Message); }
         }
