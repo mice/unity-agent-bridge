@@ -1332,7 +1332,7 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
         [Test]
         [Category("AGBM_MCP_PROCESS")]
-        public void StopCurrentProjectServers_TerminatesPreparedRuntimeMatch()
+        public void StopCurrentProjectServers_LeavesUnprovenRuntimeOwnershipRunning()
         {
             var provider = new FakeProcessProvider(new[]
             {
@@ -1348,8 +1348,9 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
 
             var result = probe.StopCurrentProjectServers(new McpEditorSettings());
 
-            Assert.That(result.Attempted, Is.True);
-            Assert.That(provider.TerminatedProcessIds, Is.EquivalentTo(new[] { 105 }));
+            Assert.That(result.Attempted, Is.False);
+            Assert.That(provider.TerminatedProcessIds, Is.Empty);
+            Assert.That(result.SnapshotBeforeStop.RuntimeInUse, Is.True);
         }
 
         [Test]
@@ -1402,6 +1403,48 @@ namespace UnityMcp.AgentBridge.Tests.Mcp
             Assert.That(filterIndex, Is.GreaterThanOrEqualTo(0));
             Assert.That(mainModuleIndex, Is.GreaterThan(filterIndex));
             Assert.That(metadataIndex, Is.GreaterThan(mainModuleIndex));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_299.md
+        [TestCase("unity-agent-bridge.exe mcp-server --routing-mode multi-project", "")]
+        [TestCase("unity-agent-bridge.exe mcp-server", "multi-project")]
+        [Category("AGBM_299")]
+        [Category("AGBM_MCP_PROCESS")]
+        public void StopCurrentProjectServers_PreservesMultiProjectHost(string command, string routingMode)
+        {
+            var provider = new FakeProcessProvider(new[]
+            {
+                new McpProcessDescriptor
+                {
+                    ProcessId = 107,
+                    ProcessName = "unity-agent-bridge",
+                    ExecutablePath = "C:/Project/.unitymcp/runtime/unity-agent-bridge.exe",
+                    CommandLine = command,
+                    RoutingMode = routingMode,
+                }
+            });
+            var probe = CreateProbe(provider, "C:/Project", "C:/Project/.unitymcp/runtime");
+            var result = probe.StopCurrentProjectServers(new McpEditorSettings());
+            Assert.That(provider.TerminatedProcessIds, Is.Empty);
+            Assert.That(result.SnapshotBeforeStop.State, Is.EqualTo(McpServerProcessState.MultiProjectHost));
+            Assert.That(result.SnapshotBeforeStop.RuntimeInUse, Is.True);
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_267.md
+        [Test]
+        [Category("AGBM_267")]
+        [Category("AGBM_MCP_PROCESS")]
+        public void Classify_PathPrefixDoesNotEstablishProjectOwnership()
+        {
+            var info = McpServerProcessProbe.Classify(new McpProcessDescriptor
+            {
+                ProcessId = 108,
+                ProcessName = "unity-agent-bridge",
+                ExecutablePath = "C:/Project/.unitymcp/runtime/unity-agent-bridge.exe",
+                CommandLine = "UNITY_PROJECT_PATH=C:/ProjectCopy unity-agent-bridge.exe mcp-server",
+            }, "C:/Project", "C:/Project/.unitymcp/runtime");
+            Assert.That(info.MatchKind, Is.EqualTo(McpServerProcessMatchKind.MismatchedProject));
+            Assert.That(info.HasExclusiveProjectOwnership, Is.False);
         }
 
         private static string Normalize(string path)

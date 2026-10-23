@@ -73,7 +73,7 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var activeServerSnapshot = _serverProcessProbe.Inspect(settings);
-            if (activeServerSnapshot.SafeStopTargets.Any())
+            if (activeServerSnapshot.RuntimeInUse)
             {
                 return Task.FromResult(new ManagedBlockApplyResult
                 {
@@ -506,7 +506,13 @@ namespace UnityMcp.AgentBridge.Mcp
                 return null;
             }
 
-            var projectEvidence = ContainsPath(normalizedCommandLine, projectRoot);
+            var projectBinding = ReadProjectBinding(normalizedCommandLine);
+            var projectEvidence = !string.IsNullOrWhiteSpace(projectBinding) &&
+                                  string.Equals(NormalizePath(projectBinding), NormalizePath(projectRoot), StringComparison.OrdinalIgnoreCase);
+            var multiProject = string.Equals(process.RoutingMode, "multi-project", StringComparison.OrdinalIgnoreCase) ||
+                               System.Text.RegularExpressions.Regex.IsMatch(commandLine, @"--routing-mode(?:[=\s]+)[""']?multi-project", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            var explicitSingleProject = string.Equals(process.RoutingMode, "single-project", StringComparison.OrdinalIgnoreCase) ||
+                                        System.Text.RegularExpressions.Regex.IsMatch(commandLine, @"--routing-mode(?:[=\s]+)[""']?single-project", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             var executableRuntimeEvidence = IsUnderPath(executablePath, runtimeRoot);
             var commandLineRuntimeEvidence = ContainsPath(normalizedCommandLine, runtimeRoot);
             var runtimeEvidence = executableRuntimeEvidence || commandLineRuntimeEvidence;
@@ -521,7 +527,12 @@ namespace UnityMcp.AgentBridge.Mcp
 
             McpServerProcessMatchKind matchKind;
             string matchReason;
-            if (projectEvidence && !hasContradictoryProject)
+            if (multiProject)
+            {
+                matchKind = McpServerProcessMatchKind.MultiProjectHost;
+                matchReason = "shared multi-project host; use an explicit host-level stop after reviewing all projects";
+            }
+            else if (projectEvidence && !hasContradictoryProject)
             {
                 matchKind = McpServerProcessMatchKind.CurrentProject;
                 matchReason = "command line (" + commandLineSource + ") references the current Unity project";
@@ -553,6 +564,11 @@ namespace UnityMcp.AgentBridge.Mcp
                 CommandLineSource = commandLineSource,
                 EvidenceLabels = evidenceLabels,
                 MatchKind = matchKind,
+                RuntimeAssociated = runtimeEvidence,
+                HasExclusiveProjectOwnership = !multiProject && !hasContradictoryProject &&
+                    ((projectEvidence && (explicitSingleProject ||
+                        normalizedCommandLine.IndexOf("UNITY_PROJECT_PATH=", StringComparison.OrdinalIgnoreCase) >= 0)) ||
+                     (runtimeEvidence && explicitSingleProject)),
                 MatchReason = matchReason,
                 InspectionError = Summarize(
                     CombineInspectionErrors(process.InspectionError, process.CommandLineInspectionError),
@@ -641,14 +657,19 @@ namespace UnityMcp.AgentBridge.Mcp
                    normalizedCommandLine.IndexOf("mcp-server", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
+        private static string ReadProjectBinding(string commandLine)
+        {
+            var match = System.Text.RegularExpressions.Regex.Match(commandLine,
+                @"(?:UNITY_PROJECT_PATH|UNITY_AGENT_BRIDGE_PROJECT_PATH)=(?:""(?<path>[^""]+)""|'(?<path>[^']+)'|(?<path>[^\s]+))",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return match.Success ? match.Groups["path"].Value : string.Empty;
+        }
+
         private static bool HasContradictoryProjectBinding(string normalizedCommandLine, string projectRoot)
         {
-            if (normalizedCommandLine.IndexOf("UNITY_PROJECT_PATH=", StringComparison.OrdinalIgnoreCase) < 0)
-            {
-                return false;
-            }
-
-            return !ContainsPath(normalizedCommandLine, projectRoot);
+            var binding = ReadProjectBinding(normalizedCommandLine);
+            return !string.IsNullOrWhiteSpace(binding) &&
+                   !string.Equals(NormalizePath(binding), NormalizePath(projectRoot), StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsUnderPath(string candidatePath, string rootPath)
@@ -782,11 +803,40 @@ namespace UnityMcp.AgentBridge.Mcp
                         descriptor.CommandLineInspectionError = SystemMcpProcessMetadataReader.SummarizeError(exception.Message);
                     }
 
+                    descriptor.RoutingMode = ReadRoutingMode(process);
                     descriptors.Add(descriptor);
                 }
             }
 
             return descriptors;
+        }
+
+        private static string ReadRoutingMode(Process process)
+        {
+            try
+            {
+                var root = Environment.GetEnvironmentVariable("UNITY_AGENT_BRIDGE_REGISTRY_ROOT");
+                if (string.IsNullOrWhiteSpace(root))
+                    root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "UnityAgentBridge", "projects");
+                var path = Path.Combine(root, "hosts", process.Id + ".json");
+                if (!File.Exists(path) || new FileInfo(path).Length > 16384) return string.Empty;
+                var lease = UnityEngine.JsonUtility.FromJson<HostProcessLease>(File.ReadAllText(path));
+                if (lease == null || lease.schemaVersion != 1 || lease.processId != process.Id ||
+                    !DateTimeOffset.TryParse(lease.processStartTime, out var start) ||
+                    Math.Abs((start.UtcDateTime - process.StartTime.ToUniversalTime()).TotalMilliseconds) > 1)
+                    return string.Empty;
+                return lease.routingMode ?? string.Empty;
+            }
+            catch { return string.Empty; }
+        }
+
+        [Serializable]
+        private sealed class HostProcessLease
+        {
+            public int schemaVersion;
+            public int processId;
+            public string processStartTime;
+            public string routingMode;
         }
 
         private static bool LooksLikeUnityAgentBridgeProcessName(string processName)
@@ -844,6 +894,7 @@ namespace UnityMcp.AgentBridge.Mcp
 
     internal sealed class McpProcessDescriptor
     {
+        public string RoutingMode { get; set; } = string.Empty;
         public int ProcessId { get; set; }
         public string ProcessName { get; set; } = string.Empty;
         public string ExecutablePath { get; set; } = string.Empty;
@@ -865,11 +916,13 @@ namespace UnityMcp.AgentBridge.Mcp
         {
             get
             {
-                return Processes.Where(process =>
-                    process.MatchKind == McpServerProcessMatchKind.CurrentProject ||
-                    process.MatchKind == McpServerProcessMatchKind.PreparedRuntime);
+                return Processes.Where(process => process.HasExclusiveProjectOwnership &&
+                    (process.MatchKind == McpServerProcessMatchKind.CurrentProject ||
+                     process.MatchKind == McpServerProcessMatchKind.PreparedRuntime));
             }
         }
+
+        public bool RuntimeInUse => Processes.Any(process => process.RuntimeAssociated);
 
         public static McpServerProcessSnapshot Unavailable(string reason)
         {
@@ -893,7 +946,9 @@ namespace UnityMcp.AgentBridge.Mcp
             var currentCount = snapshot.SafeStopTargets.Count();
             var totalCount = snapshot.Processes.Count;
             var mismatchedCount = snapshot.Processes.Count(process => process.MatchKind == McpServerProcessMatchKind.MismatchedProject);
-            var candidateCount = snapshot.Processes.Count(process => process.MatchKind == McpServerProcessMatchKind.Candidate);
+            var sharedCount = snapshot.Processes.Count(process => process.MatchKind == McpServerProcessMatchKind.MultiProjectHost);
+            var candidateCount = snapshot.Processes.Count(process => process.MatchKind == McpServerProcessMatchKind.Candidate ||
+                (process.MatchKind == McpServerProcessMatchKind.PreparedRuntime && !process.HasExclusiveProjectOwnership));
             var ratio = "(" + currentCount + "/" + totalCount + ")";
 
             if (snapshot.Processes.Count == 0)
@@ -901,6 +956,12 @@ namespace UnityMcp.AgentBridge.Mcp
                 snapshot.State = McpServerProcessState.Stopped;
                 snapshot.Summary = "Idle " + ratio;
                 snapshot.Detail = "No long-running MCP server process was detected. MCP may still be available through on-demand CLI calls.";
+            }
+            else if (sharedCount > 0)
+            {
+                snapshot.State = McpServerProcessState.MultiProjectHost;
+                snapshot.Summary = "Shared " + ratio;
+                snapshot.Detail = "Multi-project hosts may serve other projects. Current-project Stop excludes them; use an explicit host-level stop.";
             }
             else if (currentCount == 1)
             {
@@ -942,6 +1003,7 @@ namespace UnityMcp.AgentBridge.Mcp
         Stopped,
         RunningCurrentProject,
         MultipleCurrentProject,
+        MultiProjectHost,
         MismatchedProject,
         Ambiguous,
         Unavailable,
@@ -951,12 +1013,15 @@ namespace UnityMcp.AgentBridge.Mcp
     {
         CurrentProject,
         PreparedRuntime,
+        MultiProjectHost,
         MismatchedProject,
         Candidate,
     }
 
     public sealed class McpServerProcessInfo
     {
+        public bool HasExclusiveProjectOwnership { get; set; }
+        public bool RuntimeAssociated { get; set; }
         public int ProcessId { get; set; }
         public string ProcessName { get; set; } = string.Empty;
         public string ExecutablePath { get; set; } = string.Empty;

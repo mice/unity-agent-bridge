@@ -201,9 +201,14 @@ namespace UnityMcp.BuiltInPlugins.UnityQueries
                 : reportRoot + Path.DirectorySeparatorChar;
             var durableCompileRoot = Path.Combine(projectRoot, "Library", "AgentBridge", "compile-reports") + Path.DirectorySeparatorChar;
             var durableTaskRoot = Path.Combine(projectRoot, "Library", "AgentBridge", "mcp-task-reports") + Path.DirectorySeparatorChar;
+            var durableEditorTestRoot = Path.Combine(projectRoot, "Library", "AgentBridge", "editor-test-reports") + Path.DirectorySeparatorChar;
+            var commandHistoryRoot = Path.Combine(projectRoot, "Library", "AgentBridge", "command-history");
+            var ownedCommandReport = string.Equals(Path.GetDirectoryName(combinedPath), commandHistoryRoot, StringComparison.OrdinalIgnoreCase) &&
+                System.Text.RegularExpressions.Regex.IsMatch(Path.GetFileName(combinedPath), @"^(?:r-[0-9a-f]{64}|[0-9a-f]{64}-report-[0-9a-f]{64})\.json$");
             if (!combinedPath.StartsWith(reportRootWithSeparator, StringComparison.OrdinalIgnoreCase) &&
                 !combinedPath.StartsWith(durableCompileRoot, StringComparison.OrdinalIgnoreCase) &&
-                !combinedPath.StartsWith(durableTaskRoot, StringComparison.OrdinalIgnoreCase))
+                !combinedPath.StartsWith(durableTaskRoot, StringComparison.OrdinalIgnoreCase) &&
+                !combinedPath.StartsWith(durableEditorTestRoot, StringComparison.OrdinalIgnoreCase) && !ownedCommandReport)
             {
                 failure = UnityQueriesResult.InvalidArgs("AGENTBRIDGE_REPORT_PATH_OUTSIDE_ROOT", "reportPath must resolve within the Agent Bridge report root.");
                 return false;

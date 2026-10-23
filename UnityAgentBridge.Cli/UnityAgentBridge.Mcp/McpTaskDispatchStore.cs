@@ -1,7 +1,7 @@
 namespace UnityAgentBridge.Mcp;
 
 internal sealed record McpTaskDispatch(string ProjectIdentity, string McpTaskId, string CommandId,
-    string TaskType, string PayloadHash, DateTimeOffset CreatedAt, string? ResponseJson = null, int Version = 1);
+    string TaskType, string PayloadHash, DateTimeOffset CreatedAt, string? ResponseJson = null, int Version = 1, string? ProjectId = null, string? EditorSessionId = null, string? ConnectionId = null, string? QueueRoot = null);
 
 /// <summary>A durable dispatch intent is never automatically replayed.</summary>
 internal sealed class McpTaskDispatchStore(string projectPath)

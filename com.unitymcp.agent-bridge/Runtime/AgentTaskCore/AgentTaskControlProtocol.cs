@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 
 namespace UnityMcp.AgentTaskCore
 {
@@ -205,7 +206,10 @@ namespace UnityMcp.AgentTaskCore
         private static string ReadString(string json, string name)
         {
             var raw = ReadRaw(json, name);
-            return raw == "null" ? null : Unescape(raw.Trim('"'));
+            if (raw == "null") return null;
+            if (raw.Length == 0 || raw[0] != '"') return raw;
+            if (raw.Length < 2 || raw[raw.Length - 1] != '"') throw new FormatException("Unterminated JSON string.");
+            return Unescape(raw.Substring(1, raw.Length - 2));
         }
 
         private static string ReadRaw(string json, string name)
@@ -214,20 +218,92 @@ namespace UnityMcp.AgentTaskCore
             var start = json.IndexOf(marker, StringComparison.Ordinal);
             if (start < 0) return string.Empty;
             start += marker.Length;
+            while (start < json.Length && char.IsWhiteSpace(json[start])) start++;
+            if (start >= json.Length) throw new FormatException("Missing JSON value: " + name);
             var end = start;
             var quoted = json[start] == '"';
             if (quoted)
             {
                 end++;
-                while (end < json.Length && (json[end] != '"' || json[end - 1] == '\\')) end++;
-                return json.Substring(start, Math.Min(end + 1, json.Length) - start);
+                while (end < json.Length)
+                {
+                    if (json[end] == '"')
+                    {
+                        return json.Substring(start, end + 1 - start);
+                    }
+                    if (json[end] == '\\')
+                    {
+                        end++;
+                        if (end >= json.Length) throw new FormatException("Truncated JSON escape.");
+                    }
+                    end++;
+                }
+                throw new FormatException("Unterminated JSON string.");
             }
             while (end < json.Length && json[end] != ',' && json[end] != '}') end++;
             return json.Substring(start, end - start);
         }
 
         private static string StringValue(string value) => value == null ? "null" : "\"" + Escape(value) + "\"";
-        private static string Escape(string value) => value == null ? string.Empty : value.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", "\\r").Replace("\n", "\\n");
-        private static string Unescape(string value) => value.Replace("\\\"", "\"").Replace("\\\\", "\\").Replace("\\r", "\r").Replace("\\n", "\n");
+        private static string Escape(string value)
+        {
+            if (value == null) return string.Empty;
+            var output = new StringBuilder(value.Length);
+            foreach (var c in value)
+            {
+                switch (c)
+                {
+                    case '\\': output.Append("\\\\"); break;
+                    case '"': output.Append("\\\""); break;
+                    case '\r': output.Append("\\r"); break;
+                    case '\n': output.Append("\\n"); break;
+                    case '\t': output.Append("\\t"); break;
+                    case '\b': output.Append("\\b"); break;
+                    case '\f': output.Append("\\f"); break;
+                    default:
+                        if (c < 0x20 || char.IsSurrogate(c)) output.Append("\\u").Append(((int)c).ToString("x4", System.Globalization.CultureInfo.InvariantCulture));
+                        else output.Append(c);
+                        break;
+                }
+            }
+            return output.ToString();
+        }
+        private static string Unescape(string value)
+        {
+            var output = new StringBuilder(value.Length);
+            for (var i = 0; i < value.Length; i++)
+            {
+                var c = value[i];
+                if (c < 0x20 || c == '"') throw new FormatException("Invalid character in JSON string.");
+                if (c != '\\') { output.Append(c); continue; }
+                if (++i >= value.Length) throw new FormatException("Truncated JSON escape.");
+                switch (value[i])
+                {
+                    case '\\': output.Append('\\'); break;
+                    case '"': output.Append('"'); break;
+                    case '/': output.Append('/'); break;
+                    case 'r': output.Append('\r'); break;
+                    case 'n': output.Append('\n'); break;
+                    case 't': output.Append('\t'); break;
+                    case 'b': output.Append('\b'); break;
+                    case 'f': output.Append('\f'); break;
+                    case 'u':
+                        if (value.Length - i <= 4) throw new FormatException("Truncated JSON Unicode escape.");
+                        var unit = 0;
+                        for (var j = 0; j < 4; j++)
+                        {
+                            var digit = value[++i];
+                            var hex = digit >= '0' && digit <= '9' ? digit - '0' : digit >= 'a' && digit <= 'f' ? digit - 'a' + 10 : digit >= 'A' && digit <= 'F' ? digit - 'A' + 10 : -1;
+                            if (hex < 0) throw new FormatException("Invalid JSON Unicode escape.");
+                            unit = unit * 16 + hex;
+                        }
+                        // Preserve UTF-16 units, including surrogate pairs, without normalization.
+                        output.Append((char)unit);
+                        break;
+                    default: throw new FormatException("Invalid JSON escape.");
+                }
+            }
+            return output.ToString();
+        }
     }
 }

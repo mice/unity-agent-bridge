@@ -1,4 +1,5 @@
 using System.Reflection;
+using UnityAgentBridge.ExternalBridgeClientCore;
 
 namespace UnityAgentBridge.Mcp;
 
@@ -11,6 +12,21 @@ public sealed record McpHostDiagnostics(
     string LogsDirectory,
     string ServerLogPath)
 {
+    public string? ExpectedCapabilityRevision { get; init; }
+    public Action? ValidateCatalogSnapshot { get; init; }
+
+    public static McpHostDiagnostics ForWorkspace(string workspace)
+    {
+        var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "UnityAgentBridge", "host-logs");
+        return new(ResolveCurrentExecutablePath(), "multi-project-runtime", Array.Empty<string>(), workspace,
+            Path.Combine(workspace, "Temp", "AgentBridge"), root, Path.Combine(root, "mcp-server.log"));
+    }
+    public McpHostDiagnostics ForProject(ProjectContext context) => this with
+    {
+        ProjectPath = context.ProjectPath, QueueRoot = context.QueuePaths.QueueRoot,
+        LogsDirectory = Path.Combine(context.QueuePaths.QueueRoot, "logs"),
+        ServerLogPath = Path.Combine(context.QueuePaths.QueueRoot, "logs", "mcp-server.log")
+    };
     public static McpHostDiagnostics Resolve(string? explicitProjectPath = null)
     {
         var projectPath = ResolveProjectPath(explicitProjectPath);

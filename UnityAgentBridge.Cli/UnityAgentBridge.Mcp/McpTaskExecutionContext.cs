@@ -1,4 +1,5 @@
 using System.Text.Json;
+using UnityAgentBridge.ExternalBridgeClientCore;
 
 namespace UnityAgentBridge.Mcp;
 
@@ -8,9 +9,9 @@ internal static class McpTaskExecutionContext
     private static readonly AsyncLocal<PendingTaskRequest?> Pending = new();
     public static string? CurrentTaskId => Pending.Value?.McpTaskId;
 
-    public static void Prepare(string toolName, string argumentsJson)
+    public static void Prepare(string toolName, string argumentsJson, ProjectContext? projectContext = null)
     {
-        Pending.Value = new PendingTaskRequest(toolName, argumentsJson);
+        Pending.Value = new PendingTaskRequest(toolName, argumentsJson) { ProjectContext = projectContext };
     }
 
     public static PendingTaskRequest? ConsumePending()
@@ -31,6 +32,7 @@ internal static class McpTaskExecutionContext
         public string ToolName { get; }
         public string ArgumentsJson { get; }
         public string? McpTaskId { get; set; }
+        public ProjectContext? ProjectContext { get; init; }
 
         public bool IsEditModeTest => string.Equals(ToolName, "unity_tests_run_edit_mode", StringComparison.Ordinal);
         public bool IsCompile => string.Equals(ToolName, "unity_project_compile", StringComparison.Ordinal);

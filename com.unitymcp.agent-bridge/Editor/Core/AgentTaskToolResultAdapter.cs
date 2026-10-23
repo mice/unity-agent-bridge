@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 using UnityMcp.AgentTaskCore;
 
 namespace UnityMcp.AgentBridge
@@ -6,6 +8,21 @@ namespace UnityMcp.AgentBridge
     /// <summary>Projects protocol-independent task snapshots into the legacy ToolResult envelope.</summary>
     public static class AgentTaskToolResultAdapter
     {
+        internal static void ApplyBusinessPayload(ToolResult result, string payloadJson)
+        {
+            result.metricsObjectJson = payloadJson;
+            using (var text = new System.IO.StringReader(payloadJson))
+            using (var reader = new Newtonsoft.Json.JsonTextReader(text) { DateParseHandling = Newtonsoft.Json.DateParseHandling.None })
+            {
+                if (!(JToken.ReadFrom(reader) is JObject payload)) return;
+                result.reportPath = payload.Value<string>("reportPath");
+                if (payload["errors"] is JArray errors && errors.Count > 0)
+                    result.errors = errors.ToObject<List<ToolError>>();
+                if (payload["warnings"] is JArray warnings && warnings.Count > 0)
+                    result.warnings = warnings.ToObject<List<ToolWarning>>();
+            }
+        }
+
         public static ToolResult FromSnapshot(AgentTaskSnapshot snapshot, AgentCommand command, string tool)
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
@@ -40,9 +57,9 @@ namespace UnityMcp.AgentBridge
                     result.summary = string.IsNullOrWhiteSpace(snapshot.Result?.Reason) ? "Agent task completed." : snapshot.Result.Reason;
                     if (snapshot.Result?.Payload != null)
                     {
-                        result.metricsObjectJson = JsonUtil.SerializeObject(snapshot.Result.Payload);
+                        ApplyBusinessPayload(result, JsonUtil.SerializeObject(snapshot.Result.Payload));
                     }
-                    if (domainFailure)
+                    if (domainFailure && result.errors.Count == 0)
                     {
                         result.errors.Add(new ToolError { code = "AGENT_TASK_DOMAIN_FAILURE", message = result.summary });
                     }

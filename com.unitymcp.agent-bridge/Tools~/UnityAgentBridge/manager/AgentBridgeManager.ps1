@@ -450,13 +450,26 @@ switch ($Command) {
         exit 0
     }
     'launch' {
+        $multiProject = $env:UNITY_AGENT_BRIDGE_ROUTING_MODE -eq 'multi-project'
+        if ($multiProject -and [string]::IsNullOrWhiteSpace($env:UNITY_AGENT_BRIDGE_WORKSPACE_PATH)) {
+            $env:UNITY_AGENT_BRIDGE_WORKSPACE_PATH = (Get-Location).ProviderPath
+        }
+        $projectRoot = ''
+        if ($multiProject) {
+            try { $projectRoot = Get-ProjectRoot } catch { $ProjectPath = '' }
+        } else { $projectRoot = Get-ProjectRoot }
         $resolved = Resolve-InstalledRuntime
-        $projectRoot = Get-ProjectRoot
         $env:UNITY_AGENT_BRIDGE_PROJECT_PATH = $projectRoot
         $env:UNITY_AGENT_BRIDGE_RUNTIME_MODE = 'machine'
         $activeMarker = Join-Path $resolved.root ("active-" + $PID + '.json')
         Write-JsonFile -Value ([ordered]@{ projectPath = $projectRoot; version = $resolved.version; pid = $PID; startedUtc = (Get-Date).ToUniversalTime().ToString('o') }) -PathValue $activeMarker
-        Push-Location $projectRoot
-        try { & $resolved.executable 'mcp-server'; exit $LASTEXITCODE } finally { Pop-Location; if (Test-Path -LiteralPath $activeMarker) { Remove-Item -LiteralPath $activeMarker -Force } }
+        $launchDirectory = if ($multiProject) { $env:UNITY_AGENT_BRIDGE_WORKSPACE_PATH } else { $projectRoot }
+        Push-Location $launchDirectory
+        try {
+            $serverArguments = @('mcp-server')
+            if ($env:UNITY_AGENT_BRIDGE_ROUTING_MODE -eq 'multi-project') { $serverArguments += @('--routing-mode', 'multi-project') }
+            & $resolved.executable @serverArguments
+            exit $LASTEXITCODE
+        } finally { Pop-Location; if (Test-Path -LiteralPath $activeMarker) { Remove-Item -LiteralPath $activeMarker -Force } }
     }
 }

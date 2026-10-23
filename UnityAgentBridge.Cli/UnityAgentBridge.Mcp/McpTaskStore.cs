@@ -8,7 +8,7 @@ namespace UnityAgentBridge.Mcp;
 
 internal sealed record McpStoredTask(int Version, string ProjectIdentity, McpTaskInfo Task,
     DateTimeOffset ExecutionDeadline, DateTimeOffset? ObservationFailedAt = null,
-    JsonElement? LastObservation = null, string? OwnedReport = null, bool CancellationRequested = false);
+    JsonElement? LastObservation = null, string? OwnedReport = null, bool CancellationRequested = false, string? ProjectId = null, string? EditorSessionId = null, string? ConnectionId = null, string? QueueRoot = null);
 
 #pragma warning disable CS0067
 public sealed class McpTaskStore : IMcpTaskStore
@@ -18,6 +18,14 @@ public sealed class McpTaskStore : IMcpTaskStore
     private readonly McpTaskExecutionCoordinator? coordinator;
     private readonly McpTaskPolicy policy;
     private readonly TimeProvider clock;
+    private readonly UnityAgentBridge.ExternalBridgeClientCore.ProjectContext? context;
+    private readonly bool historicalLegacy;
+
+    public McpTaskStore(McpTaskRoute route, McpTaskExecutionCoordinator? coordinator = null)
+        : this(route.ProjectPath, coordinator) { historicalLegacy = route.EditorSessionId is null; }
+
+    public McpTaskStore(UnityAgentBridge.ExternalBridgeClientCore.ProjectContext context, McpTaskExecutionCoordinator? coordinator = null)
+        : this(context.ProjectPath, coordinator) { this.context = context; }
 
     public McpTaskStore(string projectPath, McpTaskExecutionCoordinator? coordinator = null)
         : this(projectPath, coordinator, new McpTaskPolicy(), TimeProvider.System) { }
@@ -45,7 +53,8 @@ public sealed class McpTaskStore : IMcpTaskStore
         var task = new McpTaskInfo("mcp-" + Guid.NewGuid().ToString("N"), McpTaskStatus.Working, now, now,
             null, 250, "Allocated; awaiting validated execution.", null, null, new Dictionary<string, InputRequest>());
         var window = pending?.TimeoutMs > 0 ? TimeSpan.FromMilliseconds(Math.Min((long)pending.TimeoutMs + 30000, 86400000)) : policy.DefaultExecutionWindow;
-        Save(new(Version, persistence.ProjectPath, task, now + window));
+        Save(new(Version, persistence.ProjectPath, task, now + window, ProjectId: context?.ProjectId,
+            EditorSessionId: context?.EditorSessionId, ConnectionId: context?.ConnectionId, QueueRoot: context?.QueuePaths.QueueRoot));
         if (pending is not null) pending.McpTaskId = task.TaskId;
         return task;
     }
@@ -61,6 +70,16 @@ public sealed class McpTaskStore : IMcpTaskStore
             if (IsTerminal(record.Task.Status))
             {
                 if (Expired(record)) { Delete(record); return null; }
+                return record.Task;
+            }
+            if (historicalLegacy)
+            {
+                var now = clock.GetUtcNow();
+                record = record with { ObservationFailedAt = record.ObservationFailedAt ?? now,
+                    Task = record.Task with { StatusMessage = "AGENT_TASK_LEGACY_UNCONFIRMED: Original Editor instance is unknown; execution was not replayed." } };
+                if (now - record.ObservationFailedAt >= policy.RecoveryWindow || now >= record.ExecutionDeadline)
+                    return CommitFailure(record, "AGENT_TASK_OUTCOME_UNKNOWN", "Legacy execution could not be confirmed; it was not replayed.").Task;
+                Save(record);
                 return record.Task;
             }
             if (clock.GetUtcNow() >= record.ExecutionDeadline)
@@ -83,6 +102,9 @@ public sealed class McpTaskStore : IMcpTaskStore
             record = record with { LastObservation = JsonSerializer.SerializeToElement(projection) };
             if (projection["observationFailure"]?.GetValue<bool>() == true)
             {
+                if (projection["errorCode"]?.GetValue<string>() == "AGENT_TASK_INTERRUPTED" &&
+                    projection["originalInstanceExited"]?.GetValue<bool>() == true)
+                    return CommitFailure(record, "AGENT_TASK_INTERRUPTED", "The original Editor process exited; execution was not replayed.").Task;
                 record = record with { ObservationFailedAt = record.ObservationFailedAt ?? now,
                     Task = record.Task with { LastUpdatedAt = now, StatusMessage = projection["errorCode"]?.GetValue<string>() + ": " +
                         (projection["errorMessage"]?.GetValue<string>() ?? projection["summary"]?.GetValue<string>() ?? "Observation unavailable.") } };
@@ -304,6 +326,7 @@ public sealed class McpTaskStore : IMcpTaskStore
                 try { File.Copy(source, temporary); File.Move(temporary, ownedReport, overwrite: true); }
                 finally { if (File.Exists(temporary)) File.Delete(temporary); }
             }
+            File.SetLastWriteTimeUtc(ownedReport, clock.GetUtcNow().UtcDateTime);
             ReplaceReportReferences(payload, payload["reportPath"]!.GetValue<string>(), Path.GetRelativePath(persistence.ProjectPath, ownedReport).Replace('\\', '/'));
             payload["reportRetention"] = new JsonObject { ["available"] = true, ["owned"] = true };
         }
@@ -335,7 +358,11 @@ public sealed class McpTaskStore : IMcpTaskStore
             if (task is null || string.IsNullOrWhiteSpace(task.TaskId) || Path.GetFileName(destination) != Path.GetFileName(PathFor(task.TaskId))) throw new InvalidDataException();
             if (task.Result is { } old && old.ValueKind == JsonValueKind.Object && !old.TryGetProperty("content", out _))
                 task = task with { Result = McpToolResultConverter.Serialize(JsonNode.Parse(old.GetRawText())!.AsObject()) };
-            McpTaskPersistence.Write(destination, new McpStoredTask(Version, persistence.ProjectPath, task, task.CreatedAt + policy.DefaultExecutionWindow));
+            string? ownedReport = null;
+            if (IsTerminal(task.Status) && task.Result is { } importedResult)
+                task = task with { Result = RetainReport(task.TaskId, importedResult, out ownedReport) };
+            McpTaskPersistence.Write(destination, new McpStoredTask(Version, persistence.ProjectPath, task,
+                task.CreatedAt + policy.DefaultExecutionWindow, OwnedReport: ownedReport));
         }
         catch (Exception exception) when (exception is InvalidDataException or JsonException)
         {

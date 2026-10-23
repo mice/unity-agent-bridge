@@ -34,9 +34,9 @@ namespace UnityMcp.AgentBridge
             return relativePath;
         }
 
-        public static string WriteReport(AgentBridgeSettings settings, string commandId, string prefix, object report)
+        public static string WriteReport(AgentBridgeSettings settings, string commandId, string prefix, object report, bool retainInLibrary = false)
         {
-            ResolveReportPaths(settings, commandId, prefix, out var absolutePath, out var relativePath);
+            ResolveReportPaths(settings, commandId, prefix, out var absolutePath, out var relativePath, retainInLibrary);
             if (string.IsNullOrWhiteSpace(absolutePath))
             {
                 return null;
@@ -46,7 +46,7 @@ namespace UnityMcp.AgentBridge
             return relativePath;
         }
 
-        private static void ResolveReportPaths(AgentBridgeSettings settings, string commandId, string prefix, out string absolutePath, out string relativePath)
+        private static void ResolveReportPaths(AgentBridgeSettings settings, string commandId, string prefix, out string absolutePath, out string relativePath, bool retainInLibrary = false)
         {
             absolutePath = null;
             relativePath = null;
@@ -74,7 +74,7 @@ namespace UnityMcp.AgentBridge
 
             var reportsDirectory = string.Equals(prefix, "compile", StringComparison.Ordinal)
                 ? Path.Combine(projectRoot, "Library", "AgentBridge", "compile-reports")
-                : GetReportRootAbsolutePath(settings);
+                : retainInLibrary ? Path.Combine(projectRoot, "Library", "AgentBridge", "editor-test-reports") : GetReportRootAbsolutePath(settings);
             Directory.CreateDirectory(reportsDirectory);
 
             var fileName = prefix + "_" + commandId + ".json";

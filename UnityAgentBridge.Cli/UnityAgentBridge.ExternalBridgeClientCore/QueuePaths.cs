@@ -6,9 +6,14 @@ public sealed class QueuePaths
 {
     public const string DefaultQueueRoot = QueueLayout.DefaultQueueRoot;
 
-    public QueuePaths(string projectPath, string queueRoot)
+    public QueuePaths(string projectPath, string queueRoot, string? targetProjectId = null, string? targetEditorSessionId = null)
     {
+        if ((targetProjectId is null) != (targetEditorSessionId is null) ||
+            (targetProjectId is not null && (string.IsNullOrWhiteSpace(targetProjectId) || string.IsNullOrWhiteSpace(targetEditorSessionId))))
+            throw new ArgumentException("Project and Editor target identities must be supplied together.");
         ProjectPath = projectPath;
+        TargetProjectId = targetProjectId;
+        TargetEditorSessionId = targetEditorSessionId;
         QueueRoot = QueueLayout.ResolveRelativePath(projectPath, queueRoot);
         InboxDirectory = Path.Combine(QueueRoot, QueueLayout.InboxDirectoryName);
         ProcessingDirectory = Path.Combine(QueueRoot, QueueLayout.ProcessingDirectoryName);
@@ -16,6 +21,10 @@ public sealed class QueuePaths
         StatusDirectory = Path.Combine(QueueRoot, QueueLayout.StatusDirectoryName);
         LogsDirectory = Path.Combine(QueueRoot, QueueLayout.LogsDirectoryName);
     }
+
+    public string? TargetProjectId { get; }
+
+    public string? TargetEditorSessionId { get; }
 
     public string ProjectPath { get; }
 

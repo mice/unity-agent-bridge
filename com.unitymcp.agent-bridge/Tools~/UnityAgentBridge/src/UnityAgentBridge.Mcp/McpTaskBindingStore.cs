@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace UnityAgentBridge.Mcp;
 
-public sealed record McpTaskBinding(string ProjectIdentity, string McpTaskId, string AgentTaskId, string? CommandId, int Version = 1);
+public sealed record McpTaskBinding(string ProjectIdentity, string McpTaskId, string AgentTaskId, string? CommandId, int Version = 1, string? ProjectId = null, string? EditorSessionId = null, string? ConnectionId = null, string? QueueRoot = null);
 
 public sealed class McpTaskBindingStore
 {
@@ -24,6 +24,8 @@ public sealed class McpTaskBindingStore
         if (binding.Version != CurrentVersion || string.IsNullOrWhiteSpace(binding.ProjectIdentity) || string.IsNullOrWhiteSpace(binding.McpTaskId) || string.IsNullOrWhiteSpace(binding.AgentTaskId))
             throw new InvalidDataException("Invalid MCP task binding.");
         using var lease = _persistence.Enter();
+        var previous = Load(binding.ProjectIdentity, binding.McpTaskId);
+        if (previous is not null && previous != binding) throw new InvalidOperationException("TASK_PROJECT_CONFLICT: Task binding is immutable.");
         McpTaskPersistence.Write(PathFor(binding.ProjectIdentity, binding.McpTaskId), binding);
     }
 

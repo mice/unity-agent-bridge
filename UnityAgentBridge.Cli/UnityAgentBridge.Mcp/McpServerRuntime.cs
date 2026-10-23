@@ -15,26 +15,30 @@ namespace UnityAgentBridge.Mcp;
 public static class McpServerRuntime
 {
     private static McpServerService? _service;
-    public static async Task RunAsync(CancellationToken cancellationToken)
+    public static async Task RunAsync(CancellationToken cancellationToken, McpRoutingOptions? routingOptions = null)
     {
-        var diagnostics = McpHostDiagnostics.Resolve();
+        var routing = routingOptions ?? McpRoutingOptions.Parse();
+        var diagnostics = routing.MultiProject ? McpHostDiagnostics.ForWorkspace(routing.WorkspaceRoot) : McpHostDiagnostics.Resolve();
         var queuePaths = new QueuePaths(diagnostics.ProjectPath, diagnostics.QueueRoot);
-        CommandStore.EnsureQueueDirectories(queuePaths);
-        McpToolRuntimeContext.QueuePaths = queuePaths;
+        if (!routing.MultiProject) CommandStore.EnsureQueueDirectories(queuePaths);
+        var multiProject = routing.MultiProject ? new McpMultiProjectHost(routing, diagnostics) : null;
+        using var hostLease = multiProject is null ? null : McpHostLease.Create(multiProject.ConnectionId);
         var builder = Host.CreateApplicationBuilder();
         builder.Logging.ClearProviders();
         var externalClient = new ExternalBridgeClient();
         builder.Services.AddSingleton(externalClient);
         builder.Services.AddSingleton(diagnostics);
+        if (multiProject is not null) builder.Services.AddSingleton(multiProject);
         builder.Services.AddSingleton(queuePaths);
         builder.Services.AddSingleton(new McpStageLogger(diagnostics.ServerLogPath));
-        var taskAdapter = new McpTaskAdapter(externalClient, queuePaths, diagnostics.ProjectPath);
-        var taskCoordinator = new McpTaskExecutionCoordinator(taskAdapter);
-        var taskStore = new McpTaskStore(diagnostics.ProjectPath, taskCoordinator);
-        builder.Services.AddSingleton(taskAdapter);
-        builder.Services.AddSingleton(taskCoordinator);
-        builder.Services.AddSingleton(taskStore);
-        builder.Services.AddHostedService<McpTaskMaintenanceService>();
+        var taskAdapter = multiProject is null ? new McpTaskAdapter(externalClient, queuePaths, diagnostics.ProjectPath) : null;
+        var taskCoordinator = taskAdapter is null ? null : new McpTaskExecutionCoordinator(taskAdapter);
+        var taskStore = multiProject is null ? new McpTaskStore(diagnostics.ProjectPath, taskCoordinator) : null;
+        if (taskAdapter is not null) builder.Services.AddSingleton(taskAdapter);
+        if (taskCoordinator is not null) builder.Services.AddSingleton(taskCoordinator);
+        if (taskStore is not null) builder.Services.AddSingleton(taskStore);
+        if (multiProject is null) builder.Services.AddHostedService<McpTaskMaintenanceService>();
+        else builder.Services.AddHostedService<McpMultiProjectMaintenanceService>();
         builder.Services.AddSingleton<McpServerService>();
         builder.Services.AddMcpServer(options =>
             {
@@ -57,20 +61,35 @@ public static class McpServerRuntime
                     CreateTaskRequestHandler("tasks/result", HandleTaskResultAsync),
                 };
             })
-            .WithTasks(taskStore, options => options.ExecutionModeSelector = context =>
+            .WithTasks((ModelContextProtocol.Extensions.Tasks.IMcpTaskStore?)multiProject?.Store ?? taskStore!, options => options.ExecutionModeSelector = context =>
             {
-                var definition = McpToolCatalog.TryGet(context.Params?.Name ?? string.Empty, diagnostics);
+                var toolName = context.Params?.Name ?? string.Empty;
+                var arguments = context.Params?.Arguments ?? new Dictionary<string, JsonElement>();
+                var argumentsJson = JsonSerializer.Serialize(arguments);
+                ProjectContext? projectContext = null;
+                McpToolDefinition? definition;
+                try
+                {
+                    if (multiProject is not null && !McpProjectRouter.IsHostTool(toolName))
+                    {
+                        projectContext = multiProject.Resolve(toolName, JsonNode.Parse(argumentsJson)!.AsObject());
+                        definition = multiProject.Definition(toolName, projectContext);
+                        if (definition is not null) McpArgumentValidator.ValidateOrThrow(toolName, McpMultiProjectHost.PublicTool(definition).InputSchema.GetRawText(), argumentsJson);
+                        argumentsJson = McpProjectRouter.BusinessArguments(JsonNode.Parse(argumentsJson)!.AsObject()).ToJsonString();
+                    }
+                    else definition = McpToolCatalog.TryGet(toolName, diagnostics, queuePaths, externalClient);
+                }
+                catch (Exception e) when (e is McpProjectRoutingException or McpArgumentValidationException or InvalidOperationException or ArgumentException)
+                { McpTaskExecutionContext.Clear(); return McpTaskExecutionMode.Synchronous; }
                 if (definition?.SupportsTaskExecution == true)
                 {
-                    var arguments = context.Params?.Arguments ?? new Dictionary<string, JsonElement>();
-                    var argumentsJson = JsonSerializer.Serialize(arguments);
                     try { McpArgumentValidator.ValidateOrThrow(definition.ProtocolTool.Name, definition.SchemaJson, argumentsJson); }
                     catch (McpArgumentValidationException)
                     {
                         McpTaskExecutionContext.Clear();
                         return McpTaskExecutionMode.Synchronous;
                     }
-                    McpTaskExecutionContext.Prepare(context.Params?.Name ?? string.Empty, argumentsJson);
+                    McpTaskExecutionContext.Prepare(context.Params?.Name ?? string.Empty, argumentsJson, projectContext);
                 }
                 return definition?.SupportsTaskExecution == true
                     ? McpTaskExecutionMode.Optional
@@ -114,7 +133,8 @@ public static class McpServerRuntime
         var parameters = context.Request.Params?.AsObject() ?? new JsonObject();
         var taskType = parameters["taskType"]?.GetValue<string>() ?? "run_editmode_tests";
         var payload = parameters["payload"]?.GetValue<string>() ?? parameters["filter"]?.GetValue<string>() ?? string.Empty;
-        var result = await service.CreateTaskAsync(taskType, payload, SerializeCapabilities(context.Request.Context?.ClientCapabilities), context.CancellationToken);
+        var result = await service.CreateTaskAsync(taskType, payload, SerializeCapabilities(context.Request.Context?.ClientCapabilities), context.CancellationToken,
+            parameters["projectPath"]?.GetValue<string>(), parameters["projectId"]?.GetValue<string>());
         return result;
     }
 

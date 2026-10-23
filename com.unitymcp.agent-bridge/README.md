@@ -99,6 +99,8 @@ Lua tools are delivered separately by `com.unitymcp.lua-gc-lint`. Install that U
 
 ## Documentation Index
 
+- [Multi-project routing and configuration migration](Documentation~/multi-project-routing.md) — current implementation supplement dated 2026-10-23; acceptance in progress, unpublished. Existing unmarked configurations remain single-project.
+
 - `Documentation~/integration-guide.md`: installation, Unity project wiring, CLI usage, and MCP setup workflow
 - `Documentation~/mcp-runbook.md`: acceptance and verifier runbook for EMCP and package distribution changes
 - `Documentation~/acceptance-checklist.md`: `EMCP-AC-001..013` checklist plus package distribution evidence cross-reference

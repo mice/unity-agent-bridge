@@ -94,6 +94,12 @@ namespace UnityMcp.AgentBridge
                     continue;
                 }
 
+                var targetError = ValidateTarget(parseResult.Command);
+                if (targetError != null)
+                {
+                    HandleInvalidInboxCommand(path, rawCommandJson, ToolResult.InvalidArgs(targetError, "Command target does not match this Editor instance."));
+                    continue;
+                }
                 validCandidates.Add(new ParsedInboxCommand(path, rawCommandJson, parseResult.Command));
             }
 
@@ -196,6 +202,18 @@ namespace UnityMcp.AgentBridge
                 }
 
                 var command = parseResult.Command;
+                var targetError = ValidateTarget(command);
+                if (targetError != null)
+                {
+                    var result = ToolResult.InvalidArgs(targetError, "Recovered command belongs to another Editor instance.");
+                    result.commandId = commandId;
+                    result.tool = command.tool;
+                    WriteResultAtomic(outboxResultPath, result);
+                    MoveToFailed(processingCommandPath, commandId);
+                    DeleteIfExists(processingStatePath);
+                    records.Add(QueueRecoveryRecord.Failed(commandId, result));
+                    continue;
+                }
                 if (IsTimedOut(state, _utcNowProvider()))
                 {
                     var timeoutResult = ToolResult.InvalidArgs("AGENTBRIDGE_COMMAND_TIMEOUT", "processing command exceeded recovery timeout.");
@@ -265,6 +283,13 @@ namespace UnityMcp.AgentBridge
         public void Fail(string commandId, ToolResult result)
         {
             Complete(commandId, result);
+        }
+
+        private string ValidateTarget(AgentCommand command)
+        {
+            if (command.targetSchemaVersion == 0 && string.IsNullOrEmpty(command.projectId) && string.IsNullOrEmpty(command.editorSessionId)) return null;
+            using (var process = System.Diagnostics.Process.GetCurrentProcess())
+                return CommandTargetValidator.Validate(command, ProjectPathIdentity.GetProjectId(ProjectRoot), process.Id + ":" + process.StartTime.ToUniversalTime().Ticks);
         }
 
         private void EnsureDirectories()

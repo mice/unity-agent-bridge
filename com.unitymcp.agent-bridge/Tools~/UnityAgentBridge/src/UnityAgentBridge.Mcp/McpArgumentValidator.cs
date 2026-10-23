@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace UnityAgentBridge.Mcp;
@@ -6,13 +7,22 @@ internal static class McpArgumentValidator
 {
     public static void ValidateOrThrow(string toolName, string schemaJson, string argumentsJson)
     {
-        var schema = JObject.Parse(schemaJson);
-        var arguments = JObject.Parse(string.IsNullOrWhiteSpace(argumentsJson) ? "{}" : argumentsJson);
+        var schema = ParseObject(schemaJson);
+        var arguments = ParseObject(string.IsNullOrWhiteSpace(argumentsJson) ? "{}" : argumentsJson);
 
         EnsureObjectType(schema, arguments, "$");
         EnsureRequiredProperties(toolName, schema, arguments);
         EnsureNoAdditionalProperties(toolName, schema, arguments);
         EnsurePropertyConstraints(toolName, schema, arguments);
+    }
+
+    private static JObject ParseObject(string json)
+    {
+        // JSON Schema validates JSON strings, including ISO-looking business values.
+        // Do not coerce them to Date tokens or normalize their lexical enum identity.
+        using var text = new StringReader(json);
+        using var reader = new JsonTextReader(text) { DateParseHandling = DateParseHandling.None };
+        return JObject.Load(reader);
     }
 
     private static void EnsureObjectType(JObject schema, JToken arguments, string path)

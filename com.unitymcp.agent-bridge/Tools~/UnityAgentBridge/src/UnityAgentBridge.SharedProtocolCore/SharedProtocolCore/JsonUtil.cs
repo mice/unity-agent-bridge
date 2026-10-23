@@ -12,7 +12,7 @@ namespace UnityMcp.AgentBridge
     {
         public const string CurrentSchemaVersion = "1.0";
 
-        public static string BuildCommandEnvelope(string commandId, string tool, int timeoutMs, string argsJson, DateTime? createdAtUtc = null)
+        public static string BuildCommandEnvelope(string commandId, string tool, int timeoutMs, string argsJson, DateTime? createdAtUtc = null, int targetSchemaVersion = 0, string projectId = null, string editorSessionId = null)
         {
             var argsNode = ParseTokenNoDate(argsJson);
             if (argsNode is not JObject argsObject)
@@ -30,6 +30,12 @@ namespace UnityMcp.AgentBridge
                 ["args"] = argsObject
             };
 
+            if (targetSchemaVersion != 0)
+            {
+                envelope["targetSchemaVersion"] = targetSchemaVersion;
+                envelope["projectId"] = projectId;
+                envelope["editorSessionId"] = editorSessionId;
+            }
             return envelope.ToString(Formatting.None);
         }
 
@@ -73,9 +79,23 @@ namespace UnityMcp.AgentBridge
                 return CommandParseResult.FromFailure(ToolResult.InvalidArgs("AGENTBRIDGE_ARGS_OBJECT_REQUIRED", "args must be a JSON object."));
             }
 
+            var targetVersionToken = parsedObject["targetSchemaVersion"];
+            if ((targetVersionToken != null && targetVersionToken.Type != JTokenType.Integer) ||
+                (parsedObject["projectId"] != null && parsedObject["projectId"].Type != JTokenType.String) ||
+                (parsedObject["editorSessionId"] != null && parsedObject["editorSessionId"].Type != JTokenType.String))
+                return CommandParseResult.FromFailure(ToolResult.InvalidArgs("PROJECT_TARGET_INVALID", "Target fields have invalid types."));
+            long targetVersion = 0;
+            if ((targetVersionToken != null && !long.TryParse(targetVersionToken.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out targetVersion)) || targetVersion < 0 || targetVersion > int.MaxValue)
+                return CommandParseResult.FromFailure(ToolResult.Unsupported("PROJECT_PROTOCOL_UNSUPPORTED", "Unsupported target version."));
+            if (targetVersion != 0 && (string.IsNullOrWhiteSpace(parsedObject.Value<string>("projectId")) || string.IsNullOrWhiteSpace(parsedObject.Value<string>("editorSessionId"))))
+                return CommandParseResult.FromFailure(ToolResult.InvalidArgs("PROJECT_TARGET_INVALID", "Versioned targets require project and Editor identities."));
+
             return CommandParseResult.FromCommand(new AgentCommand
             {
                 schemaVersion = schemaVersion,
+                targetSchemaVersion = (int)targetVersion,
+                projectId = parsedObject.Value<string>("projectId"),
+                editorSessionId = parsedObject.Value<string>("editorSessionId"),
                 commandId = commandId,
                 tool = tool,
                 timeoutMs = timeoutMs,

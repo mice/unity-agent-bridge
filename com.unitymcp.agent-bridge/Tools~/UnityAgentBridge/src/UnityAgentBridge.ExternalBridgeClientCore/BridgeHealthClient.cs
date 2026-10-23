@@ -27,7 +27,7 @@ public sealed class BridgeHealthClient
         return ClassifyLifecycle(statusFileExists && readable, GetHeartbeatAgeMs(status), status);
     }
 
-    public bool TryHandleLocalCommand(QueuePaths queuePaths, BridgeCommandSpec commandSpec, string commandId, out ToolResultEnvelope result)
+    public bool TryHandleLocalCommand(QueuePaths queuePaths, BridgeCommandSpec commandSpec, string commandId, out ToolResultEnvelope result, Action<QueuePaths, string>? commandDispatching = null, string? connectionId = null)
     {
         result = default!;
         switch (commandSpec.Tool)
@@ -42,7 +42,7 @@ public sealed class BridgeHealthClient
                     ["success"] = true,
                     ["status"] = "success",
                     ["summary"] = "mcp_echo completed locally.",
-                    ["echo"] = JToken.Parse(commandSpec.ArgsJson)
+                    ["echo"] = ParseJson(commandSpec.ArgsJson)
                 };
                 result = CreateLocalResult(payload);
                 return true;
@@ -118,7 +118,9 @@ public sealed class BridgeHealthClient
                 }
 
                 var targetArgs = args["args"] is JObject argsObject ? argsObject.ToString(Formatting.None) : "{}";
-                var targetCommandJson = AgentCommandEnvelope.Build(commandId, targetTool, targetTimeoutMs, targetArgs);
+                var targetCommandJson = AgentCommandEnvelope.Build(commandId, targetTool, targetTimeoutMs, targetArgs,
+                    queuePaths.TargetEditorSessionId is null ? 0 : 1, queuePaths.TargetProjectId, queuePaths.TargetEditorSessionId);
+                commandDispatching?.Invoke(queuePaths, commandId);
                 new CommandStore().WriteInboxAtomic(queuePaths, commandId, targetCommandJson);
 
                 var payload = new JObject
@@ -130,7 +132,11 @@ public sealed class BridgeHealthClient
                     ["status"] = "success",
                     ["summary"] = "Command submitted.",
                     ["queueRoot"] = queuePaths.QueueRoot,
-                    ["submittedTool"] = targetTool
+                    ["submittedTool"] = targetTool,
+                    ["projectId"] = queuePaths.TargetProjectId,
+                    ["projectPath"] = queuePaths.ProjectPath,
+                    ["editorSessionId"] = queuePaths.TargetEditorSessionId,
+                    ["connectionId"] = connectionId
                 };
                 result = CreateLocalResult(payload);
                 return true;
@@ -149,7 +155,9 @@ public sealed class BridgeHealthClient
                 EnsurePositiveTimeout(targetTimeoutMs);
                 try
                 {
-                    result = new CommandStore().WaitForResultAsync(queuePaths, targetCommandId, targetTimeoutMs, CancellationToken.None).GetAwaiter().GetResult();
+                    var history = new BridgeResultHistory(queuePaths, connectionId);
+                    result = history.Read(targetCommandId) ?? history.Save(targetCommandId,
+                        new CommandStore().WaitForResultAsync(queuePaths, targetCommandId, targetTimeoutMs, CancellationToken.None).GetAwaiter().GetResult());
                 }
                 catch (TimeoutException)
                 {
@@ -263,8 +271,15 @@ public sealed class BridgeHealthClient
 
     private static JObject SafeParseJsonObject(string rawJson)
     {
-        var parsed = JToken.Parse(rawJson);
+        var parsed = ParseJson(rawJson);
         return parsed as JObject ?? new JObject();
+    }
+
+    private static JToken ParseJson(string json)
+    {
+        using var text = new StringReader(json);
+        using var reader = new JsonTextReader(text) { DateParseHandling = DateParseHandling.None };
+        return JToken.ReadFrom(reader);
     }
 
     private JObject HandleUnityEditorList(QueuePaths queuePaths, string commandId, string argsJson)

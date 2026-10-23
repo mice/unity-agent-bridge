@@ -141,6 +141,7 @@ public sealed class VerifiedAnalysisLifecycleRegressionTests
             Assert.IsTrue(result.StructuredContent!.Value.GetProperty("success").GetBoolean());
         }
         // Simulate loss of bridge observation while preserving the project and record.
+        scope.HeartbeatEnabled = false;
         File.Delete(Path.Combine(scope.Paths.StatusDirectory, "unity_bridge_status.json"));
         await using var restarted = await StartClientAsync(scope.Root, token);
         var queries = scope.QueryCount;
@@ -219,16 +220,30 @@ public sealed class VerifiedAnalysisLifecycleRegressionTests
         Assert.AreEqual(0, Directory.GetFiles(Path.Combine(scope.Root, "Library", "AgentBridge", "mcp-tasks"), "*.json").Length);
     }
 
-    private static Task<McpClient> StartClientAsync(string root, CancellationToken token)
+    private static async Task<McpClient> StartClientAsync(string root, CancellationToken token)
     {
         var configuration = new DirectoryInfo(AppContext.BaseDirectory).Parent!.Name;
         var assembly = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "UnityAgentBridge.Cli", "bin", configuration, "net8.0", "win-x64", "UnityAgentBridge.Cli.dll"));
-        return McpClient.CreateAsync(new StdioClientTransport(new StdioClientTransportOptions
+        var errors = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        try
         {
-            Command = "dotnet",
-            Arguments = [assembly, "mcp-server"],
-            EnvironmentVariables = new Dictionary<string, string?> { ["UNITY_AGENT_BRIDGE_PROJECT_PATH"] = root }
-        }), new McpClientOptions { ProtocolVersion = "2026-07-28" }, cancellationToken: token);
+            return await McpClient.CreateAsync(new StdioClientTransport(new StdioClientTransportOptions
+            {
+                Command = "dotnet",
+                Arguments = [assembly, "mcp-server"],
+                StandardErrorLines = line => errors.Enqueue(line),
+                EnvironmentVariables = new Dictionary<string, string?> { ["UNITY_AGENT_BRIDGE_PROJECT_PATH"] = root }
+            }), new McpClientOptions { ProtocolVersion = "2026-07-28" }, cancellationToken: token);
+        }
+        catch (Exception exception)
+        {
+            Console.Error.WriteLine("Pinned SDK startup failed after " + started.Elapsed + "; host=" + assembly +
+                "; routingMode=" + (Environment.GetEnvironmentVariable("UNITY_AGENT_BRIDGE_ROUTING_MODE") ?? "single-project") +
+                "; callerCancelled=" + token.IsCancellationRequested + "; error=" + exception +
+                Environment.NewLine + "server stderr:" + Environment.NewLine + string.Join(Environment.NewLine, errors));
+            throw;
+        }
     }
 
     [TestMethod]
@@ -347,6 +362,9 @@ public sealed class VerifiedAnalysisLifecycleRegressionTests
         public JsonNode? CreatePayload { get; private set; }
         public bool Hold { get; set; }
         public bool SupportsCancellation { get; set; }
+        public bool HeartbeatEnabled { get; set; } = true;
+        private DateTime lastHeartbeatUtc;
+        private DateTime? heartbeatPublishBlockedSince;
 
         public QueueFixture(bool failed = false, bool transportFailure = false, bool hold = false)
         {
@@ -358,7 +376,7 @@ public sealed class VerifiedAnalysisLifecycleRegressionTests
             File.WriteAllText(Path.Combine(Root, "ProjectSettings", "ProjectVersion.txt"), "m_EditorVersion: 2022.3.53f1");
             Paths = new QueuePaths(Root, Path.Combine(Root, "Temp", "AgentBridge"));
             CommandStore.EnsureQueueDirectories(Paths);
-            File.WriteAllText(Path.Combine(Paths.StatusDirectory, "unity_bridge_status.json"), new JsonObject { ["heartbeatUtc"] = DateTime.UtcNow.ToString("O"), ["projectPath"] = Root, ["currentStage"] = "idle" }.ToJsonString());
+            PublishHeartbeat();
             VerifiedAnalysisCatalogFixture.Install(Root);
             var catalogPath = Path.Combine(Root, "Library", "AgentBridge", "plugin-catalog.json");
             var catalog = JsonNode.Parse(File.ReadAllText(catalogPath))!;
@@ -377,10 +395,39 @@ public sealed class VerifiedAnalysisLifecycleRegressionTests
             worker = PumpAsync();
         }
 
+        private void PublishHeartbeat()
+        {
+            if (!HeartbeatEnabled || cancellation.IsCancellationRequested) return;
+            var path = Path.Combine(Paths.StatusDirectory, "unity_bridge_status.json");
+            var temporary = path + ".fixture.tmp";
+            try
+            {
+                var now = DateTime.UtcNow;
+                File.WriteAllText(temporary, new JsonObject { ["heartbeatUtc"] = now.ToString("O"), ["projectPath"] = Root, ["currentStage"] = "idle" }.ToJsonString());
+                if (HeartbeatEnabled && !cancellation.IsCancellationRequested)
+                {
+                    try { File.Move(temporary, path, overwrite: true); }
+                    catch (Exception exception) when (
+                        exception is IOException or UnauthorizedAccessException &&
+                        OperatingSystem.IsWindows() && (exception.HResult & 0xffff) is 5 or 32 or 33 &&
+                        File.Exists(path) && File.Exists(temporary))
+                    {
+                        heartbeatPublishBlockedSince ??= now;
+                        if (now - heartbeatPublishBlockedSince.Value >= TimeSpan.FromSeconds(10)) throw;
+                        return; // Keep the last complete snapshot and retry on the next pump iteration.
+                    }
+                    lastHeartbeatUtc = now;
+                    heartbeatPublishBlockedSince = null;
+                }
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        }
+
         private async Task PumpAsync()
         {
             while (!cancellation.IsCancellationRequested)
             {
+                if (DateTime.UtcNow - lastHeartbeatUtc >= TimeSpan.FromMilliseconds(250)) PublishHeartbeat();
                 foreach (var path in Directory.EnumerateFiles(Paths.InboxDirectory, "*.json"))
                 {
                     JsonNode command;

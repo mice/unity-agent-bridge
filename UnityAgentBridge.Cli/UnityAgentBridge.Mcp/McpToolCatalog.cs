@@ -1,5 +1,6 @@
 using ModelContextProtocol.Protocol;
 using System.Text;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
@@ -31,14 +32,78 @@ public static class McpToolCatalog
         metadata => metadata.Name,
         StringComparer.Ordinal);
 
-    public static IReadOnlyList<McpToolDefinition> GetTools(McpHostDiagnostics diagnostics)
+    public static IReadOnlyList<McpToolDefinition> GetBuiltInTools()
+        => BuiltInMetadataByName.Values.Select(tool => CreateDefinition(tool)).ToArray();
+
+    public static IReadOnlyList<McpToolDefinition> GetTools(McpHostDiagnostics diagnostics, QueuePaths? paths = null, ExternalBridgeClient? client = null, McpTaskAdapter? adapter = null)
     {
-        return BuildDefinitions(diagnostics).Values.Select(CreateDefinition).ToList();
+        return BuildDefinitions(diagnostics).Values.Select(metadata => CreateDefinition(metadata, paths, client, adapter)).ToList();
     }
 
-    public static McpToolDefinition? TryGet(string toolName, McpHostDiagnostics diagnostics)
+    public static McpToolDefinition? TryGet(string toolName, McpHostDiagnostics diagnostics, QueuePaths? paths = null, ExternalBridgeClient? client = null, McpTaskAdapter? adapter = null)
     {
-        return BuildDefinitions(diagnostics).TryGetValue(toolName, out var metadata) ? CreateDefinition(metadata) : null;
+        return BuildDefinitions(diagnostics).TryGetValue(toolName, out var metadata) ? CreateDefinition(metadata, paths, client, adapter) : null;
+    }
+
+    // Catalog V1 exports plugin contracts only. These AgentTool implementations remain in Editor/Tools.
+    private static readonly HashSet<string> CoreBridgeTools = new(StringComparer.Ordinal)
+    {
+        "unity.compile", "unity.agent_task_template.list", "unity.agent_task_template.run",
+        "unity.open_scene", "unity.run_static_method", "unity.run_diagnostic"
+    };
+
+    public static IReadOnlyList<McpToolDefinition> GetProjectTools(McpHostDiagnostics diagnostics, bool coreProtocolCompatible,
+        QueuePaths? paths = null, ExternalBridgeClient? client = null, McpTaskAdapter? adapter = null)
+        => BuildProjectDefinitions(diagnostics, coreProtocolCompatible).Tools.Values.Select(tool => CreateDefinition(tool, paths, client, adapter)).ToArray();
+
+    public static McpToolDefinition? TryGetProject(string name, McpHostDiagnostics diagnostics, bool coreProtocolCompatible,
+        QueuePaths? paths = null, ExternalBridgeClient? client = null, McpTaskAdapter? adapter = null)
+    {
+        var catalog = BuildProjectDefinitions(diagnostics, coreProtocolCompatible);
+        if (catalog.Conflicts.TryGetValue(name, out var reason)) throw new McpProjectRoutingException(reason, "Target catalog has an incompatible contract for " + name);
+        if (!coreProtocolCompatible && BuiltInMetadataByName.TryGetValue(name, out var baseline) && CoreBridgeTools.Contains(baseline.BridgeTool))
+            throw new McpProjectRoutingException("PROJECT_PROTOCOL_UNSUPPORTED", "Core tool requires a compatible versioned Editor session.");
+        return catalog.Tools.TryGetValue(name, out var tool) ? CreateDefinition(tool, paths, client, adapter) : null;
+    }
+
+    public static IReadOnlyDictionary<string, string> GetProjectCatalogIssues(McpHostDiagnostics diagnostics)
+        => BuildProjectDefinitions(diagnostics, true).Conflicts;
+
+    private static (Dictionary<string, ToolMetadata> Tools, Dictionary<string, string> Conflicts) BuildProjectDefinitions(McpHostDiagnostics diagnostics, bool coreProtocolCompatible)
+    {
+        var tools = BuiltInMetadataByName.Values.Where(tool => !tool.IsForwardedToUnityQueue ||
+            (coreProtocolCompatible && CoreBridgeTools.Contains(tool.BridgeTool))).ToDictionary(tool => tool.Name, StringComparer.Ordinal);
+        var conflicts = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var plugin in LoadPluginTools(diagnostics))
+        {
+            if (BuiltInMetadataByName.TryGetValue(plugin.Name, out var baseline) &&
+                (!baseline.IsForwardedToUnityQueue || baseline.BridgeTool != plugin.BridgeTool || !BusinessSchemasEqual(baseline.SchemaJson, plugin.SchemaJson)))
+            {
+                tools.Remove(plugin.Name); conflicts[plugin.Name] = "PROJECT_TOOL_CONTRACT_CONFLICT"; continue;
+            }
+            var schema = JsonNode.Parse(plugin.SchemaJson)!.AsObject();
+            if (schema["properties"] is JsonObject properties && (properties.ContainsKey("projectPath") || properties.ContainsKey("projectId")))
+            { tools.Remove(plugin.Name); conflicts[plugin.Name] = "TOOL_ROUTING_FIELD_CONFLICT"; continue; }
+            if (!conflicts.ContainsKey(plugin.Name)) tools[plugin.Name] = plugin;
+        }
+        return (tools, conflicts);
+    }
+
+    internal static bool BusinessSchemasEqual(string first, string second)
+    {
+        static void RemoveAnnotations(JsonNode? node)
+        {
+            if (node is JsonObject obj)
+            {
+                foreach (var key in new[] { "$schema", "$id", "title", "description", "examples", "$comment" }) obj.Remove(key);
+                foreach (var map in new[] { "properties", "patternProperties", "$defs", "definitions", "dependentSchemas" })
+                    if (obj[map] is JsonObject schemas) foreach (var child in schemas) RemoveAnnotations(child.Value);
+                foreach (var key in new[] { "items", "additionalProperties", "propertyNames", "contains", "not", "if", "then", "else", "allOf", "anyOf", "oneOf", "prefixItems" }) RemoveAnnotations(obj[key]);
+            }
+            else if (node is JsonArray array) foreach (var child in array) RemoveAnnotations(child);
+        }
+        var a = JsonNode.Parse(first); var b = JsonNode.Parse(second); RemoveAnnotations(a); RemoveAnnotations(b);
+        return JsonNode.DeepEquals(a, b);
     }
 
     private static IReadOnlyDictionary<string, ToolMetadata> BuildDefinitions(McpHostDiagnostics diagnostics)
@@ -154,14 +219,24 @@ public static class McpToolCatalog
         var catalogPath = Path.Combine(diagnostics.ProjectPath, "Library", "AgentBridge", "plugin-catalog.json");
         if (!File.Exists(catalogPath))
         {
+            if (diagnostics.ExpectedCapabilityRevision is not null)
+                throw new McpProjectRoutingException("PROJECT_CAPABILITY_MISMATCH", "The bound capability catalog is missing.");
             return Array.Empty<ToolMetadata>();
         }
 
         try
         {
             var catalogBytes = File.ReadAllBytes(catalogPath);
+            if (diagnostics.ExpectedCapabilityRevision is { } expected)
+            {
+                var actual = Convert.ToHexString(SHA256.HashData(catalogBytes)).ToLowerInvariant();
+                if (!string.Equals(expected, actual, StringComparison.Ordinal))
+                    throw new McpProjectRoutingException("PROJECT_CAPABILITY_MISMATCH", "Catalog bytes differ from the bound Editor capability revision.");
+                diagnostics.ValidateCatalogSnapshot?.Invoke();
+            }
             if (catalogBytes.Length > PluginCatalogMaxUtf8Bytes)
             {
+                if (diagnostics.ExpectedCapabilityRevision is not null) throw new McpProjectRoutingException("PROJECT_CAPABILITY_MISMATCH", "Bound catalog exceeds the size limit.");
                 Console.Error.WriteLine($"Plugin catalog exceeds the {PluginCatalogMaxUtf8Bytes}-byte Catalog V1 limit.");
                 return Array.Empty<ToolMetadata>();
             }
@@ -176,6 +251,7 @@ public static class McpToolCatalog
                 tools.ValueKind != JsonValueKind.Array ||
                 tools.GetArrayLength() > PluginCatalogMaxTools)
             {
+                if (diagnostics.ExpectedCapabilityRevision is not null) throw new McpProjectRoutingException("PROJECT_CAPABILITY_MISMATCH", "Bound catalog envelope is invalid.");
                 Console.Error.WriteLine("Plugin catalog does not conform to the Catalog V1 envelope.");
                 return Array.Empty<ToolMetadata>();
             }
@@ -200,8 +276,11 @@ public static class McpToolCatalog
 
             return accepted;
         }
+        catch (McpProjectRoutingException) { throw; }
         catch (Exception exception)
         {
+            if (diagnostics.ExpectedCapabilityRevision is not null)
+                throw new McpProjectRoutingException("PROJECT_CAPABILITY_MISMATCH", "The bound capability catalog cannot be read or parsed: " + exception.Message);
             Console.Error.WriteLine($"Plugin catalog could not be read: {exception.Message}");
             return Array.Empty<ToolMetadata>();
         }
@@ -310,7 +389,7 @@ public static class McpToolCatalog
         "unity_project_compile" or "unity_tests_run_edit_mode" or "unity_tests_run_play_mode" or
         "unity_analysis_compile_failure" or "unity_analysis_asset_problem" or "unity_agent_task_template_run";
 
-    private static McpToolDefinition CreateDefinition(ToolMetadata metadata)
+    private static McpToolDefinition CreateDefinition(ToolMetadata metadata, QueuePaths? paths = null, ExternalBridgeClient? scopedClient = null, McpTaskAdapter? scopedAdapter = null)
     {
         return new McpToolDefinition
         {
@@ -332,12 +411,12 @@ public static class McpToolCatalog
             InvokeAsync = async (argumentsJson, cancellationToken) =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var client = new ExternalBridgeClient();
-                var queuePaths = McpToolRuntimeContext.QueuePaths ?? throw new InvalidOperationException("MCP queue paths were not initialized.");
+                var client = scopedClient ?? new ExternalBridgeClient();
+                var queuePaths = paths ?? McpToolRuntimeContext.QueuePaths ?? throw new InvalidOperationException("MCP queue paths were not initialized.");
                 var commandId = client.CreateCommandId();
                 if (metadata.Name is "unity_analysis_compile_failure" or "unity_analysis_asset_problem" or "unity_agent_task_template_run")
                 {
-                    var adapter = new McpTaskAdapter(client, queuePaths, queuePaths.ProjectPath);
+                    var adapter = scopedAdapter ?? new McpTaskAdapter(client, queuePaths, queuePaths.ProjectPath);
                     var taskType = metadata.Name == "unity_agent_task_template_run" ? "template_run" : metadata.Name == "unity_analysis_asset_problem" ? "analysis_asset_problem" : "analysis_compile_failure";
                     var created = await adapter.CreateAsync(taskType, argumentsJson, cancellationToken);
                     if (created["creationRejected"]?.GetValue<bool>() == true) return created.ToJsonString();

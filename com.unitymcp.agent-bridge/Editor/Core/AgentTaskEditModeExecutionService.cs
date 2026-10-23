@@ -28,7 +28,7 @@ namespace UnityMcp.AgentBridge
                 var validation = Validate(filterArgs);
                 if (validation != null) return new AgentTaskControlResponse { Success = false, ErrorCode = "INVALID_ARGS", ErrorMessage = validation.summary };
                 var timeoutMs = request.TimeoutMs > 0 ? request.TimeoutMs : 120000;
-                var testTask = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), UnityTestOperationManager.CreateRunnerFilter(TestMode.EditMode, filterArgs));
+                var testTask = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), UnityTestOperationManager.CreateRunnerFilter(TestMode.EditMode, filterArgs), WriteTaskReport);
                 var task = new TimedEditModeTask(testTask, timeoutMs);
                 var id = Manager.Register(task);
                 var command = new AgentCommand { commandId = "agent-task-" + id.Value, tool = "unity.run_editmode_tests", timeoutMs = timeoutMs, rawArgsJson = request.Payload ?? "{}" };
@@ -55,6 +55,12 @@ namespace UnityMcp.AgentBridge
             return snapshot == null
                 ? new AgentTaskControlResponse { Success = false, ErrorCode = "NOT_FOUND", ErrorMessage = "Agent task was not found.", AgentTaskId = taskId.Value }
                 : ProjectControlResponse(snapshot, taskId.Value);
+        }
+
+        private static string WriteTaskReport(string taskId, object report)
+        {
+            var settings = AgentBridgeSettingsLoader.Load().Settings;
+            return AgentBridgeReportWriter.WriteReport(settings, taskId, "editmode_tests", report, retainInLibrary: true);
         }
 
         private static AgentTaskControlResponse ProjectControlResponse(AgentTaskSnapshot snapshot, string taskId)
@@ -123,7 +129,7 @@ namespace UnityMcp.AgentBridge
             }
 
             var filter = UnityTestOperationManager.CreateRunnerFilter(TestMode.EditMode, args);
-            var testTask = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), filter);
+            var testTask = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), filter, WriteTaskReport);
             var task = new TimedEditModeTask(testTask, effectiveTimeout);
             var taskId = Manager.Register(task);
             active = new ActiveRun
@@ -231,7 +237,7 @@ namespace UnityMcp.AgentBridge
         internal static ToolResult ProjectRetainedResult(AgentTaskControlResponse retained, AgentCommand command)
         {
             var result = AgentTaskToolResultAdapter.FromSnapshot(retained.Snapshot, command, command.tool);
-            if (!string.IsNullOrWhiteSpace(retained.ResultPayloadJson)) result.metricsObjectJson = retained.ResultPayloadJson;
+            if (!string.IsNullOrWhiteSpace(retained.ResultPayloadJson)) AgentTaskToolResultAdapter.ApplyBusinessPayload(result, retained.ResultPayloadJson);
             if (!string.IsNullOrWhiteSpace(retained.ErrorCode))
             {
                 result.summary = retained.ErrorMessage ?? result.summary;
@@ -278,7 +284,7 @@ namespace UnityMcp.AgentBridge
                     }
                     if (!JsonUtil.TryDeserializeArgs<UnityTestRunArgs>(command.rawArgsJson ?? "{}", out var args, out _)) args = new UnityTestRunArgs();
                     var filter = UnityTestOperationManager.CreateRunnerFilter(TestMode.EditMode, args);
-                    var task = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), filter);
+                    var task = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), filter, WriteTaskReport);
                     var timed = new TimedEditModeTask(task, state.effectiveTimeoutMs, state.startedAtUtc);
                     var taskId = new AgentTaskId(state.agentTaskId);
                     Manager.RestoreRunning(taskId, timed, state.createdAtUtc == default(DateTimeOffset) ? DateTimeOffset.UtcNow : state.createdAtUtc);

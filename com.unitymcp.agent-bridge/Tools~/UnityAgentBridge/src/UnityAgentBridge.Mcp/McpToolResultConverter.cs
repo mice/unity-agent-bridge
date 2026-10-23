@@ -54,7 +54,24 @@ internal static class McpToolResultConverter
             result["metrics"] = metrics;
             result.Remove("metricsObjectJson");
         }
+        // Business payloads can carry diagnostics and a retained report without
+        // being a ToolResult or requiring operation-specific projection logic.
+        if (result["metrics"] is JsonObject business)
+        {
+            foreach (var name in new[] { "errors", "warnings", "reportPath" })
+            {
+                if (result[name] is not null || business[name] is not { } value) continue;
+                if (value is JsonArray array && array.Count == 0) continue;
+                result[name] = value.DeepClone();
+            }
+        }
         result.Remove("resultPayloadJson");
+        // Identity comes from the admitted route, never a nested business payload.
+        foreach (var name in new[] { "projectId", "projectPath", "editorSessionId", "connectionId", "dispatchCommandId" })
+        {
+            if (source.TryGetPropertyValue(name, out var identity)) result[name] = identity?.DeepClone();
+            else result.Remove(name);
+        }
         var kind = source["resultKind"]?.GetValue<string>();
         var success = kind is not null
             ? string.Equals(kind, "Succeeded", StringComparison.OrdinalIgnoreCase)

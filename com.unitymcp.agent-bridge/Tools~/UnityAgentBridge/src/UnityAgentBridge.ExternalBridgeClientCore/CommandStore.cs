@@ -18,6 +18,19 @@ public sealed class CommandStore
 
     public void WriteInboxAtomic(QueuePaths queuePaths, string commandId, string commandJson)
     {
+        if (!string.IsNullOrEmpty(queuePaths.TargetEditorSessionId))
+        {
+            using var text = new StringReader(commandJson);
+            using var reader = new JsonTextReader(text) { DateParseHandling = DateParseHandling.None };
+            var envelope = JObject.Load(reader);
+            if ((envelope["projectId"] != null && envelope.Value<string>("projectId") != queuePaths.TargetProjectId) ||
+                (envelope["editorSessionId"] != null && envelope.Value<string>("editorSessionId") != queuePaths.TargetEditorSessionId))
+                throw new InvalidOperationException("PROJECT_TARGET_CONFLICT");
+            envelope["targetSchemaVersion"] = 1;
+            envelope["projectId"] = queuePaths.TargetProjectId;
+            envelope["editorSessionId"] = queuePaths.TargetEditorSessionId;
+            commandJson = envelope.ToString(Formatting.None);
+        }
         var targetPath = Path.Combine(queuePaths.InboxDirectory, commandId + ".json");
         var tempPath = targetPath + ".tmp";
         if (File.Exists(tempPath))

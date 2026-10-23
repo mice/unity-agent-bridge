@@ -41,12 +41,12 @@ namespace UnityMcp.AgentBridge.Mcp
                 }
                 return _jsonMerger.Apply(
                     GetTargetPath(settings, _pathResolver),
-                    BuildManagedLauncherJson(launcherPath, _pathResolver.GetProjectRoot()));
+                    McpMultiProjectConfig.BuildJson(launcherPath, _pathResolver.GetProjectRoot(), _pathResolver.GetWorkspaceRoot(settings), true));
             }
 
             return _jsonMerger.Apply(
                 GetTargetPath(settings, _pathResolver),
-                BuildManagedJson(executableCommand, string.Empty, false));
+                McpMultiProjectConfig.BuildJson(executableCommand, _pathResolver.GetProjectRoot(), _pathResolver.GetWorkspaceRoot(settings), false));
         }
 
         public ManagedBlockApplyResult Remove()
@@ -67,8 +67,8 @@ namespace UnityMcp.AgentBridge.Mcp
             }
 
             var serverJson = IsMachineRuntime(settings)
-                ? BuildManagedLauncherJson(_pathResolver.ResolveLauncherPath(settings), _pathResolver.GetProjectRoot())
-                : BuildManagedJson(executableCommand, string.Empty, false);
+                ? McpMultiProjectConfig.BuildJson(_pathResolver.ResolveLauncherPath(settings), _pathResolver.GetProjectRoot(), _pathResolver.GetWorkspaceRoot(settings), true)
+                : McpMultiProjectConfig.BuildJson(executableCommand, _pathResolver.GetProjectRoot(), _pathResolver.GetWorkspaceRoot(settings), false);
             return "{\n  \"mcpServers\": {\n    \"unity_agent_bridge\": " + serverJson + "\n  }\n}";
         }
 

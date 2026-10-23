@@ -6,6 +6,24 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+## [1.5.0-rc.1] - 2026-10-23
+
+### Added
+
+- Opt-in multi-project MCP routing with a connection workspace, cwd-based default project selection, explicit cross-project paths and project-ID assertions. Keep existing single-project configurations compatible until explicitly migrated.
+- Per-project registration and Editor-session discovery, capability validation, and immutable task/command ownership across concurrent projects, host reconnects and Editor restarts. Retain offline results and reports in their original projects.
+- Multi-project setup and migration guidance, with project Stop protection for a shared MCP host. Reuse independent per-project file queues; Socket transport and a permanent shared Host service are outside this release.
+
+### Fixed
+
+- Preserve test assertion messages, stack traces, output and durable reports across ordinary calls, native Tasks and reload recovery, including explicit report-write warnings.
+- Preserve nested JSON escapes and exact timestamp strings; distinguish verified original-Editor exit from missing or unreadable status. Serialize observations per project and retry transient Windows status-sharing failures without treating cached observations as ready.
+- Bind capability revisions to successfully published catalog bytes and validate the same bytes against the current project/session; inspection discovery no longer overwrites the active catalog.
+
+### Release scope
+
+- Source-only release candidate `v1.5.0-rc.1`; generated runtime executables are built locally and are not uploaded as release assets. RC validation and publication do not authorize stable promotion.
+
 ## [1.4.3] - 2026-10-17
 
 ### Added

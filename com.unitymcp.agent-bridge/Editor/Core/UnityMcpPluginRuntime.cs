@@ -57,7 +57,8 @@ namespace UnityMcp.AgentBridge
             AgentBridgeSettings settings,
             AgentBridgePaths paths,
             FileAgentBridgeLogger logger,
-            UnityMcpPluginHostServices hostServices = null)
+            UnityMcpPluginHostServices hostServices = null,
+            bool publishCatalog = true)
         {
             if (registry == null)
             {
@@ -141,7 +142,7 @@ namespace UnityMcp.AgentBridge
             }
             ManifestProviders.EndRefresh();
 
-            WriteCatalog(paths.PluginCatalogPath, result.Catalog, logger);
+            if (publishCatalog) result.CapabilityRevision = WriteCatalog(paths.PluginCatalogPath, result.Catalog, logger);
             _lastDiscoverySettings = settings;
             _lastInstalledPlugins = result.InstalledPlugins.ToArray();
             return result;
@@ -522,7 +523,7 @@ namespace UnityMcp.AgentBridge
             return token.ToString(Newtonsoft.Json.Formatting.None);
         }
 
-        private static void WriteCatalog(string outputPath, UnityMcpPluginCatalog catalog, FileAgentBridgeLogger logger)
+        private static string WriteCatalog(string outputPath, UnityMcpPluginCatalog catalog, FileAgentBridgeLogger logger)
         {
             try
             {
@@ -541,11 +542,12 @@ namespace UnityMcp.AgentBridge
                     throw new InvalidOperationException("Plugin catalog violates the frozen Catalog V1 envelope limits.");
                 }
 
+                var bytes = new UTF8Encoding(false).GetBytes(json);
                 var tempPath = outputPath + ".tmp";
                 var backupPath = outputPath + ".bak";
                 try
                 {
-                    File.WriteAllText(tempPath, json, new UTF8Encoding(false));
+                    File.WriteAllBytes(tempPath, bytes);
                     if (File.Exists(outputPath))
                     {
                         File.Replace(tempPath, outputPath, backupPath);
@@ -567,10 +569,13 @@ namespace UnityMcp.AgentBridge
                         File.Delete(backupPath);
                     }
                 }
+                using (var hash = System.Security.Cryptography.SHA256.Create())
+                    return BitConverter.ToString(hash.ComputeHash(bytes)).Replace("-", "").ToLowerInvariant();
             }
             catch (Exception exception)
             {
                 logger?.Exception("plugin_catalog_write_failed", exception);
+                throw;
             }
         }
     }
@@ -578,6 +583,8 @@ namespace UnityMcp.AgentBridge
     public sealed class UnityMcpPluginDiscoveryResult
     {
         public UnityMcpPluginCatalog Catalog { get; } = new UnityMcpPluginCatalog();
+
+        public string CapabilityRevision { get; internal set; } = "missing";
 
         public List<UnityMcpInstalledPlugin> InstalledPlugins { get; } = new List<UnityMcpInstalledPlugin>();
     }

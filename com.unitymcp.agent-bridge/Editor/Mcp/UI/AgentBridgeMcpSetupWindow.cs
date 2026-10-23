@@ -1501,7 +1501,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 Queue = new AgentCommandQueue(projectRoot, settings.tempRoot),
                 Registry = registry,
                 Logger = logger
-            });
+            }, publishCatalog: false);
             var facade = new UnityToolFacade(registry, settings, logger);
             return facade;
         }
@@ -1732,10 +1732,10 @@ namespace UnityMcp.AgentBridge.Mcp
             _runtimeInitRunning = true;
             _runtimeInitMessage = string.Empty;
             RefreshServerProcessSnapshot(force: true);
-            if (_serverProcessSnapshot != null && _serverProcessSnapshot.SafeStopTargets.Any())
+            if (_serverProcessSnapshot != null && _serverProcessSnapshot.RuntimeInUse)
             {
                 _runtimeInitRunning = false;
-                _runtimeInitMessage = "Stop the active MCP server before preparing the runtime.";
+                _runtimeInitMessage = "The runtime is in use. Review all connected projects and stop the host before preparing it.";
                 _serverProcessMessage = _runtimeInitMessage;
                 _serverProcessMessageType = MessageType.Warning;
                 Repaint();

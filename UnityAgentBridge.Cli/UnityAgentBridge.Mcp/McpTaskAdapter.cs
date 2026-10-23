@@ -12,6 +12,19 @@ public sealed class McpTaskAdapter
     private readonly McpTaskBindingStore _bindings;
     private readonly McpTaskDispatchStore _dispatches;
     private readonly string _projectIdentity;
+    private readonly ProjectContext? _context;
+    private readonly McpTaskRouteIndex? _index;
+    private readonly BridgeResultHistory _history;
+    private readonly bool _requireSessionBinding;
+    private readonly string? _expectedEditorSessionId;
+
+    public McpTaskAdapter(ExternalBridgeClient client, ProjectContext context, McpTaskRouteIndex? index = null)
+        : this(client, context.QueuePaths, context.ProjectPath)
+    { _context = context; _index = index; _requireSessionBinding = true; _expectedEditorSessionId = context.EditorSessionId; }
+
+    public McpTaskAdapter(ExternalBridgeClient client, McpTaskRoute route, McpTaskRouteIndex? index = null)
+        : this(client, route.CreateQueuePaths(), route.ProjectPath)
+    { _index = index; _requireSessionBinding = true; _expectedEditorSessionId = route.EditorSessionId; }
 
     public McpTaskAdapter(ExternalBridgeClient client, QueuePaths queuePaths, string projectIdentity)
     {
@@ -20,6 +33,7 @@ public sealed class McpTaskAdapter
         _projectIdentity = string.IsNullOrWhiteSpace(projectIdentity) ? throw new ArgumentException("Project identity is required.", nameof(projectIdentity)) : projectIdentity;
         _bindings = new McpTaskBindingStore(queuePaths.ProjectPath);
         _dispatches = new McpTaskDispatchStore(queuePaths.ProjectPath);
+        _history = new BridgeResultHistory(queuePaths);
     }
 
     public bool Supports(JsonElement? clientCapabilities)
@@ -45,9 +59,16 @@ public sealed class McpTaskAdapter
 
     public async Task<JsonObject> CreateForExternalTaskAsync(string mcpId, string taskType, string payload, int timeoutMs, CancellationToken cancellationToken)
     {
+        if (_requireSessionBinding && _context is null) throw new InvalidOperationException("PROJECT_CONTEXT_REQUIRED: Historical routes cannot admit new execution.");
         if (HasBinding(mcpId)) return await GetAsync(mcpId, cancellationToken);
         var dispatch = new McpTaskDispatch(_projectIdentity, mcpId, _client.CreateCommandId(), taskType,
-            McpTaskPersistence.Hash(payload + "\n" + timeoutMs), DateTimeOffset.UtcNow);
+            McpTaskPersistence.Hash(payload + "\n" + timeoutMs), DateTimeOffset.UtcNow,
+            ProjectId: _context?.ProjectId, EditorSessionId: _context?.EditorSessionId, ConnectionId: _context?.ConnectionId, QueueRoot: _queuePaths.QueueRoot);
+        if (_context is not null)
+        {
+            _index?.SaveTask(mcpId, McpTaskRoute.From(_context));
+            _index?.SaveCommand(dispatch.CommandId, McpTaskRoute.From(_context));
+        }
         if (!_dispatches.TryCreate(dispatch))
         {
             var previous = _dispatches.Load(_projectIdentity, mcpId)!;
@@ -71,7 +92,8 @@ public sealed class McpTaskAdapter
             response["status"] = "failed";
             return response;
         }
-        _bindings.Save(new McpTaskBinding(_projectIdentity, dispatch.McpTaskId, agentId, dispatch.CommandId));
+        _bindings.Save(new McpTaskBinding(_projectIdentity, dispatch.McpTaskId, agentId, dispatch.CommandId,
+            ProjectId: dispatch.ProjectId, EditorSessionId: dispatch.EditorSessionId, ConnectionId: dispatch.ConnectionId, QueueRoot: dispatch.QueueRoot));
         var state = response["state"]?.GetValue<string>();
         var status = string.Equals(state, "Failed", StringComparison.OrdinalIgnoreCase) ? "failed" : string.Equals(state, "Cancelled", StringComparison.OrdinalIgnoreCase) ? "cancelled" : "working";
         return new JsonObject { ["success"] = status == "working", ["taskId"] = dispatch.McpTaskId, ["status"] = status, ["pollIntervalMs"] = 250, ["execution"] = response["execution"]?.DeepClone() ?? UnknownExecution() };
@@ -129,6 +151,8 @@ public sealed class McpTaskAdapter
 
     public async Task<JsonObject> CancelAsync(string mcpTaskId, CancellationToken cancellationToken)
     {
+        var retained = _history.Read("task-" + mcpTaskId);
+        if (retained is not null) return new JsonObject { ["taskId"] = mcpTaskId, ["disposition"] = "AlreadyTerminal", ["status"] = retained.Status };
         var response = await SendMappedAsync("cancel", mcpTaskId, cancellationToken);
         var disposition = response["cancellation"]?.GetValue<string>() ?? "NotFound";
         return new JsonObject { ["taskId"] = mcpTaskId, ["disposition"] = disposition, ["status"] = disposition == "Accepted" ? "working" : MapStatus(response) };
@@ -136,6 +160,8 @@ public sealed class McpTaskAdapter
 
     private async Task<JsonObject> SendMappedAsync(string operation, string mcpTaskId, CancellationToken cancellationToken)
     {
+        var retained = _history.Read("task-" + mcpTaskId);
+        if (retained is not null && operation != "cancel") return JsonNode.Parse(retained.RawJson)!.AsObject();
         var binding = _bindings.Load(_projectIdentity, mcpTaskId);
         if (binding is null)
         {
@@ -144,13 +170,52 @@ public sealed class McpTaskAdapter
                 ? Error("IDENTITY_CONFLICT", "MCP task binding belongs to another project identity.")
                 : Error("STALE_BINDING", "MCP task binding was not found for this project.");
         }
+        JsonObject BoundError(string code, string message)
+        {
+            var error = ObservationError(code, message, mcpTaskId);
+            if (_requireSessionBinding || binding.ProjectId is not null)
+            {
+                error["projectId"] = binding.ProjectId;
+                error["projectPath"] = _queuePaths.ProjectPath;
+                error["editorSessionId"] = binding.EditorSessionId;
+                error["connectionId"] = binding.ConnectionId;
+            }
+            error["dispatchCommandId"] = binding.CommandId;
+            if (code == "AGENT_TASK_INTERRUPTED") error["originalInstanceExited"] = true;
+            return error;
+        }
+        // A stopped Editor leaves its final, correctly identified heartbeat on disk.
+        // Process identity must therefore be observed even when that file still names this session.
+        if (binding.EditorSessionId is not null && OriginalInstanceExited(binding.EditorSessionId))
+            return BoundError("AGENT_TASK_INTERRUPTED", "The admitted Editor process has exited; execution was not replayed.");
+        string UnavailableCode() => OriginalInstanceExited(binding.EditorSessionId) ? "AGENT_TASK_INTERRUPTED" : "AGENT_TASK_OUTCOME_UNKNOWN";
+        if (_requireSessionBinding && (binding.EditorSessionId is null || binding.EditorSessionId != _expectedEditorSessionId))
+            return BoundError(binding.EditorSessionId is null ? "AGENT_TASK_LEGACY_UNCONFIRMED" : UnavailableCode(),
+                "The admitted Editor instance is unavailable; execution will not be replayed.");
+        if (binding.EditorSessionId is not null)
+        {
+            var statusPath = Path.Combine(_queuePaths.StatusDirectory, "unity_bridge_status.json");
+            try
+            {
+                if (File.Exists(statusPath))
+                {
+                    var status = JsonNode.Parse(File.ReadAllText(statusPath));
+                    var currentSession = status?["editorSession"]?["editorSessionId"]?.GetValue<string>() ?? status?["editorSessionId"]?.GetValue<string>();
+                    if (!string.IsNullOrWhiteSpace(currentSession) && currentSession != binding.EditorSessionId)
+                        return BoundError(UnavailableCode(), "The admitted Editor instance does not match current evidence; execution was not replayed.");
+                }
+                else return BoundError(UnavailableCode(), "Editor instance evidence is missing; execution was not replayed.");
+            }
+            catch (Exception e) when (e is IOException or JsonException or UnauthorizedAccessException)
+            { return BoundError("AGENT_TASK_OUTCOME_UNKNOWN", "Editor instance evidence is unreadable; execution was not replayed."); }
+        }
         JsonObject response;
         using var observation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         observation.CancelAfter(TimeSpan.FromSeconds(5));
         try { response = await SendAsync(operation, binding.AgentTaskId, null, null, 0, observation.Token); }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        { return ObservationError("AGENT_TASK_OBSERVATION_TIMEOUT", "Unity did not answer this observation within five seconds.", mcpTaskId); }
-        if (response["errorCode"]?.GetValue<string>() == "NOT_FOUND") return ObservationError("STALE_BINDING", "MCP task binding points to an unavailable AgentTask.", mcpTaskId);
+        { return BoundError("AGENT_TASK_OBSERVATION_TIMEOUT", "Unity did not answer this observation within five seconds."); }
+        if (response["errorCode"]?.GetValue<string>() == "NOT_FOUND") return BoundError("STALE_BINDING", "MCP task binding points to an unavailable AgentTask.");
         response["taskId"] = mcpTaskId;
         response["dispatchCommandId"] = binding.CommandId;
         if (response["state"] is null && response["snapshot"]?["state"] is null)
@@ -169,7 +234,29 @@ public sealed class McpTaskAdapter
         {
             try { response["metrics"] = JsonNode.Parse(payloadJson); } catch (JsonException) { }
         }
+        if (_requireSessionBinding || binding.ProjectId is not null)
+        {
+            response["projectId"] = binding.ProjectId;
+            response["projectPath"] = _queuePaths.ProjectPath;
+            response["editorSessionId"] = binding.EditorSessionId;
+            response["connectionId"] = binding.ConnectionId;
+        }
+        if (mappedStatus is "completed" or "failed" or "cancelled")
+            return JsonNode.Parse(_history.Save("task-" + mcpTaskId, new ToolResultEnvelope(response.ToJsonString(), mappedStatus, false)).RawJson)!.AsObject();
         return response;
+    }
+
+    private static bool OriginalInstanceExited(string? sessionId)
+    {
+        var parts = sessionId?.Split(':');
+        if (parts?.Length != 2 || !int.TryParse(parts[0], out var pid) || !long.TryParse(parts[1], out var startTicks)) return false;
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById(pid);
+            return process.HasExited || process.StartTime.ToUniversalTime().Ticks != startTicks;
+        }
+        catch (ArgumentException) { return true; }
+        catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException) { return false; }
     }
 
     private async Task<JsonObject> SendAsync(string operation, string? agentTaskId, string? taskType, string? payload, int timeoutMs, CancellationToken cancellationToken, string? commandId = null)

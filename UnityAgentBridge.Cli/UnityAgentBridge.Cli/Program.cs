@@ -3,7 +3,7 @@ using UnityAgentBridge.Mcp;
 
 if (args.Length > 0 && string.Equals(args[0], "mcp-server", StringComparison.Ordinal))
 {
-    await McpServerRuntime.RunAsync(CancellationToken.None);
+    await McpServerRuntime.RunAsync(CancellationToken.None, McpRoutingOptions.Parse(args.Skip(1).ToArray()));
     return 0;
 }
 

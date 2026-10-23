@@ -48,10 +48,10 @@ namespace UnityMcp.AgentBridge.Mcp
                 }
                 return _configEditor.ApplyManagedBlock(
                     targetPath,
-                    BuildManagedBlockBodyWithLauncher(launcherPath, projectRoot));
+                    McpMultiProjectConfig.BuildToml(launcherPath, projectRoot, _pathResolver.GetWorkspaceRoot(settings), true));
             }
 
-            return _configEditor.Apply(targetPath, executableCommand, GetProjectRoot(_pathResolver));
+            return _configEditor.ApplyManagedBlock(targetPath, McpMultiProjectConfig.BuildToml(executableCommand, GetProjectRoot(_pathResolver), _pathResolver.GetWorkspaceRoot(settings), false));
         }
 
         public ManagedBlockApplyResult Remove()
@@ -77,11 +77,11 @@ namespace UnityMcp.AgentBridge.Mcp
                 {
                     return "# machine_launcher_missing" + Environment.NewLine + "# Install or select a machine runtime before applying managed MCP config.";
                 }
-                return new ManagedBlockTextEditor().Apply(string.Empty, BuildManagedBlockBodyWithLauncher(launcherPath, projectRoot));
+                return new ManagedBlockTextEditor().Apply(string.Empty, McpMultiProjectConfig.BuildToml(launcherPath, projectRoot, _pathResolver.GetWorkspaceRoot(settings), true));
             }
             return new ManagedBlockTextEditor().Apply(
                 string.Empty,
-                BuildManagedBlockBody(executableCommand, projectRoot, string.Empty));
+                McpMultiProjectConfig.BuildToml(executableCommand, projectRoot, _pathResolver.GetWorkspaceRoot(settings), false));
         }
 
         internal static string GetTargetPath()

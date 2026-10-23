@@ -33,7 +33,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 };
             }
 
-            return _jsonMerger.Apply(GetTargetPath(settings, _pathResolver), BuildManagedJson(launcherCommand, projectRoot), ContainerName);
+            return _jsonMerger.Apply(GetTargetPath(settings, _pathResolver), McpMultiProjectConfig.BuildJson(launcherCommand, projectRoot, _pathResolver.GetWorkspaceRoot(settings), true), ContainerName);
         }
 
         public ManagedBlockApplyResult Remove()
@@ -48,7 +48,7 @@ namespace UnityMcp.AgentBridge.Mcp
                 return "{\n  \"" + ContainerName + "\": {\n    \"unity_agent_bridge\": {\n      \"error\": \"launcher_missing\",\n      \"message\": \"Prepared Unity Agent Bridge launcher does not exist. Prepare the project-local MCP runtime before applying managed MCP config.\"\n    }\n  }\n}";
             }
 
-            return "{\n  \"" + ContainerName + "\": {\n    \"unity_agent_bridge\": " + BuildManagedJson(launcherCommand, projectRoot) + "\n  }\n}";
+            return "{\n  \"" + ContainerName + "\": {\n    \"unity_agent_bridge\": " + McpMultiProjectConfig.BuildJson(launcherCommand, projectRoot, _pathResolver.GetWorkspaceRoot(settings), true) + "\n  }\n}";
         }
 
         internal static string GetTargetPath(McpPathResolver pathResolver)

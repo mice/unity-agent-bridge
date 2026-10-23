@@ -84,10 +84,31 @@ namespace UnityMcp.AgentBridge
         }
 
         private static string PathFor(string id) => Path.Combine(Root, "agent-task-results", id + ".json");
+        internal static void CleanupEditorTestReports(string bridgeRoot, int maximumReports = 1000,
+            long maximumBytes = 256L * 1024 * 1024, DateTime? utcNow = null)
+        {
+            // Editor owns only raw test reports. Host-owned retained copies have their
+            // own reference/retention policy and must never be swept by this publisher.
+            var directory = Path.Combine(bridgeRoot, "editor-test-reports");
+            if (!Directory.Exists(directory)) return;
+            var files = new DirectoryInfo(directory).GetFiles("editmode_tests_*.json").OrderBy(file => file.LastWriteTimeUtc).ToList();
+            var bytes = files.Sum(file => file.Length);
+            var count = files.Count;
+            foreach (var file in files)
+            {
+                if ((utcNow ?? DateTime.UtcNow) - file.LastWriteTimeUtc < TimeSpan.FromDays(7) && count <= maximumReports && bytes <= maximumBytes) continue;
+                var length = file.Length;
+                file.Delete();
+                count--;
+                bytes -= length;
+            }
+        }
+
         private static void Maintain()
         {
             if (EditorApplication.timeSinceStartup < nextCleanup) return;
             nextCleanup = EditorApplication.timeSinceStartup + 30;
+            CleanupEditorTestReports(Root);
             foreach (var category in new[] { "agent-task-results", "compile-results", "compile-reports" })
             {
                 var directory = Path.Combine(Root, category);

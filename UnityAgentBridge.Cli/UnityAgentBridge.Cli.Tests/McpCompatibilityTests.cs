@@ -397,6 +397,7 @@ public sealed class McpCompatibilityTests
         private readonly StreamReader _stdout;
         private readonly StreamWriter _stdin;
         private int _nextRequestId = 1;
+        private readonly System.Collections.Concurrent.ConcurrentQueue<string> _stderrLines = new();
 
         public JObject InitializeResult { get; private set; } = null!;
 
@@ -405,6 +406,11 @@ public sealed class McpCompatibilityTests
             _process = process;
             _stdout = process.StandardOutput;
             _stdin = process.StandardInput;
+            process.ErrorDataReceived += (_, args) =>
+            {
+                if (args.Data is not null) _stderrLines.Enqueue(args.Data);
+            };
+            process.BeginErrorReadLine();
         }
 
         public static async Task<McpServerSession> StartAsync(string projectRoot, bool includeTaskCapability = false, bool initialize = true)
@@ -435,11 +441,19 @@ public sealed class McpCompatibilityTests
             process.Start();
 
             var session = new McpServerSession(process);
-            if (initialize)
+            try
             {
-                await session.InitializeAsync(includeTaskCapability);
+                if (initialize) await session.InitializeAsync(includeTaskCapability);
+                return session;
             }
-            return session;
+            catch (Exception exception)
+            {
+                try { await session.DisposeAsync(); }
+                catch (Exception cleanup) { Console.Error.WriteLine("Owned MCP startup cleanup failed: " + cleanup); }
+                Console.Error.WriteLine("MCP initialization failed; host=" + assemblyPath + "; error=" + exception +
+                    Environment.NewLine + "server stderr:" + Environment.NewLine + await session.ReadAvailableErrorAsync());
+                throw;
+            }
         }
 
         public async Task<JObject> CallToolAsync(string toolName, JObject arguments)
@@ -580,13 +594,7 @@ public sealed class McpCompatibilityTests
         private async Task<string> ReadAvailableErrorAsync()
         {
             await Task.Delay(50);
-            var builder = new StringBuilder();
-            while (_process.StandardError.Peek() >= 0)
-            {
-                builder.Append((char)_process.StandardError.Read());
-            }
-
-            return builder.ToString();
+            return string.Join(Environment.NewLine, _stderrLines);
         }
     }
 }

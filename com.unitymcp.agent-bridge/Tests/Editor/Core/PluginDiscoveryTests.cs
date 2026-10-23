@@ -10,11 +10,91 @@ namespace UnityMcp.AgentBridge.Tests
     {
         private string _projectRoot;
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_284.md
+        [Test, Category("AGB_Core"), Category("AGBM_284")]
+        public void CatalogPublicationFailure_DoesNotReturnSuccessfulCapabilityRevision()
+        {
+            var settings = CreatePluginOnlySettings();
+            var paths = new AgentBridgePaths(_projectRoot, settings);
+            paths.EnsureDirectories();
+            Directory.CreateDirectory(paths.PluginCatalogPath);
+            var registry = new AgentToolRegistry();
+            registry.Discover();
+            UnityMcpPluginDiscoveryResult published = null;
+            try
+            {
+                Assert.Catch(() => published = UnityMcpPluginRuntime.DiscoverAndRegister(
+                    registry, settings, paths, new FileAgentBridgeLogger(paths.BridgeLogPath)));
+                Assert.That(published, Is.Null, "Failed publication must not expose a successful discovery result/revision.");
+                Assert.That(File.Exists(paths.PluginCatalogPath), Is.False);
+            }
+            finally { UnityEngine.Object.DestroyImmediate(settings); }
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_285.md
+        [Test, Category("AGB_Core"), Category("AGBM_285")]
+        public void PollerCapabilityRevision_RemainsBoundToPublishedRegistryWhenDiskChanges()
+        {
+            var settings = CreatePluginOnlySettings();
+            AgentCommandPoller poller = null;
+            try
+            {
+                settings.enabled = true;
+                var paths = new AgentBridgePaths(_projectRoot, settings);
+                paths.EnsureDirectories();
+                var registry = new AgentToolRegistry();
+                registry.Discover();
+                var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
+                var published = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, logger);
+                poller = new AgentCommandPoller(new AgentCommandQueue(_projectRoot, settings.tempRoot),
+                    new UnityToolFacade(registry, settings, logger), settings, paths, logger, published.CapabilityRevision);
+                Assert.That(published.CapabilityRevision, Does.Match("^[a-f0-9]{64}$"));
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                    Assert.That(published.CapabilityRevision, Is.EqualTo(BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(paths.PluginCatalogPath))).Replace("-", "").ToLowerInvariant()));
+                File.WriteAllText(paths.PluginCatalogPath, "{\"version\":1,\"tools\":[],\"changed\":true}");
+                poller.Start();
+                var method = typeof(AgentCommandPoller).GetMethod("PublishStatus", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                Assert.That(method, Is.Not.Null);
+                method.Invoke(poller, new object[] { "", "test" });
+                var status = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(paths.StatusFilePath));
+                Assert.That(status["editorSession"]["capabilityRevision"].ToString(), Is.EqualTo(published.CapabilityRevision));
+            }
+            finally
+            {
+                try { poller?.Stop(); }
+                finally { UnityEngine.Object.DestroyImmediate(settings); }
+            }
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_286.md
+        [Test, Category("AGB_Core"), Category("AGBM_286")]
+        public void InspectionDiscovery_DoesNotOverwriteActiveCatalogOrClaimPublication()
+        {
+            var settings = CreatePluginOnlySettings();
+            var paths = new AgentBridgePaths(_projectRoot, settings);
+            paths.EnsureDirectories();
+            var original = new byte[] { 123, 125, 10 };
+            File.WriteAllBytes(paths.PluginCatalogPath, original);
+            var registry = new AgentToolRegistry();
+            registry.Discover();
+            try
+            {
+                var inspected = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths,
+                    new FileAgentBridgeLogger(paths.BridgeLogPath), publishCatalog: false);
+                CollectionAssert.AreEqual(original, File.ReadAllBytes(paths.PluginCatalogPath));
+                Assert.That(inspected.CapabilityRevision, Is.EqualTo("missing"));
+            }
+            finally { UnityEngine.Object.DestroyImmediate(settings); }
+        }
+
         [SetUp]
         public void SetUp()
         {
             _projectRoot = Path.Combine(Path.GetTempPath(), "PluginDiscoveryTests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Path.Combine(_projectRoot, "Assets"));
+            // File-only identity fixture: no Unity project generation or Editor launch.
+            Directory.CreateDirectory(Path.Combine(_projectRoot, "ProjectSettings"));
+            File.WriteAllText(Path.Combine(_projectRoot, "ProjectSettings", "ProjectVersion.txt"), "identity fixture");
             Directory.CreateDirectory(Path.Combine(_projectRoot, "Packages"));
             Directory.CreateDirectory(Path.Combine(_projectRoot, "Library"));
         }

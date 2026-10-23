@@ -7,6 +7,7 @@ namespace UnityMcp.AgentBridge
     {
         public string logVersion = "1.0";
         public string schemaVersion = JsonUtil.CurrentSchemaVersion;
+        public EditorSessionInfo editorSession;
         public string timestamp;
         public string heartbeatUtc;
         public string currentCommandId;

@@ -6,6 +6,9 @@ namespace UnityMcp.AgentBridge
     public sealed class AgentCommand
     {
         public string schemaVersion;
+        public int targetSchemaVersion;
+        public string projectId;
+        public string editorSessionId;
         public string commandId;
         public string tool;
         public int timeoutMs;

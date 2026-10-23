@@ -9,10 +9,12 @@ public sealed class McpStageLogger
     private const string SchemaVersion = "1.0";
     private static readonly object WriteGate = new();
     private readonly string _logPath;
+    private readonly UnityAgentBridge.ExternalBridgeClientCore.ProjectContext? _context;
 
-    public McpStageLogger(string logPath)
+    public McpStageLogger(string logPath, UnityAgentBridge.ExternalBridgeClientCore.ProjectContext? context = null)
     {
         _logPath = logPath;
+        _context = context;
     }
 
     public void Write(string stage, string commandId, string tool, string status, string message)
@@ -26,7 +28,12 @@ public sealed class McpStageLogger
             commandId,
             tool,
             status,
-            message
+            message,
+            projectId = _context?.ProjectId,
+            projectPath = _context?.ProjectPath,
+            editorSessionId = _context?.EditorSessionId,
+            connectionId = _context?.ConnectionId,
+            taskId = McpTaskExecutionContext.CurrentTaskId
         };
 
         lock (WriteGate)

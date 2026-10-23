@@ -2,6 +2,12 @@
 
 This runbook is the package-facing entry point for acceptance agents validating the Editor MCP increment and the package-distribution migration.
 
+## Multi-project routing increment (2026-10-23; unpublished)
+
+Read [Multi-project routing and migration](multi-project-routing.md) before validating the current implementation. This increment explicitly opts into `multi-project` mode and captures a connection workspace; old unmarked configurations remain single-project. The historical version-selection checks below do not by themselves verify routing two projects through one host.
+
+Current workbench acceptance uses `Verify-MultiProjectRouting.ps1` with the fixed prepared A/B roots, the current product host, and `Fixtures/MultiProjectRoutingProbe.py`. The outer verifier owns the exclusive project-pair lease and bounded output directory. Record project/session/connection and task/command identities, actual overlapping fixture intervals, offline observation time, reports, dispatch rejection, and file restoration. Protocol-probe evidence supplements real Codex-client acceptance and cannot replace it. Check the workbench change checklist and acceptance records for actual results; this section declares no passing acceptance or release.
+
 ## Versioned runtime checks
 
 For multi-project acceptance, install one release artifact into a temporary manager home and configure two projects with different selections:

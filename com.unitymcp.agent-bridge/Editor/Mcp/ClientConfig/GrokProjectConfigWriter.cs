@@ -38,9 +38,8 @@ namespace UnityMcp.AgentBridge.Mcp
 
             return _configEditor.Apply(
                 targetPath,
-                preservedChildSections => BuildManagedBlockBody(
-                    launcherCommand,
-                    projectRoot,
+                preservedChildSections => ManagedTomlConfigEditor.AppendPreservedChildSections(
+                    McpMultiProjectConfig.BuildToml(launcherCommand, projectRoot, _pathResolver.GetWorkspaceRoot(settings), true, true),
                     preservedChildSections),
                 createBackup: true);
         }
@@ -64,7 +63,7 @@ namespace UnityMcp.AgentBridge.Mcp
 
             return new ManagedBlockTextEditor().Apply(
                 string.Empty,
-                BuildManagedBlockBody(launcherCommand, projectRoot, string.Empty));
+                McpMultiProjectConfig.BuildToml(launcherCommand, projectRoot, _pathResolver.GetWorkspaceRoot(settings), true, true));
         }
 
         internal static string GetTargetPath(McpPathResolver pathResolver)

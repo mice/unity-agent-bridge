@@ -140,7 +140,7 @@ namespace UnityMcp.AgentBridge
                 var queue = new AgentCommandQueue(_projectRoot, settings.tempRoot);
                 var registry = new AgentToolRegistry(_logger);
                 registry.Discover();
-                UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, _logger, new UnityMcpPluginHostServices
+                var discovery = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, _logger, new UnityMcpPluginHostServices
                 {
                     Settings = settings,
                     Queue = queue,
@@ -148,7 +148,7 @@ namespace UnityMcp.AgentBridge
                     Logger = _logger
                 });
                 var facade = new UnityToolFacade(registry, settings, _logger);
-                _poller = new AgentCommandPoller(queue, facade, settings, paths, _logger);
+                _poller = new AgentCommandPoller(queue, facade, settings, paths, _logger, discovery.CapabilityRevision);
 
                 var recoveryRecords = queue.Recover();
                 foreach (var record in recoveryRecords)

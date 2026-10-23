@@ -5,15 +5,16 @@ using UnityAgentBridge.Mcp;
 
 namespace UnityAgentBridge.Cli.Tests;
 
-[TestClass]
+[TestClass, DoNotParallelize]
 public sealed class McpProbeRunnerTests
 {
     [TestMethod]
     public async Task ProbeRunner_EmitsToolNamesAndPingResultShape()
     {
         var projectRoot = CreateUnityProject();
+        var previousProjectPath = Environment.GetEnvironmentVariable("UNITY_AGENT_BRIDGE_PROJECT_PATH");
         Environment.SetEnvironmentVariable("UNITY_AGENT_BRIDGE_PROJECT_PATH", projectRoot);
-        using var bridgeResponder = StartBridgeResponder(projectRoot);
+        var bridgeResponder = StartBridgeResponder(projectRoot);
         try
         {
             var json = await McpProbeRunner.RunAsync(CancellationToken.None);
@@ -34,7 +35,12 @@ public sealed class McpProbeRunnerTests
         }
         finally
         {
-            Environment.SetEnvironmentVariable("UNITY_AGENT_BRIDGE_PROJECT_PATH", null);
+            try { bridgeResponder.Dispose(); }
+            finally
+            {
+                Environment.SetEnvironmentVariable("UNITY_AGENT_BRIDGE_PROJECT_PATH", previousProjectPath);
+                Directory.Delete(projectRoot, true);
+            }
         }
     }
 
@@ -65,10 +71,13 @@ public sealed class McpProbeRunnerTests
         private readonly QueuePaths _queuePaths;
         private readonly CancellationTokenSource _cts = new();
         private readonly Task _task;
+        private DateTime _lastHeartbeatUtc;
+        private DateTime? _heartbeatPublishBlockedSince;
 
         public BridgeResponder(QueuePaths queuePaths)
         {
             _queuePaths = queuePaths;
+            WriteFreshStatus();
             _task = Task.Run(RespondAsync);
         }
 
@@ -77,24 +86,27 @@ public sealed class McpProbeRunnerTests
             _cts.Cancel();
             try
             {
-                _task.Wait(TimeSpan.FromSeconds(5));
+                _task.WaitAsync(TimeSpan.FromSeconds(5)).GetAwaiter().GetResult();
             }
-            catch
-            {
-            }
-
-            _cts.Dispose();
+            catch (OperationCanceledException) when (_cts.IsCancellationRequested) { }
+            finally { _cts.Dispose(); }
         }
 
         private async Task RespondAsync()
         {
-            WriteFreshStatus();
             while (!_cts.IsCancellationRequested)
             {
+                if (DateTime.UtcNow - _lastHeartbeatUtc >= TimeSpan.FromMilliseconds(250)) WriteFreshStatus();
                 var commandPath = Directory.GetFiles(_queuePaths.InboxDirectory, "*.json").FirstOrDefault();
                 if (commandPath is not null)
                 {
-                    var command = JObject.Parse(await File.ReadAllTextAsync(commandPath, _cts.Token));
+                    JObject command;
+                    try { command = JObject.Parse(await File.ReadAllTextAsync(commandPath, _cts.Token)); }
+                    catch (Exception exception) when (exception is IOException or Newtonsoft.Json.JsonReaderException)
+                    {
+                        await Task.Delay(50, _cts.Token);
+                        continue; // Retry a writer-owned or incomplete command before applying any effect.
+                    }
                     var tool = command.Value<string>("tool") ?? string.Empty;
                     if (tool is "unity.ping" or "unity.get_console" or "unity.project.get_info")
                     {
@@ -110,7 +122,8 @@ public sealed class McpProbeRunnerTests
                             ["summary"] = tool == "unity.ping" ? "Pong." : tool == "unity.get_console" ? "Console entries collected." : "Project info collected.",
                             ["projectPath"] = _queuePaths.ProjectPath
                         };
-                        await File.WriteAllTextAsync(resultPath, result.ToString(Newtonsoft.Json.Formatting.None), _cts.Token);
+                        await File.WriteAllTextAsync(resultPath + ".fixture.tmp", result.ToString(Newtonsoft.Json.Formatting.None), _cts.Token);
+                        File.Move(resultPath + ".fixture.tmp", resultPath);
                         File.Delete(commandPath);
                     }
                 }
@@ -131,7 +144,24 @@ public sealed class McpProbeRunnerTests
                 ["staleProjectBindingKind"] = "bound",
                 ["staleDetectedProjectPath"] = _queuePaths.ProjectPath.Replace("\\", "/")
             };
-            File.WriteAllText(statusPath, status.ToString(Newtonsoft.Json.Formatting.None));
+            var temporary = statusPath + ".fixture.tmp";
+            try
+            {
+                File.WriteAllText(temporary, status.ToString(Newtonsoft.Json.Formatting.None));
+                try { File.Move(temporary, statusPath, overwrite: true); }
+                catch (Exception exception) when (
+                    exception is IOException or UnauthorizedAccessException &&
+                    OperatingSystem.IsWindows() && (exception.HResult & 0xffff) is 5 or 32 or 33 &&
+                    File.Exists(statusPath) && File.Exists(temporary))
+                {
+                    _heartbeatPublishBlockedSince ??= DateTime.UtcNow;
+                    if (DateTime.UtcNow - _heartbeatPublishBlockedSince.Value >= TimeSpan.FromSeconds(10)) throw;
+                    return;
+                }
+                _lastHeartbeatUtc = DateTime.UtcNow;
+                _heartbeatPublishBlockedSince = null;
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
     }
 }

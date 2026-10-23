@@ -15,18 +15,20 @@ namespace UnityMcp.AgentBridge
         private readonly AgentBridgeSettings _settings;
         private readonly FileAgentBridgeLogger _logger;
         private readonly AgentBridgePaths _paths;
+        private readonly string _capabilityRevision;
         private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
         private DateTime _nextTickUtc;
         private bool _isStarted;
         private string _lastError = string.Empty;
 
-        public AgentCommandPoller(AgentCommandQueue queue, UnityToolFacade facade, AgentBridgeSettings settings, AgentBridgePaths paths, FileAgentBridgeLogger logger = null)
+        public AgentCommandPoller(AgentCommandQueue queue, UnityToolFacade facade, AgentBridgeSettings settings, AgentBridgePaths paths, FileAgentBridgeLogger logger = null, string capabilityRevision = null)
         {
             _queue = queue ?? throw new ArgumentNullException(nameof(queue));
             _facade = facade ?? throw new ArgumentNullException(nameof(facade));
             _settings = settings ?? throw new ArgumentNullException(nameof(settings));
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
             _logger = logger;
+            _capabilityRevision = capabilityRevision ?? "missing";
         }
 
         public bool IsStarted => _isStarted;
@@ -52,6 +54,7 @@ namespace UnityMcp.AgentBridge
 
             EditorApplication.update -= OnEditorUpdate;
             _isStarted = false;
+            PublishStatus(string.Empty, "unity.poller.stopped");
         }
 
         private void OnEditorUpdate()
@@ -170,11 +173,36 @@ namespace UnityMcp.AgentBridge
             }
         }
 
+        private EditorSessionInfo CreateEditorSession()
+        {
+            using (var process = System.Diagnostics.Process.GetCurrentProcess())
+            {
+                var sessionId = process.Id + ":" + process.StartTime.ToUniversalTime().Ticks;
+                var revisionKey = "UnityAgentBridge.EditorSessionRevision." + sessionId;
+                long.TryParse(SessionState.GetString(revisionKey, "0"), out var lastRevision);
+                var revision = Math.Max(DateTime.UtcNow.Ticks, lastRevision + 1);
+                SessionState.SetString(revisionKey, revision.ToString(CultureInfo.InvariantCulture));
+                return new EditorSessionInfo
+                {
+                    projectId = ProjectPathIdentity.GetProjectId(_paths.ProjectRoot),
+                    editorSessionId = sessionId,
+                    processId = process.Id,
+                    processStartTime = process.StartTime.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
+                    heartbeatUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                    revision = revision,
+                    bridgeEnabled = _settings.enabled && _isStarted,
+                    bridgeVersion = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(AgentCommandPoller).Assembly)?.version ?? typeof(AgentCommandPoller).Assembly.GetName().Version.ToString(),
+                    capabilityRevision = _capabilityRevision
+                };
+            }
+        }
+
         private void PublishStatus(string currentCommandId, string currentStage)
         {
 
             var snapshot = new UnityBridgeStatusSnapshot
             {
+                editorSession = CreateEditorSession(),
                 timestamp = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                 heartbeatUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                 currentCommandId = currentCommandId ?? string.Empty,
