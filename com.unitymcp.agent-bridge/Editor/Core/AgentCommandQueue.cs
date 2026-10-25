@@ -249,7 +249,15 @@ namespace UnityMcp.AgentBridge
             }
 
             result.commandId = commandId;
-            WriteResultAtomic(GetOutboxResultPath(commandId), result);
+            var resultPath = GetOutboxResultPath(commandId);
+            if (!File.Exists(resultPath)) WriteResultAtomic(resultPath, result);
+            else
+            {
+                var committed = JsonUtil.TryDeserializeArgs<ToolResult>(File.ReadAllText(resultPath), out var prior, out _);
+                if (!committed || prior == null || prior.commandId != commandId ||
+                    prior.status == ToolResultStatus.Pending || prior.status == ToolResultStatus.Running || prior.status == ToolResultStatus.Resuming)
+                    throw new InvalidDataException("Original terminal result is unreadable or non-terminal; delivery cannot overwrite retained evidence.");
+            }
             DeleteIfExists(GetProcessingCommandPath(commandId));
             DeleteIfExists(GetProcessingStatePath(commandId));
         }
@@ -320,6 +328,15 @@ namespace UnityMcp.AgentBridge
 
             if (fileName.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase))
             {
+                return true;
+            }
+
+            // Retained terminal output is authoritative even after scheduler metadata cleanup.
+            // Never replay a completed ordinary command or an already-answered internal create.
+            var commandId = Path.GetFileNameWithoutExtension(path);
+            if (File.Exists(GetOutboxResultPath(commandId)))
+            {
+                MoveToFailed(path, commandId);
                 return true;
             }
 

@@ -42,10 +42,14 @@ namespace UnityMcp.AgentBridge
                 return ToolResult.InvalidArgs("AGENTBRIDGE_SETTINGS_NULL", "Settings are required.");
             }
 
-            Subscribe();
-
+            // Reobserving an immutable completed result is not a new execution.
             var retained = ReadCompletedResult(command.commandId);
             if (retained != null) return retained;
+
+            if (!EditorTaskScheduling.IsExecuting(command.commandId))
+                return EditorTaskScheduling.Execute(command, settings, () => StartOrResume(command, settings));
+
+            Subscribe();
 
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
             if (string.IsNullOrWhiteSpace(projectRoot))
@@ -60,8 +64,8 @@ namespace UnityMcp.AgentBridge
 
             var effectiveTimeoutMs = Math.Min(command.timeoutMs, settings.maxToolDurationMs);
             var timeoutTruncated = effectiveTimeoutMs != command.timeoutMs;
-            var operationPath = GetOperationPath(projectRoot, settings.tempRoot, command.commandId);
-            var lifecycleStore = new CompileLifecycleStore(projectRoot, settings.tempRoot);
+            var operationPath = GetOperationPath(projectRoot, EditorTaskScheduling.GetQueueRoot(settings.tempRoot), command.commandId);
+            var lifecycleStore = new CompileLifecycleStore(projectRoot, EditorTaskScheduling.GetQueueRoot(settings.tempRoot));
             var lifecycle = CompileLifecycleStateMachine.EnsureInitialized(lifecycleStore.Read(), projectRoot);
 
             if (!OperationsById.TryGetValue(command.commandId, out var state))
@@ -71,7 +75,7 @@ namespace UnityMcp.AgentBridge
                     commandId = command.commandId,
                     tool = command.tool,
                     projectRoot = projectRoot,
-                    tempRoot = settings.tempRoot,
+                    tempRoot = EditorTaskScheduling.GetQueueRoot(settings.tempRoot),
                     startedAt = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                     effectiveTimeoutMs = effectiveTimeoutMs,
                     timeoutTruncated = timeoutTruncated,
@@ -87,7 +91,7 @@ namespace UnityMcp.AgentBridge
             else
             {
                 state.projectRoot = projectRoot;
-                state.tempRoot = settings.tempRoot;
+                state.tempRoot = EditorTaskScheduling.GetQueueRoot(settings.tempRoot);
                 state.effectiveTimeoutMs = effectiveTimeoutMs;
                 state.timeoutTruncated = timeoutTruncated;
                 state.domainReloadRestored = true;
@@ -280,7 +284,7 @@ namespace UnityMcp.AgentBridge
                 return;
             }
 
-            var tempRoot = OperationsById.Values.FirstOrDefault()?.tempRoot ?? "Temp/AgentBridge";
+            var tempRoot = OperationsById.Values.FirstOrDefault()?.tempRoot ?? EditorTaskScheduling.ActiveCompileQueueRoot ?? "Temp/AgentBridge";
             var lifecycleStore = new CompileLifecycleStore(projectRoot, tempRoot);
             var lifecycle = CompileLifecycleStateMachine.RecordCompilationStarted(lifecycleStore.Read(), nowUtc, projectRoot);
 
@@ -303,6 +307,7 @@ namespace UnityMcp.AgentBridge
                 }
 
                 lifecycle = CompileLifecycleStateMachine.RegisterWaitingCommand(lifecycle, state.commandId, state.targetEpoch, state.lifecycleStage, projectRoot);
+                EditorTaskScheduling.SetOperationCorrelation(state.commandId, "compile:" + state.targetEpoch);
             }
 
             lifecycleStore.Write(lifecycle);
@@ -317,7 +322,7 @@ namespace UnityMcp.AgentBridge
 
             var nowUtc = DateTime.UtcNow;
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
-            var tempRoot = OperationsById.Values.FirstOrDefault()?.tempRoot ?? "Temp/AgentBridge";
+            var tempRoot = OperationsById.Values.FirstOrDefault()?.tempRoot ?? EditorTaskScheduling.ActiveCompileQueueRoot ?? "Temp/AgentBridge";
             if (!string.IsNullOrWhiteSpace(projectRoot))
             {
                 var errorCount = messages?.Count(message => message.type == CompilerMessageType.Error) ?? 0;
@@ -355,11 +360,13 @@ namespace UnityMcp.AgentBridge
         private static void OnCompilationFinished(object context)
         {
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
-            var tempRoot = OperationsById.Values.FirstOrDefault()?.tempRoot ?? "Temp/AgentBridge";
+            var tempRoot = OperationsById.Values.FirstOrDefault()?.tempRoot ?? EditorTaskScheduling.ActiveCompileQueueRoot ?? "Temp/AgentBridge";
             if (!string.IsNullOrWhiteSpace(projectRoot))
             {
                 var lifecycleStore = new CompileLifecycleStore(projectRoot, tempRoot);
                 lifecycleStore.Write(CompileLifecycleStateMachine.RecordCompilationFinished(lifecycleStore.Read(), DateTime.UtcNow));
+                foreach (var operation in OperationsById.Values.ToArray())
+                    EditorTaskScheduling.NotifyExecutionEnded(operation.commandId, "Original CompilationPipeline.compilationFinished epoch " + operation.targetEpoch);
             }
 
             EvaluateOperations(forceLifecycleRefresh: true);
@@ -411,7 +418,7 @@ namespace UnityMcp.AgentBridge
                 return;
             }
 
-            var tempRoot = OperationsById.Values.FirstOrDefault()?.tempRoot ?? "Temp/AgentBridge";
+            var tempRoot = OperationsById.Values.FirstOrDefault()?.tempRoot ?? EditorTaskScheduling.ActiveCompileQueueRoot ?? "Temp/AgentBridge";
             var lifecycleStore = new CompileLifecycleStore(projectRoot, tempRoot);
             var lifecycle = CompileLifecycleStateMachine.EnsureInitialized(lifecycleStore.Read(), projectRoot);
             if (forceLifecycleRefresh)
@@ -890,6 +897,22 @@ namespace UnityMcp.AgentBridge
 
         private static string CurrentEditorSession => System.Diagnostics.Process.GetCurrentProcess().Id + ":" + System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks;
         private static string CompletedResultPath(string commandId) => Path.Combine(AgentTaskDurableResults.Root, "compile-results", commandId + ".json");
+        internal static ToolResult CompleteOriginalDeadline(string commandId)
+        {
+            var retained = ReadCompletedResult(commandId);
+            if (retained != null) return retained;
+            if (!OperationsById.TryGetValue(commandId, out var state)) return null;
+            state.timeoutReason = state.targetEpoch <= 0 ? "compile_start_timeout" : "compile_finish_timeout";
+            state.lifecycleStage = "timeout";
+            state.lastTransition = "compile_timeout";
+            state.lastTransitionAtUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+            PersistState(GetOperationPath(state.projectRoot, state.tempRoot, state.commandId), state);
+            // This commits the existing compile result/report, not physical-end
+            // evidence. The scheduler retains ownership until the epoch finishes.
+            CompleteOperation(state, BuildTimeoutResult(state));
+            return ReadCompletedResult(commandId);
+        }
+
         internal static bool HasOperation(string commandId) => OperationsById.ContainsKey(commandId);
         internal static ToolResult ReadCompletedResult(string commandId)
         {

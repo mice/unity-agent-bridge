@@ -21,6 +21,8 @@ namespace UnityMcp.AgentTaskCore
         public string TaskType { get; set; }
         public string Payload { get; set; }
         public int TimeoutMs { get; set; }
+        public string SubmittedAtUtc { get; set; }
+        public string CommandId { get; set; }
     }
 
     public sealed class AgentTaskControlResponse
@@ -37,6 +39,7 @@ namespace UnityMcp.AgentTaskCore
         public string ResultKind { get; set; }
         public string ResultReason { get; set; }
         public string ResultPayloadJson { get; set; }
+        public string SchedulingJson { get; set; }
     }
 
     public sealed class AgentTaskBinding
@@ -82,9 +85,9 @@ namespace UnityMcp.AgentTaskCore
         public static string Serialize(object value)
         {
             var request = value as AgentTaskControlRequest;
-            if (request != null) return "{\"version\":" + request.Version + ",\"operation\":" + StringValue(request.Operation) + ",\"projectIdentity\":" + StringValue(request.ProjectIdentity) + ",\"agentTaskId\":" + StringValue(request.AgentTaskId) + ",\"taskType\":" + StringValue(request.TaskType) + ",\"payload\":" + StringValue(request.Payload) + ",\"timeoutMs\":" + request.TimeoutMs + "}";
+            if (request != null) return "{\"version\":" + request.Version + ",\"operation\":" + StringValue(request.Operation) + ",\"projectIdentity\":" + StringValue(request.ProjectIdentity) + ",\"agentTaskId\":" + StringValue(request.AgentTaskId) + ",\"taskType\":" + StringValue(request.TaskType) + ",\"payload\":" + StringValue(request.Payload) + (request.CommandId == null ? "" : ",\"commandId\":" + StringValue(request.CommandId)) + ",\"timeoutMs\":" + request.TimeoutMs + (request.SubmittedAtUtc == null ? "" : ",\"submittedAtUtc\":" + StringValue(request.SubmittedAtUtc)) + "}";
             var response = value as AgentTaskControlResponse;
-            if (response != null) return "{\"version\":" + response.Version + ",\"success\":" + (response.Success ? "true" : "false") + ",\"errorCode\":" + StringValue(response.ErrorCode) + ",\"errorMessage\":" + StringValue(response.ErrorMessage) + ",\"agentTaskId\":" + StringValue(response.AgentTaskId ?? (response.Snapshot == null ? null : response.Snapshot.Id.Value)) + ",\"state\":" + StringValue(response.Snapshot == null ? response.State : response.Snapshot.State.ToString()) + ",\"resultKind\":" + StringValue(response.Snapshot?.Result?.Kind.ToString() ?? response.ResultKind) + ",\"resultReason\":" + StringValue(response.Snapshot?.Result?.Reason ?? response.ResultReason) + ",\"resultPayloadJson\":" + StringValue(response.ResultPayloadJson) + ",\"cancellation\":" + StringValue(response.Cancellation?.ToString()) + ",\"cancellationRequested\":" + (response.Snapshot != null && response.Snapshot.CancellationRequested ? "true" : "false") + ",\"createdAt\":" + StringValue(response.Snapshot == null ? null : response.Snapshot.CreatedAt.ToString("O")) + ",\"terminalAt\":" + StringValue(response.Snapshot?.TerminalAt?.ToString("O")) + ",\"execution\":" + SerializeExecution(response.Snapshot?.Execution ?? response.Execution ?? AgentExecutionObservation.Unknown) + "}";
+            if (response != null) return "{\"version\":" + response.Version + ",\"success\":" + (response.Success ? "true" : "false") + ",\"errorCode\":" + StringValue(response.ErrorCode) + ",\"errorMessage\":" + StringValue(response.ErrorMessage) + ",\"agentTaskId\":" + StringValue(response.AgentTaskId ?? (response.Snapshot == null ? null : response.Snapshot.Id.Value)) + ",\"state\":" + StringValue(response.Snapshot == null ? response.State : response.Snapshot.State.ToString()) + ",\"resultKind\":" + StringValue(response.Snapshot?.Result?.Kind.ToString() ?? response.ResultKind) + ",\"resultReason\":" + StringValue(response.Snapshot?.Result?.Reason ?? response.ResultReason) + ",\"resultPayloadJson\":" + StringValue(response.ResultPayloadJson) + ",\"cancellation\":" + StringValue(response.Cancellation?.ToString()) + ",\"cancellationRequested\":" + (response.Snapshot != null && response.Snapshot.CancellationRequested ? "true" : "false") + ",\"createdAt\":" + StringValue(response.Snapshot == null ? null : response.Snapshot.CreatedAt.ToString("O")) + ",\"terminalAt\":" + StringValue(response.Snapshot?.TerminalAt?.ToString("O")) + ",\"schedulingJson\":" + StringValue(response.SchedulingJson) + ",\"execution\":" + SerializeExecution(response.Snapshot?.Execution ?? response.Execution ?? AgentExecutionObservation.Unknown) + "}";
             throw new ArgumentException("Unsupported control message type.", nameof(value));
         }
 
@@ -107,7 +110,9 @@ namespace UnityMcp.AgentTaskCore
                 AgentTaskId = ReadString(value, "agentTaskId"),
                 TaskType = ReadString(value, "taskType"),
                 Payload = ReadString(value, "payload"),
-                TimeoutMs = ReadOptionalInt(value, "timeoutMs")
+                TimeoutMs = ReadOptionalInt(value, "timeoutMs"),
+                SubmittedAtUtc = ReadString(value, "submittedAtUtc"),
+                CommandId = ReadString(value, "commandId")
             };
         }
 
@@ -124,6 +129,7 @@ namespace UnityMcp.AgentTaskCore
                 ResultKind = ReadString(value, "resultKind"),
                 ResultReason = ReadString(value, "resultReason"),
                 ResultPayloadJson = ReadString(value, "resultPayloadJson"),
+                SchedulingJson = ReadString(value, "schedulingJson"),
                 Cancellation = ParseCancellation(ReadString(value, "cancellation")),
                 Execution = ParseExecution(value)
             };

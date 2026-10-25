@@ -14,7 +14,7 @@ namespace UnityMcp.BuiltInPlugins.TestRunner
             {
                 new TestRunnerBridgeTool(new UnityEditModeTestTool(), hostServices.Settings, 120000, TestRunnerSchemas.RunEditModeTests),
                 new TestRunnerBridgeTool(new UnityPlayModeTestTool(), hostServices.Settings, 180000, TestRunnerSchemas.RunPlayModeTests),
-                new TestRunnerBridgeTool(new UnitySelfTestTool(new AgentBridgeSelfTestRunner(
+                new SelfTestBridgeTool(new UnitySelfTestTool(new AgentBridgeSelfTestRunner(
                     new UnityToolFacade(hostServices.Registry, hostServices.Settings, hostServices.Logger),
                     hostServices.Queue,
                     hostServices.Settings,

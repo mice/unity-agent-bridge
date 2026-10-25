@@ -5,7 +5,7 @@ using UnityMcp.Plugin;
 
 namespace UnityMcp.BuiltInPlugins.EditorBasics
 {
-    public sealed class UnityConsoleLogTool : IUnityMcpTool
+    public sealed class UnityConsoleLogTool : IUnityMcpTool, UnityMcp.AgentTaskCore.IAgentConcurrentObservationTool
     {
         public UnityMcpToolDescriptor Descriptor { get; } = new UnityMcpToolDescriptor
         {

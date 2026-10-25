@@ -27,6 +27,54 @@ public sealed class ProjectDiscoverySnapshotTests
         Assert.IsTrue(snapshot.Diagnostics.All(x => x.Availability == "unavailable" && !x.Ready));
         Assert.IsTrue(JObject.FromObject(snapshot.Diagnostics[0])["reason"]?.Type == JTokenType.String);
     }
+    // TestRecord: com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_370.md
+    [DataTestMethod, TestCategory("AGBM_370")]
+    [DataRow("isCompiling")]
+    [DataRow("isUpdating")]
+    [DataRow("reload")]
+    public void BusySchedulerObservationSupportsBoundedAdmissionWithoutClaimingReady(string flag)
+    {
+        var registration = new ProjectRegistration { projectId = "project-test", projectPath = _root, queueRoot = Path.Combine(_root, "queue") };
+        var session = new EditorSessionInfo { projectId = registration.projectId, editorSessionId = "S1", bridgeEnabled = true, heartbeatUtc = DateTimeOffset.UtcNow.ToString("O") };
+        var root = JObject.FromObject(new { editorSession = session, schedulingJson = JsonConvert.SerializeObject(new { schemaVersion = 1, projectId = session.projectId, editorSessionId = session.editorSessionId }) });
+        if (flag == "reload") root["currentStage"] = "reload"; else root[flag] = true;
+        var paths = new QueuePaths(_root, registration.queueRoot);
+        CommandStore.EnsureQueueDirectories(paths);
+        File.WriteAllText(Path.Combine(paths.QueueRoot, QueueLayout.StatusDirectoryName, QueueLayout.StatusFileName), root.ToString());
+        var observed = new ProjectDiscoveryService(new ProjectRegistry(Path.Combine(_root, "registry")), processAlive: _ => true).Observe(registration);
+        Assert.IsFalse(observed.ready);
+        Assert.AreEqual("recovering", observed.availability);
+        Assert.IsTrue(JObject.FromObject(observed).Value<bool?>("canQueueWhileBusy") == true);
+    }
+
+    // TestRecord: com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_371.md
+    [DataTestMethod, TestCategory("AGBM_371")]
+    [DataRow("absent")]
+    [DataRow("version")]
+    [DataRow("project")]
+    [DataRow("session")]
+    [DataRow("malformed")]
+    [DataRow("project_type")]
+    [DataRow("large_version")]
+    public void UnsupportedOrMismatchedBusySchedulingDoesNotGrantAdmission(string invalid)
+    {
+        var registration = new ProjectRegistration { projectId = "project-test", projectPath = _root, queueRoot = Path.Combine(_root, "queue") };
+        var session = new EditorSessionInfo { projectId = registration.projectId, editorSessionId = "S1", bridgeEnabled = true, heartbeatUtc = DateTimeOffset.UtcNow.ToString("O") };
+        var scheduling = new JObject { ["schemaVersion"] = invalid == "version" ? 2 : 1,
+            ["projectId"] = invalid == "project" ? "other" : session.projectId,
+            ["editorSessionId"] = invalid == "session" ? "other" : session.editorSessionId };
+        if (invalid == "project_type") scheduling["projectId"] = new JObject();
+        if (invalid == "large_version") scheduling["schemaVersion"] = long.MaxValue;
+        var root = JObject.FromObject(new { editorSession = session, isCompiling = true });
+        if (invalid != "absent") root["schedulingJson"] = invalid == "malformed" ? "{broken" : scheduling.ToString();
+        var paths = new QueuePaths(_root, registration.queueRoot);
+        CommandStore.EnsureQueueDirectories(paths);
+        File.WriteAllText(Path.Combine(paths.QueueRoot, QueueLayout.StatusDirectoryName, QueueLayout.StatusFileName), root.ToString());
+        var observed = new ProjectDiscoveryService(new ProjectRegistry(Path.Combine(_root, "registry")), processAlive: _ => true).Observe(registration);
+        Assert.IsFalse(observed.ready);
+        Assert.IsFalse(JObject.FromObject(observed).Value<bool?>("canQueueWhileBusy") == true);
+    }
+
     [DataTestMethod]
     [DataRow("isCompiling", "EDITOR_COMPILING", "recovering", false)]
     [DataRow("isUpdating", "EDITOR_UPDATING", "recovering", false)]

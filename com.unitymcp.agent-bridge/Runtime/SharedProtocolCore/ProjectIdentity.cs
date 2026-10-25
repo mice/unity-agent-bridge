@@ -36,6 +36,11 @@ namespace UnityMcp.AgentBridge
         public string availability;
         public string reason;
         public bool ready;
+        public bool canQueueWhileBusy;
+
+        public bool CanAdmitScheduledWork() => ready || (canQueueWhileBusy && availability == "recovering" &&
+            editorSession != null && editorSession.schemaVersion == 1 && editorSession.bridgeEnabled &&
+            (reason == "EDITOR_COMPILING" || reason == "EDITOR_UPDATING" || reason == "EDITOR_RELOADING"));
     }
 
     public static class CommandTargetValidator

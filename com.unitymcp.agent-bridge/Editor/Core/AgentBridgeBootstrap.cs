@@ -158,7 +158,7 @@ namespace UnityMcp.AgentBridge
                         continue;
                     }
 
-                    var result = facade.Execute(record.Command.Command, NoOpAgentCancellation.Instance);
+                    var result = EditorTaskScheduling.RecoverCommand(record.Command.Command);
                     if (ShouldLeaveInProcessing(result))
                     {
                         _logger?.Stage("unity.poller.pickup", record.Command.Command.commandId, record.Command.Command.tool, result.status, "recovered stale processing command continues");

@@ -74,6 +74,7 @@ public sealed class BridgeHealthClient
                     ["toolExecution"] = lifecycle.ToolExecution,
                     ["currentCommandId"] = status.Value<string>("currentCommandId") ?? string.Empty,
                     ["currentStage"] = status.Value<string>("currentStage") ?? string.Empty,
+                    ["scheduling"] = ReadScheduling(status),
                     ["isCompiling"] = status["isCompiling"] ?? JValue.CreateNull(),
                     ["isUpdating"] = status["isUpdating"] ?? JValue.CreateNull(),
                     ["isPlaying"] = status["isPlaying"] ?? JValue.CreateNull(),
@@ -119,7 +120,7 @@ public sealed class BridgeHealthClient
 
                 var targetArgs = args["args"] is JObject argsObject ? argsObject.ToString(Formatting.None) : "{}";
                 var targetCommandJson = AgentCommandEnvelope.Build(commandId, targetTool, targetTimeoutMs, targetArgs,
-                    queuePaths.TargetEditorSessionId is null ? 0 : 1, queuePaths.TargetProjectId, queuePaths.TargetEditorSessionId);
+                    queuePaths.TargetEditorSessionId is null ? 0 : 1, queuePaths.TargetProjectId, queuePaths.TargetEditorSessionId, connectionId);
                 commandDispatching?.Invoke(queuePaths, commandId);
                 new CommandStore().WriteInboxAtomic(queuePaths, commandId, targetCommandJson);
 
@@ -763,6 +764,21 @@ public sealed class BridgeHealthClient
         if (timeoutMs <= 0)
         {
             throw new BridgeCommandValidationException("--timeout-ms must be greater than 0.");
+        }
+    }
+
+    private static JObject ReadScheduling(JObject status)
+    {
+        var raw = status.Value<string>("schedulingJson");
+        if (string.IsNullOrWhiteSpace(raw)) return new JObject { ["schemaVersion"] = 1, ["stage"] = "unknown", ["executionOccupied"] = JValue.CreateNull() };
+        try
+        {
+            using var reader = new JsonTextReader(new StringReader(raw)) { DateParseHandling = DateParseHandling.None, MaxDepth = 32 };
+            return JObject.Load(reader);
+        }
+        catch (JsonException)
+        {
+            return new JObject { ["schemaVersion"] = 1, ["stage"] = "blocked", ["blockingReason"] = "SCHEDULER_STATUS_UNREADABLE", ["executionOccupied"] = JValue.CreateNull() };
         }
     }
 

@@ -14,6 +14,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="../../com.unitymcp.agent-bridge/Editor/Core/EditorExecutionJournalStore.cs" Link="EditorScheduling/EditorExecutionJournalStore.cs" />
+    <Compile Include="../../com.unitymcp.agent-bridge/Editor/Core/EditorTaskScheduling.cs" Link="EditorScheduling/EditorTaskScheduling.cs" />
     <Compile Include="../../com.unitymcp.agent-bridge/Runtime/AgentTaskCore/*.cs" Link="TemplateContracts/%(Filename)%(Extension)" />
     <Compile Include="../../com.unitymcp.agent-bridge/Runtime/AgentRuntimeAbstractions/Runtime/*.cs" Link="TemplateContracts/%(Filename)%(Extension)" />
     <Compile Include="../../com.unitymcp.agent-bridge/Runtime/AgentIntelligentAnalysis/Runtime/*.cs" Link="TemplateContracts/%(Filename)%(Extension)" />

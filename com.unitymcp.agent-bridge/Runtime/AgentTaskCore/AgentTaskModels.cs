@@ -175,6 +175,22 @@ namespace UnityMcp.AgentTaskCore
         void Cancel(AgentTaskResult result = null);
     }
 
+    public interface IAgentTaskTerminalContext
+    {
+        bool IsTerminal { get; }
+    }
+
+    // Code-registered tools that only admit tasks; their actual execution must use the gate.
+    public interface IAgentConcurrentObservationTool { }
+    public interface IAgentTaskAdmissionTool : IAgentConcurrentObservationTool { }
+
+    // Required when a template executor needs the Unity execution slot.
+    public interface IAgentUnityExecution
+    {
+        bool ExecutionEnded { get; }
+        void SetExecutionDeadline(DateTimeOffset deadline);
+    }
+
     public interface IAgentTaskClock
     {
         DateTimeOffset UtcNow { get; }

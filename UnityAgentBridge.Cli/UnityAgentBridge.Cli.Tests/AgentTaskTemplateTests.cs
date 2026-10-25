@@ -22,7 +22,7 @@ public sealed class AgentTaskTemplateTests
         Directory.CreateDirectory(Path.Combine(root, "ProjectSettings")); Directory.CreateDirectory(Path.Combine(root, "Assets"));
         UnityEngine.Application.dataPath = Path.Combine(root, "Assets");
         path = Path.Combine(root, "ProjectSettings", "AgentTaskTemplates.json");
-        executor = new FixtureExecutor(); registration = AgentTaskTemplateExecutors.Register(executor);
+        executor = new FixtureExecutor(); registration = AgentTaskTemplateExecutors.Register(executor, requiresUnityExecution: false);
     }
     [TestCleanup]
     public void Cleanup() { registration.Dispose(); Directory.Delete(root, true); }
@@ -73,7 +73,7 @@ public sealed class AgentTaskTemplateTests
     {
         var row = Row(); row["executorId"] = "missing"; Save(row); Assert.IsFalse(Run().Success);
         row = Row(); row["enabled"] = false; Save(row); Assert.IsFalse(Run().Success);
-        Save(Row()); using (AgentTaskTemplateExecutors.Register(new FixtureExecutor())) Assert.IsFalse(Run().Success);
+        Save(Row()); using (AgentTaskTemplateExecutors.Register(new FixtureExecutor(), requiresUnityExecution: false)) Assert.IsFalse(Run().Success);
         registration.Dispose(); Assert.IsFalse(Run().Success); Assert.AreEqual(0, executor.Prepares);
     }
     [TestMethod]

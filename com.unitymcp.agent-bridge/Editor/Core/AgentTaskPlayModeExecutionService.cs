@@ -17,6 +17,7 @@ namespace UnityMcp.AgentBridge
     {
         private static readonly AgentTaskManager Manager = new AgentTaskManager(idFactory: () => new AgentTaskId("playmode-" + Guid.NewGuid().ToString("N")));
         private static readonly Dictionary<AgentTaskId, IAgentTask> Tasks = new Dictionary<AgentTaskId, IAgentTask>();
+        private static readonly Dictionary<AgentTaskId, AgentCommand> Commands = new Dictionary<AgentTaskId, AgentCommand>();
         private static readonly Dictionary<AgentTaskId, DateTimeOffset> Deadlines = new Dictionary<AgentTaskId, DateTimeOffset>();
 
         static AgentTaskPlayModeExecutionService()
@@ -35,7 +36,7 @@ namespace UnityMcp.AgentBridge
             if (retained != null) return retained;
             if (request.Operation == AgentTaskControlProtocol.Cancel)
             {
-                var disposition = Manager.Cancel(id);
+                var disposition = EditorTaskScheduling.CancelTask(Manager, id);
                 return new AgentTaskControlResponse { Success = disposition != AgentTaskCancellationDisposition.NotFound, Cancellation = disposition, Snapshot = Manager.Get(id), AgentTaskId = id.Value };
             }
             var snapshot = Manager.Get(id);
@@ -48,14 +49,36 @@ namespace UnityMcp.AgentBridge
             if (!JsonUtil.TryDeserializeArgs<UnityTestRunArgs>(request.Payload ?? "{}", out var args, out var failure)) return Error("INVALID_ARGS", failure.summary);
             var validation = UnityTestOperationManager.ValidateRunArgsForAgentTask(args);
             if (validation != null) return Error("INVALID_ARGS", validation.summary);
-            if (EditorApplication.isPlaying || EditorApplication.isCompiling || UnityTestOperationManager.IsTestRunActive()) return Error("TASK_BLOCKED", "PlayMode tests cannot start in the current Editor state.");
-            var task = new RunPlayModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), UnityTestOperationManager.CreateRunnerFilter(TestMode.PlayMode, args));
+            if (EditorApplication.isPlaying && !UnityTestOperationManager.IsTestRunActive() && !EditorApplication.isCompiling && EditorApplication.isPlayingOrWillChangePlaymode) return Error("TASK_BLOCKED", "PlayMode tests require a compatible stable Editor mode.");
+            var command = EditorTaskScheduling.TaskCommand("agent-task-playmode-" + Guid.NewGuid().ToString("N"), "unity.run_playmode_tests", request.TimeoutMs > 0 ? request.TimeoutMs : 120000, request.Payload, request.SubmittedAtUtc);
+            var task = new RunPlayModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), UnityTestOperationManager.CreateRunnerFilter(TestMode.PlayMode, args), guid => EditorTaskScheduling.NotifyTestStarted(command.commandId, guid));
             var id = Manager.Register(task);
             Tasks[id] = task;
+            Commands[id] = command;
             Deadlines[id] = DateTimeOffset.UtcNow.AddMilliseconds(request.TimeoutMs > 0 ? request.TimeoutMs : 120000);
             Persist(id, request.Payload ?? "{}");
-            Manager.Start(id);
+            Schedule(id, task, command);
             return Project(Manager.Get(id), id.Value);
+        }
+
+        private static void Schedule(AgentTaskId id, RunPlayModeTestsTask task, AgentCommand command)
+        {
+            var deniedBeforeStart = false;
+            EditorTaskScheduling.ScheduleTask(Manager, id, command, "run_playmode_tests", remaining =>
+            {
+                if (EditorApplication.isPlaying)
+                {
+                    deniedBeforeStart = true;
+                    Manager.RejectBeforeStart(id, new AgentTaskError("TASK_BLOCKED", "PlayMode tests require EditMode before startup."));
+                    return;
+                }
+                command.timeoutMs = remaining;
+                Deadlines[id] = DateTimeOffset.UtcNow.AddMilliseconds(remaining);
+                Persist(id, command.rawArgsJson);
+                EditorTaskScheduling.StartTask(Manager, id);
+                Persist(id, command.rawArgsJson);
+            }, () => deniedBeforeStart ? "Mode validation rejected execution before driver Start." : task.ExecutionEnded ? "Original PlayMode runner finished or failed before start." : null,
+                () => Project(Manager.Get(id), id.Value));
         }
 
         private static void AdvanceTasks()
@@ -75,13 +98,14 @@ namespace UnityMcp.AgentBridge
                     AgentTaskDurableResults.Save(Project(snapshot, id.Value));
                     Tasks.Remove(id);
                     Deadlines.Remove(id);
+                    Commands.Remove(id);
                     DeletePersisted(id);
                 }
             }
             Manager.Cleanup();
         }
 
-        private static AgentTaskControlResponse Project(AgentTaskSnapshot snapshot, string id) => AgentTaskDurableResults.Save(new AgentTaskControlResponse { Success = true, Snapshot = snapshot, AgentTaskId = id, ErrorCode = snapshot?.Error?.Code, ErrorMessage = snapshot?.Error?.Message, ResultPayloadJson = snapshot?.Result?.Payload == null ? null : JsonUtil.SerializeObject(snapshot.Result.Payload) });
+        private static AgentTaskControlResponse Project(AgentTaskSnapshot snapshot, string id) => EditorTaskScheduling.Observe(AgentTaskDurableResults.Save(new AgentTaskControlResponse { Success = true, Snapshot = snapshot, AgentTaskId = id, ErrorCode = snapshot?.Error?.Code, ErrorMessage = snapshot?.Error?.Message, ResultPayloadJson = snapshot?.Result?.Payload == null ? null : JsonUtil.SerializeObject(snapshot.Result.Payload) }));
         private static AgentTaskControlResponse Error(string code, string message) => new AgentTaskControlResponse { Success = false, ErrorCode = code, ErrorMessage = message };
 
         private static string StateDirectory
@@ -100,7 +124,7 @@ namespace UnityMcp.AgentBridge
             try
             {
                 Directory.CreateDirectory(StateDirectory);
-                AgentTaskDurableResults.WriteAtomic(StatePath(id), JsonConvert.SerializeObject(new PersistedTask { version = 1, agentTaskId = id.Value, payload = payload, createdAt = Manager.Get(id).CreatedAt }));
+                AgentTaskDurableResults.WriteAtomic(StatePath(id), JsonConvert.SerializeObject(new PersistedTask { version = 1, agentTaskId = id.Value, payload = payload, createdAt = Manager.Get(id).CreatedAt, command = Commands[id], deadline = Deadlines[id], editorSession = AgentTaskDurableResults.EditorSession, runGuid = (Tasks[id] as RunPlayModeTestsTask)?.RunGuid }));
             }
             catch (Exception exception) { throw new IOException("AGENT_TASK_PLAYMODE_PERSIST_FAILED", exception); }
         }
@@ -122,11 +146,23 @@ namespace UnityMcp.AgentBridge
                     var id = new AgentTaskId(state.agentTaskId);
                     if (AgentTaskDurableResults.Read(id.Value) != null) { File.Delete(path); continue; }
                     if (!JsonUtil.TryDeserializeArgs<UnityTestRunArgs>(state.payload ?? "{}", out var args, out _)) args = new UnityTestRunArgs();
-                    var task = new RunPlayModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), UnityTestOperationManager.CreateRunnerFilter(TestMode.PlayMode, args));
-                    Manager.RestoreRunning(id, task, state.createdAt == default(DateTimeOffset) ? DateTimeOffset.UtcNow : state.createdAt);
-                    Manager.Fail(id, new AgentTaskError("AGENT_TASK_RECOVERY_STALE", "The PlayMode Test Runner handle was not available after domain reload."));
-                    AgentTaskDurableResults.Save(Project(Manager.Get(id), id.Value));
-                    DeletePersisted(id);
+                    var command = state.command ?? EditorTaskScheduling.TaskCommand("agent-task-" + id.Value, "unity.run_playmode_tests", 120000, state.payload);
+                    var task = new RunPlayModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), UnityTestOperationManager.CreateRunnerFilter(TestMode.PlayMode, args), guid => EditorTaskScheduling.NotifyTestStarted(command.commandId, guid));
+                    var scheduled = EditorTaskScheduling.FindTask(id.Value);
+                    Tasks[id] = task; Commands[id] = command; Deadlines[id] = state.deadline;
+                    if (scheduled != null && !scheduled.StartedAt.HasValue)
+                    {
+                        Manager.RestoreCreated(id, task, state.createdAt);
+                        Schedule(id, task, command);
+                    }
+                    else
+                    {
+                        Manager.RestoreRunning(id, task, state.createdAt == default(DateTimeOffset) ? DateTimeOffset.UtcNow : state.createdAt);
+                        Schedule(id, task, command);
+                        if (state.editorSession == AgentTaskDurableResults.EditorSession && AgentTaskEditModeExecutionService.CanReattachRun(state.runGuid))
+                            task.Reattach(Manager.GetContext(id), state.runGuid);
+                        else Manager.Fail(id, new AgentTaskError("AGENT_TASK_RECOVERY_STALE", "The original PlayMode Test Runner handle is unavailable; execution was not restarted."));
+                    }
                 }
             }
             catch (Exception exception) { Debug.LogWarning("AGENT_TASK_PLAYMODE_RESTORE_FAILED: " + exception.Message); }
@@ -139,6 +175,10 @@ namespace UnityMcp.AgentBridge
             public DateTimeOffset createdAt;
             public string agentTaskId;
             public string payload;
+            public AgentCommand command;
+            public DateTimeOffset deadline;
+            public string editorSession;
+            public string runGuid;
         }
     }
 }

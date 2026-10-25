@@ -12,6 +12,7 @@ namespace UnityMcp.AgentBridge
         public string heartbeatUtc;
         public string currentCommandId;
         public string currentStage;
+        public string schedulingJson;
         public bool isCompiling;
         public bool isUpdating;
         public bool isPlaying;

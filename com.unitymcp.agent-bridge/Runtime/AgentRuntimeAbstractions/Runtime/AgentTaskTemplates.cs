@@ -50,8 +50,9 @@ namespace UnityMcp.AgentRuntime
 
     public sealed class AgentTaskTemplateExecutorRegistration : IDisposable
     {
-        internal AgentTaskTemplateExecutorRegistration(IAgentTaskTemplateExecutor executor) { Executor = executor; IsActive = true; }
+        internal AgentTaskTemplateExecutorRegistration(IAgentTaskTemplateExecutor executor, bool requiresUnityExecution) { Executor = executor; RequiresUnityExecution = requiresUnityExecution; IsActive = true; }
         public IAgentTaskTemplateExecutor Executor { get; }
+        public bool RequiresUnityExecution { get; }
         public bool IsActive { get; private set; }
         public void Dispose()
         {
@@ -66,9 +67,12 @@ namespace UnityMcp.AgentRuntime
         private static readonly List<AgentTaskTemplateExecutorRegistration> Registrations = new List<AgentTaskTemplateExecutorRegistration>();
         public static event Action<AgentTaskTemplateExecutorRegistration> Retired;
         public static AgentTaskTemplateExecutorRegistration Register(IAgentTaskTemplateExecutor executor)
+            => Register(executor, requiresUnityExecution: true);
+
+        public static AgentTaskTemplateExecutorRegistration Register(IAgentTaskTemplateExecutor executor, bool requiresUnityExecution)
         {
             if (executor == null || string.IsNullOrWhiteSpace(executor.Id)) throw new ArgumentException("Executor identity is required.");
-            var registration = new AgentTaskTemplateExecutorRegistration(executor);
+            var registration = new AgentTaskTemplateExecutorRegistration(executor, requiresUnityExecution);
             Registrations.Add(registration);
             return registration;
         }

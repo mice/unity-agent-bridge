@@ -116,7 +116,7 @@ public sealed class McpMultiProjectHost
     private ProjectContext CurrentCatalogContext(ProjectRegistration registration)
     {
         var observed = Discovery.Observe(registration);
-        if (!observed.ready || observed.editorSession is null)
+        if (!observed.CanAdmitScheduledWork() || observed.editorSession is null)
             throw new McpProjectRoutingException("PROJECT_CAPABILITY_MISMATCH", "Project has no ready capability session.");
         return new ProjectContext(registration, observed.editorSession, new QueuePaths(registration.projectPath, registration.queueRoot), ConnectionId);
     }
@@ -132,7 +132,7 @@ public sealed class McpMultiProjectHost
     }
     internal static void ValidateCapabilityContext(ProjectContext context, ProjectSessionInfo current)
     {
-        if (!current.ready || current.editorSession is not { } session ||
+        if (!current.CanAdmitScheduledWork() || current.editorSession is not { } session ||
             session.projectId != context.ProjectId || session.editorSessionId != context.EditorSessionId ||
             string.IsNullOrWhiteSpace(context.CapabilityRevision) || session.capabilityRevision != context.CapabilityRevision)
             throw new McpProjectRoutingException("PROJECT_CAPABILITY_MISMATCH",

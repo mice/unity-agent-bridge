@@ -55,7 +55,7 @@ public sealed class ExternalBridgeClient
         }
 
         var commandJson = AgentCommandEnvelope.Build(commandId, commandSpec.Tool, commandSpec.TimeoutMs, commandSpec.ArgsJson,
-            queuePaths.TargetEditorSessionId is null ? 0 : 1, queuePaths.TargetProjectId, queuePaths.TargetEditorSessionId);
+            queuePaths.TargetEditorSessionId is null ? 0 : 1, queuePaths.TargetProjectId, queuePaths.TargetEditorSessionId, ConnectionId);
         if (!internalTaskControl) CommandDispatching?.Invoke(queuePaths, commandId);
         _store.WriteInboxAtomic(queuePaths, commandId, commandJson);
         var result = await _store.WaitForResultAsync(queuePaths, commandId, commandSpec.TimeoutMs + 15000, cancellationToken);

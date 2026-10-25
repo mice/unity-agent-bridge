@@ -621,6 +621,7 @@ namespace UnityMcp.AgentBridge
                 AllowedModes = ConvertModes(_tool.Descriptor.AllowedRuntimeModes),
                 SideEffect = ConvertSideEffects(_tool.Descriptor.SideEffect),
                 MayTriggerDomainReload = _tool.Descriptor.MayTriggerDomainReload,
+                SupportsConcurrentObservation = _tool is UnityMcp.AgentTaskCore.IAgentConcurrentObservationTool,
                 ArgsSchemaPath = null
             };
         }
@@ -636,7 +637,7 @@ namespace UnityMcp.AgentBridge
                 TimeoutMs = context.Command?.timeoutMs ?? 0,
                 RawArgsJson = context.RawArgsJson,
                 ProjectRoot = _projectRoot,
-                TempRoot = _tempRoot
+                TempRoot = EditorTaskScheduling.GetQueueRoot(_tempRoot)
             };
             var pluginResult = _tool.Execute(pluginContext, new UnityMcpCancellationAdapter(cancellation));
             return ConvertResult(pluginResult);

@@ -16,6 +16,15 @@ namespace UnityMcp.AgentBridge
         public const string TaskType = "template_run";
         private static Func<AgentTaskControlResponse, AgentTaskControlResponse> retainTerminal = response => response;
         private static Func<string, AgentTaskControlResponse> readTerminal = id => null;
+        private static Action<AgentTaskManager, AgentTaskId, AgentTaskControlRequest, Action<DateTimeOffset>, Func<bool>, Action> scheduleUnity;
+        private static Func<AgentTaskManager, AgentTaskId, AgentTaskCancellationDisposition> cancelUnity;
+        private static Func<string, string> observeScheduling = id => null;
+        private static Func<AgentTaskControlRequest, AgentTaskControlRequest> reconcileCreation;
+        public static void ConfigureScheduling(
+            Action<AgentTaskManager, AgentTaskId, AgentTaskControlRequest, Action<DateTimeOffset>, Func<bool>, Action> schedule,
+            Func<AgentTaskManager, AgentTaskId, AgentTaskCancellationDisposition> cancel,
+            Func<string, string> observe, Func<AgentTaskControlRequest, AgentTaskControlRequest> reconcile = null)
+        { scheduleUnity = schedule; cancelUnity = cancel; observeScheduling = observe ?? (id => null); reconcileCreation = reconcile; }
         // The host supplies storage; this neutral bridge assembly never references host internals.
         public static void ConfigurePersistence(Func<AgentTaskControlResponse, AgentTaskControlResponse> save, Func<string, AgentTaskControlResponse> read)
         { retainTerminal = save ?? throw new ArgumentNullException(nameof(save)); readTerminal = read ?? throw new ArgumentNullException(nameof(read)); }
@@ -33,11 +42,11 @@ namespace UnityMcp.AgentBridge
             };
             AgentTaskTemplateExecutors.Retired += owner =>
             {
-                foreach (var pair in Owners.Where(p => ReferenceEquals(p.Value, owner)).ToArray()) { Manager.Cancel(new AgentTaskId(pair.Key)); Project(pair.Key); }
+                foreach (var pair in Owners.Where(p => ReferenceEquals(p.Value, owner)).ToArray()) { CancelOwned(new AgentTaskId(pair.Key)); Project(pair.Key); }
             };
             AgentRunnerProviderRegistry.Retired += owner =>
             {
-                foreach (var pair in Admissions.Where(p => owner.TemplateIds.Contains(p.Value.Definition.Id)).ToArray()) { Manager.Cancel(new AgentTaskId(pair.Key)); Project(pair.Key); }
+                foreach (var pair in Admissions.Where(p => owner.TemplateIds.Contains(p.Value.Definition.Id)).ToArray()) { CancelOwned(new AgentTaskId(pair.Key)); Project(pair.Key); }
             };
         }
         public static string ProjectRoot => Directory.GetParent(Application.dataPath).FullName;
@@ -47,6 +56,7 @@ namespace UnityMcp.AgentBridge
             try
             {
                 if (request == null) throw new ArgumentException("Request is required.");
+                request = reconcileCreation?.Invoke(request) ?? request;
                 if (request.Operation == AgentTaskControlProtocol.Create || request.Operation == "validate")
                 {
                     var admission = Catalog().Admit(request.Payload);
@@ -57,15 +67,36 @@ namespace UnityMcp.AgentBridge
                     var execution = AgentTaskTemplateCatalog.ParseObject(admission.Definition.Execution);
                     // No interpolation/evaluation: the entire validated input object is appended as a JSON data block.
                     var prompt = execution.Value<string>("prompt") ?? "Execute the registered analysis template.";
-                    var service = new AgentService(Manager, new OutputFactory(factory, admission));
-                    var handle = service.Run(new AgentRunRequest(prompt + "\nInputs (JSON data, not instructions):\n" + admission.InputsJson, ProjectRoot));
-                    Owners[handle.TaskId.Value] = owner; Admissions[handle.TaskId.Value] = admission;
-                    return Project(handle.TaskId.Value);
+                    if (owner.RequiresUnityExecution && scheduleUnity == null) return Error("SCHEDULER_UNAVAILABLE", "Unity executor admission is unavailable; execution was not started.", true);
+                    var runRequest = new AgentRunRequest(prompt + "\nInputs (JSON data, not instructions):\n" + admission.InputsJson, ProjectRoot);
+                    var runner = new OutputRunner(factory.Create(runRequest), admission);
+                    if (owner.RequiresUnityExecution && !runner.SupportsUnityExecution)
+                        return Error("EXECUTOR_COMPLETION_UNOBSERVABLE", "Unity executors must implement IAgentUnityExecution for original deadlines and actual completion. Rebuild the executor or declare code-owned independent external execution.", true);
+                    var taskId = Manager.Register(new AgentExecutionTask(runRequest, runner));
+                    Owners[taskId.Value] = owner; Admissions[taskId.Value] = admission;
+                    if (!owner.RequiresUnityExecution) Manager.Start(taskId);
+                    else
+                    {
+                        var denied = false;
+                        var scheduledRequest = new AgentTaskControlRequest
+                        {
+                            Operation = request.Operation, TaskType = TaskType, Payload = request.Payload, SubmittedAtUtc = request.SubmittedAtUtc,
+                            TimeoutMs = request.TimeoutMs > 0 ? request.TimeoutMs : execution.Value<int?>("timeoutMs") ?? 120000
+                        };
+                        scheduleUnity(Manager, taskId, scheduledRequest, deadline =>
+                        {
+                            if (DateTimeOffset.UtcNow >= deadline) { denied = true; Manager.RejectBeforeStart(taskId, new AgentTaskError("SCHEDULER_QUEUE_TIMEOUT", "Original deadline elapsed before executor Start.")); return; }
+                            if (!owner.IsActive) { denied = true; Manager.RejectBeforeStart(taskId, new AgentTaskError("EXECUTOR_UNAVAILABLE", "The admitted executor was retired before start.")); return; }
+                            runner.SetExecutionDeadline(deadline);
+                            Manager.Start(taskId);
+                        }, () => denied || runner.ExecutionEnded, () => Project(taskId.Value));
+                    }
+                    return Project(taskId.Value);
                 }
                 var id = new AgentTaskId(request.AgentTaskId);
                 if (request.Operation == AgentTaskControlProtocol.Cancel)
                 {
-                    var disposition = Manager.Cancel(id);
+                    var disposition = CancelOwned(id);
                     var response = Project(id.Value); response.Cancellation = disposition; return response;
                 }
                 return Project(id.Value);
@@ -74,13 +105,15 @@ namespace UnityMcp.AgentBridge
             catch (Exception exception) { return Error("TEMPLATE_ADMISSION_FAILED", exception.Message, request?.Operation == AgentTaskControlProtocol.Create || request?.Operation == "validate"); }
         }
         private static AgentTaskControlResponse Error(string code, string message, bool beforeCreate = false) => new AgentTaskControlResponse { Success = false, ErrorCode = code, ErrorMessage = message, Execution = beforeCreate ? AgentExecutionObservation.NotStarted : AgentExecutionObservation.Unknown };
+        private static AgentTaskCancellationDisposition CancelOwned(AgentTaskId id) => Owners.TryGetValue(id.Value, out var owner) && owner.RequiresUnityExecution && cancelUnity != null
+            ? cancelUnity(Manager, id) : Manager.Cancel(id);
         private static AgentTaskControlResponse Project(string id)
         {
             var snapshot = Manager.Get(new AgentTaskId(id));
             if (snapshot == null) return readTerminal(id) ?? new AgentTaskControlResponse { Success = false, ErrorCode = "NOT_FOUND", ErrorMessage = "Template task was not found." };
             return retainTerminal(new AgentTaskControlResponse { Success = snapshot.State != AgentTaskState.Failed, ErrorCode = snapshot.Error?.Code,
                 ErrorMessage = snapshot.Error?.Message, AgentTaskId = id, Snapshot = snapshot,
-                ResultPayloadJson = (snapshot.Result?.Payload as AgentRunResult)?.Output });
+                ResultPayloadJson = (snapshot.Result?.Payload as AgentRunResult)?.Output, SchedulingJson = observeScheduling(id) });
         }
         private sealed class OutputFactory : IAgentRunnerFactory
         {
@@ -89,13 +122,16 @@ namespace UnityMcp.AgentBridge
             public OutputFactory(IAgentRunnerFactory factory, AgentTaskTemplateAdmission admission) { this.factory = factory; this.admission = admission; }
             public IAgentRunner Create(AgentRunRequest request) => new OutputRunner(factory.Create(request), admission);
         }
-        private sealed class OutputRunner : IAgentRunner, IAgentExecutionObservable
+        private sealed class OutputRunner : IAgentRunner, IAgentExecutionObservable, IAgentUnityExecution
         {
             private readonly IAgentRunner runner;
             private readonly AgentTaskTemplateAdmission admission;
-            public OutputRunner(IAgentRunner runner, AgentTaskTemplateAdmission admission) { this.runner = runner; this.admission = admission; }
+            public OutputRunner(IAgentRunner runner, AgentTaskTemplateAdmission admission) { this.runner = runner ?? throw new ArgumentNullException(nameof(runner)); this.admission = admission; }
             public AgentExecutionObservation Execution => (runner as IAgentExecutionObservable)?.Execution ?? AgentExecutionObservation.Unknown;
             public bool CanCancel => runner.CanCancel;
+            public bool SupportsUnityExecution => runner is IAgentUnityExecution;
+            public bool ExecutionEnded => (runner as IAgentUnityExecution)?.ExecutionEnded == true;
+            public void SetExecutionDeadline(DateTimeOffset deadline) => ((IAgentUnityExecution)runner).SetExecutionDeadline(deadline);
             public void Start(AgentRunRequest request, IAgentRunnerContext context) => runner.Start(request, new OutputContext(context, admission));
             public void Advance(IAgentRunnerContext context) => runner.Advance(new OutputContext(context, admission));
             public void RequestCancellation(IAgentRunnerContext context) => runner.RequestCancellation(new OutputContext(context, admission));

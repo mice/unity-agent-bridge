@@ -4,6 +4,8 @@
 
 ## Scope
 
+Unreleased implementation: [Editor task scheduling, deadlines and recovery](Documentation~/editor-task-scheduling.md). Fixed-pair engineering acceptance is complete; version selection and candidate publication gates remain separate.
+
 - Unity validation lane: `2022.3.x`
 - Declared package compatibility: `2022.3+`
 - Runtime support: none; this package is Editor-only

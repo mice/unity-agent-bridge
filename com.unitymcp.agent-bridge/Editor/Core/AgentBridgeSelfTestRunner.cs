@@ -44,6 +44,7 @@ namespace UnityMcp.AgentBridge
 
             cancellation?.ThrowIfCancellationRequested();
             var effectiveOptions = NormalizeOptions(options);
+            if (command.timeoutMs > 0) effectiveOptions.timeoutMs = Math.Min(effectiveOptions.timeoutMs, command.timeoutMs);
 
             if (_activeSuite == null || _activeSuite.IsCompleted)
             {
@@ -101,7 +102,7 @@ namespace UnityMcp.AgentBridge
                     break;
                 }
 
-                if (definition.IsOperationCase && IsIntermediateStatus(result.status))
+                if (IsIntermediateStatus(result.status))
                 {
                     _activeSuite.WaitingForTerminalResult = true;
                     _activeSuite.CurrentOperationCommandId = _activeSuite.CurrentCaseCommand.commandId;
@@ -126,6 +127,10 @@ namespace UnityMcp.AgentBridge
         {
             var remainingBudgetMs = GetRemainingBudgetMs();
             var command = definition.BuildCommand(_activeSuite.SuiteId, remainingBudgetMs, _utcNowProvider);
+            command.projectId = _activeSuite.OuterCommand.projectId;
+            command.editorSessionId = _activeSuite.OuterCommand.editorSessionId;
+            command.connectionId = _activeSuite.OuterCommand.connectionId;
+            command.targetSchemaVersion = _activeSuite.OuterCommand.targetSchemaVersion;
             _activeSuite.CurrentCaseCommand = command;
             _activeSuite.CurrentCaseStartedAtUtc = _utcNowProvider().ToUniversalTime();
             return _facade.Execute(command, cancellation ?? NoOpAgentCancellation.Instance);
@@ -347,7 +352,7 @@ namespace UnityMcp.AgentBridge
                 OuterCommand = command,
                 SuiteId = Guid.NewGuid().ToString("N"),
                 StartedAtUtc = _utcNowProvider().ToUniversalTime(),
-                DeadlineUtc = _utcNowProvider().ToUniversalTime().AddMilliseconds(options.timeoutMs),
+                DeadlineUtc = (ParseUtc(command.createdAt) ?? _utcNowProvider().ToUniversalTime()).AddMilliseconds(options.timeoutMs),
                 Options = options,
                 Cases = definitions,
                 CaseResults = CreateInitialCaseResults(definitions)

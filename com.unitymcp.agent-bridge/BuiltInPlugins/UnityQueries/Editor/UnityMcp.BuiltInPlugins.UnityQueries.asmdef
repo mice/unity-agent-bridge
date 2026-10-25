@@ -3,7 +3,8 @@
   "rootNamespace": "UnityMcp.BuiltInPlugins.UnityQueries",
   "references": [
     "Unity.Newtonsoft.Json",
-    "UnityMcp.Plugin.Abstractions"
+    "UnityMcp.Plugin.Abstractions",
+    "UnityMcp.AgentTaskCore"
   ],
   "includePlatforms": [
     "Editor"

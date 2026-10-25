@@ -9,7 +9,7 @@ using Newtonsoft.Json.Linq;
 
 namespace UnityMcp.BuiltInPlugins.UnityQueries
 {
-    public sealed class UnityReadReportTool : IUnityMcpTool
+    public sealed class UnityReadReportTool : IUnityMcpTool, UnityMcp.AgentTaskCore.IAgentConcurrentObservationTool
     {
         private const string ContractVersion = "report_read.v1";
         private const int DefaultLimit = 100;

@@ -17,18 +17,21 @@ namespace UnityMcp.AgentTaskEditor
         private bool started;
         private readonly List<EditModeTestCaseEvidence> evidence = new List<EditModeTestCaseEvidence>();
         private bool cleanedUp;
+        private readonly Action<string> runStarted;
 
-        public RunEditModeTestsTask(TestRunnerApi api, Filter filter, Func<string, object, string> reportWriter = null)
+        public RunEditModeTestsTask(TestRunnerApi api, Filter filter, Func<string, object, string> reportWriter = null, Action<string> runStarted = null)
         {
             this.api = api ?? throw new ArgumentNullException(nameof(api));
             this.filter = filter ?? throw new ArgumentNullException(nameof(filter));
             this.reportWriter = reportWriter;
+            this.runStarted = runStarted;
             if ((filter.testMode & TestMode.EditMode) != TestMode.EditMode)
                 throw new ArgumentException("The task requires an EditMode filter.", nameof(filter));
         }
 
         public bool CanCancel => false;
         public string RunGuid { get; private set; }
+        public bool ExecutionEnded { get; private set; }
 
         public void Start(IAgentTaskContext taskContext)
         {
@@ -41,6 +44,7 @@ namespace UnityMcp.AgentTaskEditor
             }
             catch (Exception exception)
             {
+                ExecutionEnded = true;
                 CleanupRunner();
                 context.Fail(new AgentTaskError("AGENT_TASK_TEST_RUNNER_START", exception.Message, exception));
             }
@@ -64,7 +68,7 @@ namespace UnityMcp.AgentTaskEditor
             throw new NotSupportedException("Unity Test Runner cancellation is not publicly supported.");
         }
 
-        public void RunStarted(ITestAdaptor testsToRun) { }
+        public void RunStarted(ITestAdaptor testsToRun) { runStarted?.Invoke(RunGuid); }
         public void TestStarted(ITestAdaptor test) { }
         public void TestFinished(ITestResultAdaptor result)
         {
@@ -99,6 +103,8 @@ namespace UnityMcp.AgentTaskEditor
 
         public void RunFinished(ITestResultAdaptor result)
         {
+            ExecutionEnded = true;
+            if ((context as IAgentTaskTerminalContext)?.IsTerminal == true) { CleanupRunner(); return; }
             if (context == null) return;
             // The final tree also contains leaves whose callbacks preceded Domain Reload.
             CollectFinalResults(result);

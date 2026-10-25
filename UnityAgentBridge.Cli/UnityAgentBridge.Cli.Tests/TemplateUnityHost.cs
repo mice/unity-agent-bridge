@@ -8,6 +8,8 @@ namespace UnityEditor
     internal static class EditorApplication
     {
         public static event System.Action? update;
+        public static bool isCompiling, isUpdating, isPlaying, isPlayingOrWillChangePlaymode;
+        public static double timeSinceStartup;
         public static void Tick() => update?.Invoke();
     }
 }

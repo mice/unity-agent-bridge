@@ -3,7 +3,7 @@ using UnityMcp.Plugin;
 
 namespace UnityMcp.BuiltInPlugins.EditorBasics
 {
-    public sealed class UnityGetEditorStateTool : IUnityMcpTool
+    public sealed class UnityGetEditorStateTool : IUnityMcpTool, UnityMcp.AgentTaskCore.IAgentConcurrentObservationTool
     {
         public UnityMcpToolDescriptor Descriptor { get; } = new UnityMcpToolDescriptor
         {

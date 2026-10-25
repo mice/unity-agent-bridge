@@ -42,6 +42,8 @@ namespace UnityMcp.AgentBridge
             }
 
             args ??= new UnityTestRunArgs();
+            if (!EditorTaskScheduling.IsExecuting(command.commandId))
+                return EditorTaskScheduling.Execute(command, settings, () => StartOrResume(command, settings, testMode, args));
             var validationError = ValidateRunArgs(args);
             if (validationError != null)
             {
@@ -96,7 +98,7 @@ namespace UnityMcp.AgentBridge
 
             var effectiveTimeoutMs = Math.Min(command.timeoutMs, settings.maxToolDurationMs);
             var timeoutTruncated = effectiveTimeoutMs != command.timeoutMs;
-            var statePath = GetStatePath(projectRoot, settings.tempRoot, command.commandId);
+            var statePath = GetStatePath(projectRoot, EditorTaskScheduling.GetQueueRoot(settings.tempRoot), command.commandId);
 
             if (OperationsById.TryGetValue(command.commandId, out var existingState))
             {
@@ -108,7 +110,7 @@ namespace UnityMcp.AgentBridge
                 commandId = command.commandId,
                 tool = command.tool,
                 projectRoot = projectRoot,
-                tempRoot = settings.tempRoot,
+                tempRoot = EditorTaskScheduling.GetQueueRoot(settings.tempRoot),
                 startedAt = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                 effectiveTimeoutMs = effectiveTimeoutMs,
                 timeoutTruncated = timeoutTruncated,
@@ -396,6 +398,7 @@ namespace UnityMcp.AgentBridge
             }
 
             state.status = ToolResultStatus.Running;
+            EditorTaskScheduling.NotifyTestStarted(state.commandId, state.runGuid);
             state.leafResults ??= new List<SerializedTestCaseResult>();
             state.leafResults.Clear();
             PersistState(GetStatePath(state.projectRoot, state.tempRoot, state.commandId), state);
@@ -436,6 +439,7 @@ namespace UnityMcp.AgentBridge
                 return;
             }
 
+            EditorTaskScheduling.NotifyExecutionEnded(state.commandId, "Original TestRunnerApi.RunFinished: " + state.runGuid);
             CompleteOperation(state, BuildRunFinishedResult(state, result));
         }
 

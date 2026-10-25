@@ -28,16 +28,16 @@ namespace UnityMcp.AgentBridge
                 var validation = Validate(filterArgs);
                 if (validation != null) return new AgentTaskControlResponse { Success = false, ErrorCode = "INVALID_ARGS", ErrorMessage = validation.summary };
                 var timeoutMs = request.TimeoutMs > 0 ? request.TimeoutMs : 120000;
-                var testTask = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), UnityTestOperationManager.CreateRunnerFilter(TestMode.EditMode, filterArgs), WriteTaskReport);
+                AgentCommand command = null;
+                var testTask = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), UnityTestOperationManager.CreateRunnerFilter(TestMode.EditMode, filterArgs), WriteTaskReport, guid => EditorTaskScheduling.NotifyTestStarted(command.commandId, guid));
                 var task = new TimedEditModeTask(testTask, timeoutMs);
                 var id = Manager.Register(task);
-                var command = new AgentCommand { commandId = "agent-task-" + id.Value, tool = "unity.run_editmode_tests", timeoutMs = timeoutMs, rawArgsJson = request.Payload ?? "{}" };
+                command = EditorTaskScheduling.TaskCommand("agent-task-" + id.Value, "unity.run_editmode_tests", timeoutMs, request.Payload, request.SubmittedAtUtc);
                 var settings = AgentBridgeSettingsLoader.Load().Settings;
-                Runs[command.commandId] = new ActiveRun { TaskId = id, TestTask = testTask, Command = command, QueueRoot = settings == null ? "Temp/AgentBridge" : settings.tempRoot, StartedAt = DateTimeOffset.UtcNow, Deadline = DateTimeOffset.UtcNow.AddMilliseconds(timeoutMs), CompleteQueue = false };
+                Runs[command.commandId] = new ActiveRun { TaskId = id, TestTask = testTask, Command = command, QueueRoot = EditorTaskScheduling.GetQueueRoot(settings == null ? "Temp/AgentBridge" : settings.tempRoot), StartedAt = DateTimeOffset.UtcNow, Deadline = DateTimeOffset.UtcNow.AddMilliseconds(timeoutMs), CompleteQueue = false };
                 Persist(Runs[command.commandId]);
                 EnsureUpdate();
-                Manager.Start(id);
-                Persist(Runs[command.commandId]);
+                Schedule(Runs[command.commandId]);
                 return ProjectControlResponse(Manager.Get(id), id.Value);
             }
 
@@ -48,7 +48,7 @@ namespace UnityMcp.AgentBridge
             if (retained != null) return retained;
             if (request.Operation == AgentTaskControlProtocol.Cancel)
             {
-                var disposition = Manager.Cancel(taskId);
+                var disposition = EditorTaskScheduling.CancelTask(Manager, taskId);
                 return new AgentTaskControlResponse { Success = disposition != AgentTaskCancellationDisposition.NotFound, Cancellation = disposition, Snapshot = Manager.Get(taskId), AgentTaskId = taskId.Value, ErrorCode = disposition == AgentTaskCancellationDisposition.NotFound ? "NOT_FOUND" : null };
             }
             var snapshot = Manager.Get(taskId);
@@ -65,7 +65,7 @@ namespace UnityMcp.AgentBridge
 
         private static AgentTaskControlResponse ProjectControlResponse(AgentTaskSnapshot snapshot, string taskId)
         {
-            return AgentTaskDurableResults.Save(new AgentTaskControlResponse
+            return EditorTaskScheduling.Observe(AgentTaskDurableResults.Save(new AgentTaskControlResponse
             {
                 Success = true,
                 Snapshot = snapshot,
@@ -73,7 +73,7 @@ namespace UnityMcp.AgentBridge
                 ErrorCode = snapshot?.Error?.Code,
                 ErrorMessage = snapshot?.Error?.Message,
                 ResultPayloadJson = snapshot?.Result?.Payload == null ? null : JsonUtil.SerializeObject(snapshot.Result.Payload)
-            });
+            }));
         }
         private sealed class ActiveRun
         {
@@ -104,6 +104,8 @@ namespace UnityMcp.AgentBridge
             if (command == null) return ToolResult.InvalidArgs("AGENTBRIDGE_COMMAND_NULL", "Command is required.");
             if (settings == null) return ToolResult.InvalidArgs("AGENTBRIDGE_SETTINGS_NULL", "Settings are required.");
             args ??= new UnityTestRunArgs();
+            if (!EditorTaskScheduling.IsExecuting(command.commandId))
+                return EditorTaskScheduling.Execute(command, settings, () => StartOrResume(command, settings, args));
 
             var validation = Validate(args);
             if (validation != null) return validation;
@@ -129,7 +131,7 @@ namespace UnityMcp.AgentBridge
             }
 
             var filter = UnityTestOperationManager.CreateRunnerFilter(TestMode.EditMode, args);
-            var testTask = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), filter, WriteTaskReport);
+            var testTask = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), filter, WriteTaskReport, guid => EditorTaskScheduling.NotifyTestStarted(command.commandId, guid));
             var task = new TimedEditModeTask(testTask, effectiveTimeout);
             var taskId = Manager.Register(task);
             active = new ActiveRun
@@ -137,16 +139,36 @@ namespace UnityMcp.AgentBridge
                 TaskId = taskId,
                 TestTask = testTask,
                 Command = command,
-                QueueRoot = settings.tempRoot,
+                QueueRoot = EditorTaskScheduling.GetQueueRoot(settings.tempRoot),
                 StartedAt = DateTimeOffset.UtcNow,
                 Deadline = DateTimeOffset.UtcNow.AddMilliseconds(effectiveTimeout),
             };
             Runs.Add(command.commandId, active);
             Persist(active);
             EnsureUpdate();
-            Manager.Start(taskId);
-            Persist(active);
+            Schedule(active);
             return Project(active);
+        }
+
+        private static void Schedule(ActiveRun run)
+        {
+            var deniedBeforeStart = false;
+            EditorTaskScheduling.ScheduleTask(Manager, run.TaskId, run.Command, "run_editmode_tests", remaining =>
+            {
+                if (EditorApplication.isPlaying)
+                {
+                    deniedBeforeStart = true;
+                    Manager.RejectBeforeStart(run.TaskId, new AgentTaskError("TASK_BLOCKED", "EditMode tests require a compatible stable mode."));
+                    return;
+                }
+                run.Command.timeoutMs = remaining;
+                run.StartedAt = DateTimeOffset.UtcNow;
+                run.Deadline = run.StartedAt.AddMilliseconds(remaining);
+                Persist(run);
+                EditorTaskScheduling.StartTask(Manager, run.TaskId);
+                Persist(run);
+            }, () => deniedBeforeStart ? "Mode validation rejected before driver Start." : run.TestTask?.ExecutionEnded == true ? "Original EditMode runner finished or failed before start." : null,
+                () => ProjectControlResponse(Manager.Get(run.TaskId), run.TaskId.Value));
         }
 
         private static ToolResult Validate(UnityTestRunArgs args)
@@ -284,9 +306,18 @@ namespace UnityMcp.AgentBridge
                     }
                     if (!JsonUtil.TryDeserializeArgs<UnityTestRunArgs>(command.rawArgsJson ?? "{}", out var args, out _)) args = new UnityTestRunArgs();
                     var filter = UnityTestOperationManager.CreateRunnerFilter(TestMode.EditMode, args);
-                    var task = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), filter, WriteTaskReport);
+                    var task = new RunEditModeTestsTask(ScriptableObject.CreateInstance<TestRunnerApi>(), filter, WriteTaskReport, guid => EditorTaskScheduling.NotifyTestStarted(command.commandId, guid));
                     var timed = new TimedEditModeTask(task, state.effectiveTimeoutMs, state.startedAtUtc);
                     var taskId = new AgentTaskId(state.agentTaskId);
+                    var scheduled = EditorTaskScheduling.FindTask(taskId.Value);
+                    if (scheduled != null && !scheduled.StartedAt.HasValue)
+                    {
+                        Manager.RestoreCreated(taskId, timed, state.createdAtUtc);
+                        var waiting = new ActiveRun { TaskId = taskId, TestTask = task, Command = command, QueueRoot = state.queueRoot ?? tempRoot, StartedAt = state.startedAtUtc, Deadline = state.deadlineUtc, CompleteQueue = state.completeQueue ?? true };
+                        Runs[command.commandId] = waiting;
+                        Schedule(waiting);
+                        continue;
+                    }
                     Manager.RestoreRunning(taskId, timed, state.createdAtUtc == default(DateTimeOffset) ? DateTimeOffset.UtcNow : state.createdAtUtc);
                     if (state.version > 1 || (!string.IsNullOrEmpty(state.editorSession) && state.editorSession != AgentTaskDurableResults.EditorSession) || !CanReattachRun(state.runGuid))
                     {
@@ -298,6 +329,7 @@ namespace UnityMcp.AgentBridge
                     }
                     task.Reattach(Manager.GetContext(taskId), state.runGuid);
                     Runs[command.commandId] = new ActiveRun { TaskId = taskId, TestTask = task, Command = command, QueueRoot = state.queueRoot ?? tempRoot, StartedAt = state.startedAtUtc, Deadline = state.deadlineUtc, CompleteQueue = state.completeQueue ?? true };
+                    Schedule(Runs[command.commandId]);
                 }
             }
             catch (Exception exception) { Debug.LogWarning("AGENT_TASK_EDITMODE_RESTORE_FAILED: " + exception.Message); }
@@ -329,8 +361,8 @@ namespace UnityMcp.AgentBridge
         internal static bool CanReattachRun(string runGuid)
         {
             if (string.IsNullOrWhiteSpace(runGuid)) return false;
-            // Test Framework 1.1.33 exposes only an aggregate IsRunActive API. Its
-            // persisted job holder is required to prove identity after a reload.
+            // Test Framework 1.1.33's legacy IsRunActive does not cover API jobs.
+            // Its persisted job holder proves the original identity after reload.
             try
             {
                 var holderType = typeof(TestRunnerApi).Assembly.GetType("UnityEditor.TestTools.TestRunner.TestRun.TestJobDataHolder");

@@ -29,6 +29,13 @@ namespace UnityMcp.AgentBridge
 
         public ToolResult Execute(AgentCommand command, IAgentCancellation cancellation)
         {
+            var concurrent = command != null && _registry.TryGetTool(command.tool, out var tool) &&
+                (tool.Descriptor.SupportsConcurrentObservation || tool is UnityMcp.AgentTaskCore.IAgentTaskAdmissionTool);
+            return EditorTaskScheduling.Execute(command, _settings, () => ExecuteImmediate(command, cancellation), concurrent, useCurrentFacade: true);
+        }
+
+        internal ToolResult ExecuteImmediate(AgentCommand command, IAgentCancellation cancellation)
+        {
             var startedAt = _utcNowProvider().ToUniversalTime();
             if (command == null)
             {
@@ -46,7 +53,7 @@ namespace UnityMcp.AgentBridge
             }
 
             var currentMode = _runtimeModeProvider.GetCurrentMode();
-            if (!IsAllowedInMode(tool.Descriptor.AllowedModes, currentMode))
+            if (!IsAllowedInMode(tool.Descriptor.AllowedModes, currentMode) && !(tool is UnityAgentTaskControlTool && EditorTaskScheduling.IsLifecycleObservation(command)))
             {
                 return FinalizeResult(command, BuildModeBlockedResult(tool.Descriptor, currentMode), startedAt, _utcNowProvider(), false);
             }
@@ -73,7 +80,11 @@ namespace UnityMcp.AgentBridge
                 };
 
                 var finishedAt = _utcNowProvider().ToUniversalTime();
-                if (effectiveCancellation.IsTimedOut || (finishedAt - startedAt).TotalMilliseconds > effectiveTimeoutMs)
+                // A deferred operation already owns its lifecycle. The scheduler
+                // applies its original deadline and preserves typed diagnostics;
+                // startup/import elapsed time must not replace that correlation.
+                var deferred = result.status == ToolResultStatus.Pending || result.status == ToolResultStatus.Running || result.status == ToolResultStatus.Resuming;
+                if (!deferred && (effectiveCancellation.IsTimedOut || (finishedAt - startedAt).TotalMilliseconds > effectiveTimeoutMs))
                 {
                     result = new ToolResult
                     {

@@ -30,10 +30,16 @@ namespace UnityMcp.AgentTaskCore
 
         public AgentTaskId RestoreRunning(AgentTaskId id, IAgentTask task, DateTimeOffset createdAt)
         {
+            RestoreCreated(id, task, createdAt);
+            Transition(records[id], AgentTaskState.Running);
+            return id;
+        }
+
+        public AgentTaskId RestoreCreated(AgentTaskId id, IAgentTask task, DateTimeOffset createdAt)
+        {
             if (task == null) throw new ArgumentNullException(nameof(task));
             if (records.ContainsKey(id)) throw new InvalidOperationException("Task ID is already registered: " + id.Value);
             records.Add(id, new Record(id, task, createdAt, this));
-            Transition(records[id], AgentTaskState.Running);
             return id;
         }
 
@@ -69,6 +75,16 @@ namespace UnityMcp.AgentTaskCore
             return true;
         }
 
+        // Admission rejection and queued expiry must not invoke a driver's Start method.
+        public bool RejectBeforeStart(AgentTaskId id, AgentTaskError error)
+        {
+            var record = Require(id);
+            if (record.State != AgentTaskState.Created) return false;
+            Transition(record, AgentTaskState.Failed);
+            record.Error = error ?? new AgentTaskError("AGENT_TASK_ADMISSION_FAILED", "Task was rejected before execution.");
+            return true;
+        }
+
         public IAgentTaskContext GetContext(AgentTaskId id) => Require(id).Context;
 
         public AgentTaskCancellationDisposition Cancel(AgentTaskId id)
@@ -77,13 +93,14 @@ namespace UnityMcp.AgentTaskCore
             if (!records.TryGetValue(id, out record)) return AgentTaskCancellationDisposition.NotFound;
             if (record.State == AgentTaskState.Cancelled) return AgentTaskCancellationDisposition.AlreadyCancelled;
             if (record.IsTerminal) return AgentTaskCancellationDisposition.AlreadyTerminal;
-            if (!record.Task.CanCancel) return AgentTaskCancellationDisposition.Unsupported;
-            record.CancellationRequested = true;
             if (record.State == AgentTaskState.Created)
             {
+                record.CancellationRequested = true;
                 CommitCancelled(record, AgentTaskResult.Cancelled("Cancelled before start."));
                 return AgentTaskCancellationDisposition.Accepted;
             }
+            if (!record.Task.CanCancel) return AgentTaskCancellationDisposition.Unsupported;
+            record.CancellationRequested = true;
             try { record.Task.RequestCancellation(record.Context); }
             catch (Exception exception) { FailFromException(record, exception); }
             return AgentTaskCancellationDisposition.Accepted;
@@ -143,7 +160,7 @@ namespace UnityMcp.AgentTaskCore
         }
 
         private static bool IsValidTransition(AgentTaskState current, AgentTaskState next) =>
-            (current == AgentTaskState.Created && (next == AgentTaskState.Running || next == AgentTaskState.Cancelled)) ||
+            (current == AgentTaskState.Created && (next == AgentTaskState.Running || next == AgentTaskState.Cancelled || next == AgentTaskState.Failed)) ||
             (current == AgentTaskState.Running && (next == AgentTaskState.Completed || next == AgentTaskState.Failed || next == AgentTaskState.Cancelled));
 
         private void FailFromException(Record record, Exception exception)
@@ -172,12 +189,13 @@ namespace UnityMcp.AgentTaskCore
             public AgentTaskSnapshot Snapshot => new AgentTaskSnapshot(Id, State, Result, Error, CancellationRequested, CreatedAt, TerminalAt, (Task as IAgentExecutionObservable)?.Execution);
         }
 
-        private sealed class Context : IAgentTaskContext
+        private sealed class Context : IAgentTaskContext, IAgentTaskTerminalContext
         {
             private readonly Record record;
             public Context(Record record) { this.record = record; }
             public AgentTaskId Id => record.Id;
             public bool CancellationRequested => record.CancellationRequested;
+            public bool IsTerminal => record.IsTerminal;
             public void Complete(AgentTaskResult result) => CompleteCore(result);
             public void Fail(AgentTaskError error) => FailCore(error);
             public void Cancel(AgentTaskResult result = null) => CancelCore(result);

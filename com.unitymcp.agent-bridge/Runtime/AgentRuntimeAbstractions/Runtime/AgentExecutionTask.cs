@@ -36,6 +36,7 @@ namespace UnityMcp.AgentRuntime
 
             public void Complete(AgentRunResult result)
             {
+                if ((taskContext as IAgentTaskTerminalContext)?.IsTerminal == true) return;
                 if (result == null) throw new ArgumentNullException(nameof(result));
                 if (!result.Success)
                 {
@@ -48,12 +49,14 @@ namespace UnityMcp.AgentRuntime
 
             public void Fail(AgentRunError error)
             {
+                if ((taskContext as IAgentTaskTerminalContext)?.IsTerminal == true) return;
                 if (error == null) throw new ArgumentNullException(nameof(error));
                 taskContext.Fail(new AgentTaskError(error.Code, error.Message));
             }
 
             public void Cancel(AgentRunResult result = null)
             {
+                if ((taskContext as IAgentTaskTerminalContext)?.IsTerminal == true) return;
                 taskContext.Cancel(AgentTaskResult.Cancelled(result == null ? "Agent runner cancelled execution." : result.Output));
             }
         }

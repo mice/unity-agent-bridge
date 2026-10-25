@@ -9,6 +9,7 @@ namespace UnityMcp.AgentBridge
         public int targetSchemaVersion;
         public string projectId;
         public string editorSessionId;
+        public string connectionId;
         public string commandId;
         public string tool;
         public int timeoutMs;

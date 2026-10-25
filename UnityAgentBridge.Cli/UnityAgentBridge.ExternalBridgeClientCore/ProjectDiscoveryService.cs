@@ -66,10 +66,10 @@ public sealed class ProjectDiscoveryService : IProjectDiscovery
         result.availability = "online";
         result.ready = true;
         result.reason = persisted ? "READY" : "READY_OBSERVATION_NOT_PERSISTED";
-        if (observation.IsCompiling) { result.availability = "recovering"; result.ready = false; result.reason = "EDITOR_COMPILING"; }
-        else if (observation.IsUpdating) { result.availability = "recovering"; result.ready = false; result.reason = "EDITOR_UPDATING"; }
+        if (observation.IsCompiling) { result.availability = "recovering"; result.ready = false; result.reason = "EDITOR_COMPILING"; result.canQueueWhileBusy = observation.HasScheduling; }
+        else if (observation.IsUpdating) { result.availability = "recovering"; result.ready = false; result.reason = "EDITOR_UPDATING"; result.canQueueWhileBusy = observation.HasScheduling; }
         else if (observation.CurrentStage.Contains("reload", StringComparison.OrdinalIgnoreCase))
-        { result.availability = "recovering"; result.ready = false; result.reason = "EDITOR_RELOADING"; }
+        { result.availability = "recovering"; result.ready = false; result.reason = "EDITOR_RELOADING"; result.canQueueWhileBusy = observation.HasScheduling; }
         else if (observation.CurrentStage.Contains("shutting", StringComparison.OrdinalIgnoreCase) || observation.CurrentStage.Contains("stopp", StringComparison.OrdinalIgnoreCase))
         { result.availability = "unavailable"; result.ready = false; result.reason = "EDITOR_STOPPING"; }
         else if (!string.IsNullOrEmpty(observation.CurrentCommandId) && observation.CurrentStage is "unity.tool.start" or "unity.poller.pickup")
@@ -82,7 +82,7 @@ public sealed class ProjectDiscoveryService : IProjectDiscovery
         var id = ProjectIdentityService.GetProjectId(canonical);
         var registration = _registry.Find(id) ?? new ProjectRegistration { projectId = id, projectPath = canonical, queueRoot = new QueuePaths(canonical, queueRoot ?? QueuePaths.DefaultQueueRoot).QueueRoot };
         var observed = Observe(registration);
-        if (!observed.ready) throw new InvalidOperationException(observed.reason);
+        if (!observed.CanAdmitScheduledWork()) throw new InvalidOperationException(observed.reason);
         return new ProjectContext(registration, observed.editorSession!, new QueuePaths(canonical, registration.queueRoot), connectionId);
     }
     public void PersistVerifiedObservation(ProjectRegistration registration, string editorSessionId)
@@ -141,7 +141,7 @@ public sealed class ProjectDiscoveryService : IProjectDiscovery
             (uint)error.HResult is 0x80070005u or 0x80070020u or 0x80070021u;
 
     private sealed record SessionObservation(EditorSessionInfo? Session, bool IsCompiling = false, bool IsUpdating = false,
-        string CurrentStage = "", string CurrentCommandId = "");
+        string CurrentStage = "", string CurrentCommandId = "", bool HasScheduling = false);
 
     private static SessionObservation ReadObservation(ProjectRegistration registration)
     {
@@ -176,7 +176,22 @@ public sealed class ProjectDiscoveryService : IProjectDiscovery
             if (value.Type != JTokenType.String) throw new Newtonsoft.Json.JsonSerializationException("Invalid snapshot field: " + name);
             return value.Value<string>() ?? string.Empty;
         }
-        return new(json["editorSession"]?.ToObject<EditorSessionInfo>(), Flag("isCompiling"), Flag("isUpdating"), Field("currentStage"), Field("currentCommandId"));
+        var session = json["editorSession"]?.ToObject<EditorSessionInfo>();
+        var hasScheduling = false;
+        var schedulingJson = Field("schedulingJson");
+        if (session != null && schedulingJson.Length > 0 && schedulingJson.Length <= 65536)
+        {
+            try
+            {
+                using var schedulingReader = new Newtonsoft.Json.JsonTextReader(new StringReader(schedulingJson)) { MaxDepth = 16, DateParseHandling = Newtonsoft.Json.DateParseHandling.None };
+                var scheduling = JObject.Load(schedulingReader, new JsonLoadSettings { DuplicatePropertyNameHandling = DuplicatePropertyNameHandling.Error });
+                hasScheduling = !schedulingReader.Read() && scheduling["schemaVersion"]?.Type == JTokenType.Integer && scheduling["schemaVersion"]!.ToString() == "1" &&
+                    scheduling["projectId"]?.Type == JTokenType.String && scheduling["editorSessionId"]?.Type == JTokenType.String &&
+                    scheduling.Value<string>("projectId") == session.projectId && scheduling.Value<string>("editorSessionId") == session.editorSessionId;
+            }
+            catch (Newtonsoft.Json.JsonException) { /* An optional incompatible observation never grants admission. */ }
+        }
+        return new(session, Flag("isCompiling"), Flag("isUpdating"), Field("currentStage"), Field("currentCommandId"), hasScheduling);
     }
     private static bool? ProcessAlive(EditorSessionInfo session)
     {

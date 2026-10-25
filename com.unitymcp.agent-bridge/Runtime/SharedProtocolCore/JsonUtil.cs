@@ -12,7 +12,7 @@ namespace UnityMcp.AgentBridge
     {
         public const string CurrentSchemaVersion = "1.0";
 
-        public static string BuildCommandEnvelope(string commandId, string tool, int timeoutMs, string argsJson, DateTime? createdAtUtc = null, int targetSchemaVersion = 0, string projectId = null, string editorSessionId = null)
+        public static string BuildCommandEnvelope(string commandId, string tool, int timeoutMs, string argsJson, DateTime? createdAtUtc = null, int targetSchemaVersion = 0, string projectId = null, string editorSessionId = null, string connectionId = null)
         {
             var argsNode = ParseTokenNoDate(argsJson);
             if (argsNode is not JObject argsObject)
@@ -36,6 +36,7 @@ namespace UnityMcp.AgentBridge
                 envelope["projectId"] = projectId;
                 envelope["editorSessionId"] = editorSessionId;
             }
+            if (!string.IsNullOrEmpty(connectionId)) envelope["connectionId"] = connectionId;
             return envelope.ToString(Formatting.None);
         }
 
@@ -82,7 +83,8 @@ namespace UnityMcp.AgentBridge
             var targetVersionToken = parsedObject["targetSchemaVersion"];
             if ((targetVersionToken != null && targetVersionToken.Type != JTokenType.Integer) ||
                 (parsedObject["projectId"] != null && parsedObject["projectId"].Type != JTokenType.String) ||
-                (parsedObject["editorSessionId"] != null && parsedObject["editorSessionId"].Type != JTokenType.String))
+                (parsedObject["editorSessionId"] != null && parsedObject["editorSessionId"].Type != JTokenType.String) ||
+                (parsedObject["connectionId"] != null && parsedObject["connectionId"].Type != JTokenType.String))
                 return CommandParseResult.FromFailure(ToolResult.InvalidArgs("PROJECT_TARGET_INVALID", "Target fields have invalid types."));
             long targetVersion = 0;
             if ((targetVersionToken != null && !long.TryParse(targetVersionToken.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out targetVersion)) || targetVersion < 0 || targetVersion > int.MaxValue)
@@ -96,6 +98,7 @@ namespace UnityMcp.AgentBridge
                 targetSchemaVersion = (int)targetVersion,
                 projectId = parsedObject.Value<string>("projectId"),
                 editorSessionId = parsedObject.Value<string>("editorSessionId"),
+                connectionId = parsedObject.Value<string>("connectionId"),
                 commandId = commandId,
                 tool = tool,
                 timeoutMs = timeoutMs,

@@ -47,16 +47,17 @@ namespace UnityMcp.AgentBridge
         {
             if (request == null) return Error("INVALID_REQUEST", "Request is required.");
             if (!string.Equals(request.TaskType, "compile", StringComparison.Ordinal)) return Error("UNKNOWN_TASK_TYPE", "Unsupported compile task type.");
+            if (!JsonUtil.TryDeserializeArgs<UnityCompileArgs>(request.Payload ?? "{}", out _, out var failure)) return Error("INVALID_ARGS", failure.summary);
             var timeoutMs = request.TimeoutMs > 0 ? request.TimeoutMs : 120000;
             var commandId = "agent-task-compile-" + Guid.NewGuid().ToString("N");
-            var command = new AgentCommand { commandId = commandId, tool = "unity.compile", timeoutMs = timeoutMs, rawArgsJson = request.Payload ?? "{}" };
+            var command = EditorTaskScheduling.TaskCommand(commandId, "unity.compile", timeoutMs, request.Payload, request.SubmittedAtUtc);
             var settings = AgentBridgeSettingsLoader.Load().Settings;
             var id = Manager.Register(new CompileTask(command, settings, false));
             // Persist identity before RequestScriptCompilation can reload the domain.
             AgentTaskDurableResults.WriteAtomic(StatePath(commandId), JsonConvert.SerializeObject(new PersistedCompile
             { version = 1, taskId = id.Value, command = command, createdAt = Manager.Get(id).CreatedAt }));
             Tasks[commandId] = id;
-            Manager.Start(id);
+            Schedule(id, command);
             return Project(Manager.Get(id), id.Value);
         }
 
@@ -71,19 +72,37 @@ namespace UnityMcp.AgentBridge
             if (retained != null) return retained;
             if (request.Operation == AgentTaskControlProtocol.Cancel)
             {
-                var disposition = Manager.Cancel(id);
+                var disposition = EditorTaskScheduling.CancelTask(Manager, id);
                 return new AgentTaskControlResponse { Success = disposition != AgentTaskCancellationDisposition.NotFound, Cancellation = disposition, Snapshot = Manager.Get(id), AgentTaskId = id.Value };
             }
             var snapshot = Manager.Get(id);
             return snapshot == null ? Error("NOT_FOUND", "Compile task was not found.") : Project(snapshot, id.Value);
         }
 
-        private static AgentTaskControlResponse Project(AgentTaskSnapshot snapshot, string id) => AgentTaskDurableResults.Save(new AgentTaskControlResponse
+        private static void Schedule(AgentTaskId id, AgentCommand command)
+        {
+            var deniedBeforeStart = false;
+            EditorTaskScheduling.ScheduleTask(Manager, id, command, "compile", remaining =>
+            {
+                if (EditorApplication.isPlaying)
+                {
+                    deniedBeforeStart = true;
+                    Manager.RejectBeforeStart(id, new AgentTaskError("TASK_BLOCKED", "Compilation requires a compatible EditMode state."));
+                    return;
+                }
+                command.timeoutMs = remaining;
+                AgentTaskDurableResults.WriteAtomic(StatePath(command.commandId), JsonConvert.SerializeObject(new PersistedCompile
+                { version = 1, taskId = id.Value, command = command, createdAt = Manager.Get(id).CreatedAt }));
+                EditorTaskScheduling.StartTask(Manager, id);
+            }, () => deniedBeforeStart ? "Compile mode validation rejected before driver Start." : null, () => Project(Manager.Get(id), id.Value));
+        }
+
+        private static AgentTaskControlResponse Project(AgentTaskSnapshot snapshot, string id) => EditorTaskScheduling.Observe(AgentTaskDurableResults.Save(new AgentTaskControlResponse
         {
             Success = true, Snapshot = snapshot, AgentTaskId = id,
             ErrorCode = snapshot?.Error?.Code, ErrorMessage = snapshot?.Error?.Message,
             ResultPayloadJson = snapshot?.Result?.Payload == null ? null : JsonUtil.SerializeObject(snapshot.Result.Payload)
-        });
+        }));
 
         private static AgentTaskControlResponse Error(string code, string message) => new AgentTaskControlResponse { Success = false, ErrorCode = code, ErrorMessage = message };
         private static string StatePath(string command) => Path.Combine(AgentTaskDurableResults.Root, "agent-task-compile", command + ".json");
@@ -100,8 +119,12 @@ namespace UnityMcp.AgentBridge
                     if (state == null || state.version != 1 || state.command == null || string.IsNullOrWhiteSpace(state.taskId)) throw new InvalidDataException("Invalid compile task record.");
                     var id = new AgentTaskId(state.taskId);
                     if (AgentTaskDurableResults.Read(id.Value) != null) { File.Delete(path); continue; }
-                    Manager.RestoreRunning(id, new CompileTask(state.command, AgentBridgeSettingsLoader.Load().Settings, true), state.createdAt);
+                    var queued = EditorTaskScheduling.FindTask(id.Value)?.Phase == AgentExecutionPhase.Queued;
+                    var task = new CompileTask(state.command, AgentBridgeSettingsLoader.Load().Settings, !queued);
+                    if (queued) Manager.RestoreCreated(id, task, state.createdAt);
+                    else Manager.RestoreRunning(id, task, state.createdAt);
                     Tasks[state.command.commandId] = id;
+                    Schedule(id, state.command);
                 }
                 catch (Exception exception) { UnityEngine.Debug.LogWarning("AGENT_TASK_COMPILE_RESTORE_FAILED: " + exception.Message); }
             }

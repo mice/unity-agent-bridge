@@ -6,6 +6,20 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Editor-side exclusive execution gate and bounded FIFO admission for ordinary, native task, submit-only and direct compile/test entrypoints. Original deadlines include queue time; queued work retains its identity and can expire or be cancelled without starting.
+- Optional scheduling diagnostics and durable recovery that separate logical task results, actual Unity execution ownership and immutable result delivery. Explicit safe observations and external report executors remain independently available.
+
+### Fixed
+
+- Preserve the original connection and dispatch submission time through native create and ordinary command envelopes, including historical task queries after MCP reconnects (accepted connection-origin repair from `1272c0f`).
+- Retry original result delivery without rerunning execution or overwriting retained terminal output; keep timeout and stale logical results from releasing an unfinished Unity operation.
+
+### Implementation status
+
+- Working-tree implementation passed fixed A/B scheduling, manual activity, storage faults, lifecycle and multi-project protocol acceptance. Full .NET regression passed 368 tests with one platform skip. These entries remain Unreleased; package version and RC1 history are unchanged.
+
 ## [1.5.0-rc.1] - 2026-10-23
 
 ### Added

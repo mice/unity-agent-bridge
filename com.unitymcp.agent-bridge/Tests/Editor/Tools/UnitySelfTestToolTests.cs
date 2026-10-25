@@ -354,7 +354,8 @@ namespace UnityMcp.AgentBridge.Tests
             var settings = AgentBridgeSettingsLoader.CreateDefaultSettings();
             settings.maxToolDurationMs = 60000;
             queue ??= CreateQueueRoot(Guid.NewGuid().ToString("N"));
-            return new AgentBridgeSelfTestRunner(facade, queue, settings, null, utcNowProvider);
+            return new AgentBridgeSelfTestRunner(facade, queue, settings, null,
+                utcNowProvider ?? (() => new DateTime(2026, 6, 8, 0, 0, 0, DateTimeKind.Utc)));
         }
 
         private static AgentCommandQueue CreateQueueRoot(string suffix)

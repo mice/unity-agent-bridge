@@ -5,6 +5,7 @@ using UnityEngine;
 
 namespace UnityMcp.AgentBridge.Tests
 {
+    // Isolated validation/timeout characterization; public admission is covered by scheduling tests.
     public sealed class UnityToolFacadeTests
     {
         // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_032.md
@@ -15,7 +16,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var facade = CreateFacade();
 
-            var result = facade.Execute(CreateCommand("unity.missing"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.missing"), NoOpAgentCancellation.Instance);
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Unsupported));
         }
@@ -28,7 +29,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var facade = CreateFacade(new DelegateTool("unity.success", (_, __) => new ToolResult { success = true, status = ToolResultStatus.Success, summary = "ok" }));
 
-            var result = facade.Execute(CreateCommand("unity.success"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.success"), NoOpAgentCancellation.Instance);
 
             Assert.That(result.success, Is.True);
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Success));
@@ -42,7 +43,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var facade = CreateFacade(new DelegateTool("unity.failed", (_, __) => new ToolResult { success = false, status = ToolResultStatus.Failed, summary = "failed" }));
 
-            var result = facade.Execute(CreateCommand("unity.failed"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.failed"), NoOpAgentCancellation.Instance);
 
             Assert.That(result.success, Is.False);
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Failed));
@@ -56,7 +57,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var facade = CreateFacade(new DelegateTool("unity.blocked", (_, __) => new ToolResult { success = false, status = ToolResultStatus.Blocked, summary = "blocked" }));
 
-            var result = facade.Execute(CreateCommand("unity.blocked"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.blocked"), NoOpAgentCancellation.Instance);
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Blocked));
         }
@@ -69,7 +70,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var facade = CreateFacade(new DelegateTool("unity.pending", (_, __) => new ToolResult { success = false, status = ToolResultStatus.Pending, summary = "pending" }));
 
-            var result = facade.Execute(CreateCommand("unity.pending"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.pending"), NoOpAgentCancellation.Instance);
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Pending));
         }
@@ -82,7 +83,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var facade = CreateFacade(new DelegateTool("unity.running", (_, __) => new ToolResult { success = false, status = ToolResultStatus.Running, summary = "running" }));
 
-            var result = facade.Execute(CreateCommand("unity.running"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.running"), NoOpAgentCancellation.Instance);
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Running));
         }
@@ -95,7 +96,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var facade = CreateFacade(new DelegateTool("unity.resuming", (_, __) => new ToolResult { success = false, status = ToolResultStatus.Resuming, summary = "resuming" }));
 
-            var result = facade.Execute(CreateCommand("unity.resuming"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.resuming"), NoOpAgentCancellation.Instance);
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Resuming));
         }
@@ -108,7 +109,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var facade = CreateFacade(new DelegateTool("unity.invalid", (_, __) => ToolResult.InvalidArgs("BAD_ARGS", "bad args")));
 
-            var result = facade.Execute(CreateCommand("unity.invalid"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.invalid"), NoOpAgentCancellation.Instance);
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.InvalidArgs));
         }
@@ -121,7 +122,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var facade = CreateFacade(new DelegateTool("unity.cancelled", (_, __) => new ToolResult { success = true, status = ToolResultStatus.Success, summary = "should not reach" }));
 
-            var result = facade.Execute(CreateCommand("unity.cancelled"), new ThrowingCancellation());
+            var result = facade.ExecuteImmediate(CreateCommand("unity.cancelled"), new ThrowingCancellation());
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Cancelled));
         }
@@ -139,9 +140,30 @@ namespace UnityMcp.AgentBridge.Tests
                 return new ToolResult { success = true, status = ToolResultStatus.Success, summary = "late" };
             }), 1000, clock);
 
-            var result = facade.Execute(CreateCommand("unity.timeout", 5000), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.timeout", 5000), NoOpAgentCancellation.Instance);
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Timeout));
+            Assert.That(result.warnings, Has.Some.Matches<ToolWarning>(warning => warning.code == "AGENTBRIDGE_TIMEOUT_TRUNCATED"));
+        }
+
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_371.md
+        [TestCase(ToolResultStatus.Pending)]
+        [TestCase(ToolResultStatus.Running)]
+        [TestCase(ToolResultStatus.Resuming)]
+        [Category("AGB_Facade"), Category("AGB_371")]
+        public void Execute_DeferredStartupExceedsBudget_PreservesOperationForTypedDeadline(string stage)
+        {
+            var clock = new MutableClock(new DateTime(2026, 6, 5, 10, 0, 0, DateTimeKind.Utc));
+            var original = new ToolResult { status = stage, summary = "Original operation remains authoritative." };
+            var facade = CreateFacade(new DelegateTool("unity.deferred", (_, __) =>
+            {
+                clock.UtcNow = clock.UtcNow.AddSeconds(2);
+                return original;
+            }), 1000, clock);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.deferred", 5000), NoOpAgentCancellation.Instance);
+            Assert.That(result, Is.SameAs(original));
+            Assert.That(result.status, Is.EqualTo(stage));
+            Assert.That(result.success, Is.False);
             Assert.That(result.warnings, Has.Some.Matches<ToolWarning>(warning => warning.code == "AGENTBRIDGE_TIMEOUT_TRUNCATED"));
         }
 
@@ -153,7 +175,7 @@ namespace UnityMcp.AgentBridge.Tests
         {
             var facade = CreateFacade(new DelegateTool("unity.exception", (_, __) => throw new InvalidOperationException("boom")));
 
-            var result = facade.Execute(CreateCommand("unity.exception"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.exception"), NoOpAgentCancellation.Instance);
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Exception));
             Assert.That(result.errors, Has.Count.EqualTo(1));
@@ -172,7 +194,7 @@ namespace UnityMcp.AgentBridge.Tests
                 return new ToolResult { success = true, status = ToolResultStatus.Success, summary = "ok" };
             }));
 
-            var result = facade.Execute(CreateCommand("unity.capture_settings"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.capture_settings"), NoOpAgentCancellation.Instance);
 
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Success));
             Assert.That(capturedSettings, Is.Not.Null);
@@ -191,7 +213,7 @@ namespace UnityMcp.AgentBridge.Tests
                 }, ToolExecutionModes.Edit),
                 runtimeMode: UnityRuntimeMode.PlayMode);
 
-            var result = facade.Execute(CreateCommand("unity.edit_only"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.edit_only"), NoOpAgentCancellation.Instance);
 
             Assert.That(executed, Is.False);
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Blocked));
@@ -214,7 +236,7 @@ namespace UnityMcp.AgentBridge.Tests
                 }, ToolExecutionModes.EditAndPlay),
                 runtimeMode: UnityRuntimeMode.PlayMode);
 
-            var result = facade.Execute(CreateCommand("unity.both_modes"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.both_modes"), NoOpAgentCancellation.Instance);
 
             Assert.That(executed, Is.True);
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Success));
@@ -233,7 +255,7 @@ namespace UnityMcp.AgentBridge.Tests
                 }, ToolExecutionModes.EditAndPlay),
                 runtimeMode: UnityRuntimeMode.EnteringPlayMode);
 
-            var result = facade.Execute(CreateCommand("unity.transition_blocked"), NoOpAgentCancellation.Instance);
+            var result = facade.ExecuteImmediate(CreateCommand("unity.transition_blocked"), NoOpAgentCancellation.Instance);
 
             Assert.That(executed, Is.False);
             Assert.That(result.status, Is.EqualTo(ToolResultStatus.Blocked));

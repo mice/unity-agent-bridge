@@ -13,7 +13,7 @@ namespace UnityMcp.AgentBridge.Tests
         public IEnumerator DemoPlayModeProbe_PassesAfterOneFrame()
         {
             yield return null;
-            Assert.That(1, Is.EqualTo(1));
+            Assert.That(UnityEngine.Application.isPlaying, Is.True, "The PlayMode probe must execute inside Play Mode.");
         }
     }
 }

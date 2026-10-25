@@ -10,7 +10,7 @@ namespace UnityMcp.AgentBridge
         {
             Name = "unity.agent_task_template.list", SchemaVersion = JsonUtil.CurrentSchemaVersion,
             Description = "List built-in and project task templates, including unavailable entries and diagnostics.",
-            AllowedModes = ToolExecutionModes.Edit, SideEffect = ToolSideEffect.None
+            AllowedModes = ToolExecutionModes.EditAndPlay, SideEffect = ToolSideEffect.None, SupportsConcurrentObservation = true
         };
         public ToolResult Execute(AgentToolContext context, IAgentCancellation cancellation)
         {
@@ -32,7 +32,7 @@ namespace UnityMcp.AgentBridge
         {
             Name = "unity.agent_task_template.run", SchemaVersion = JsonUtil.CurrentSchemaVersion,
             Description = "Run a validated task template by ID with business inputs.",
-            AllowedModes = ToolExecutionModes.Edit, SideEffect = ToolSideEffect.ReadsProject
+            AllowedModes = ToolExecutionModes.EditAndPlay, SideEffect = ToolSideEffect.ReadsProject, SupportsConcurrentObservation = true
         };
         public ToolResult Execute(AgentToolContext context, IAgentCancellation cancellation)
         {

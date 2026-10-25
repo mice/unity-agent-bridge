@@ -40,6 +40,22 @@ public sealed class CatalogScopeRegressionTests
     private McpHostDiagnostics Diagnostics(ProjectContext bound, Func<ProjectSessionInfo> observe) => McpHostDiagnostics.ForWorkspace(root) with
         { ExpectedCapabilityRevision = bound.CapabilityRevision, ValidateCatalogSnapshot = () => McpMultiProjectHost.ValidateCapabilityContext(bound, observe()) };
 
+    // TestRecord: com.unitymcp.agent-bridge/Documentation~/test_records/AGBM_372.md
+    [TestMethod, TestCategory("AGBM_372")]
+    public void VerifiedBusySchedulerRetainsCatalogIdentityAndRejectsLegacyOrRevisionChanges()
+    {
+        var bound = Context("S1", Revision());
+        var json = new JsonObject { ["ready"] = false, ["availability"] = "recovering", ["reason"] = "EDITOR_COMPILING", ["canQueueWhileBusy"] = true,
+            ["editorSession"] = new JsonObject { ["schemaVersion"] = 1, ["projectId"] = "project-A", ["editorSessionId"] = "S1", ["capabilityRevision"] = bound.CapabilityRevision, ["bridgeEnabled"] = true } };
+        ProjectSessionInfo Read() => Newtonsoft.Json.JsonConvert.DeserializeObject<ProjectSessionInfo>(json.ToJsonString())!;
+        McpMultiProjectHost.ValidateCapabilityContext(bound, Read());
+        json["canQueueWhileBusy"] = false;
+        Assert.ThrowsException<McpProjectRoutingException>(() => McpMultiProjectHost.ValidateCapabilityContext(bound, Read()));
+        json["canQueueWhileBusy"] = true;
+        json["editorSession"]!["capabilityRevision"] = new string('0', 64);
+        Assert.ThrowsException<McpProjectRoutingException>(() => McpMultiProjectHost.ValidateCapabilityContext(bound, Read()));
+    }
+
     [DataTestMethod]
     [DataRow("S2", false)]
     [DataRow("S1", true)]

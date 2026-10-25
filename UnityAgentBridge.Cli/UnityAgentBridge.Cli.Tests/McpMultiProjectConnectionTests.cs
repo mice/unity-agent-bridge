@@ -279,6 +279,9 @@ public sealed class McpMultiProjectConnectionTests
         Assert.AreEqual(host.ConnectionId, binding.ConnectionId);
         Assert.AreEqual(host.ConnectionId, host.Index.FindTask(taskId)!.ConnectionId);
         Assert.AreEqual(host.ConnectionId, host.Index.FindCommand(binding.CommandId!)!.ConnectionId);
+        Assert.AreEqual(host.ConnectionId, commands[binding.CommandId!]["connectionId"]?.GetValue<string>(), "The Editor must receive the admitted connection origin, not only a host-side projection.");
+        var dispatch = new McpTaskDispatchStore(context.ProjectPath).Load(context.ProjectPath, taskId)!;
+        Assert.AreEqual(dispatch.CreatedAt.ToString("O"), commands[binding.CommandId!]["args"]?["submittedAtUtc"]?.GetValue<string>(), "Creation carries the original persisted time origin through the wire.");
         var stored = McpTaskPersistence.Read<McpStoredTask>(new McpTaskPersistence(context.ProjectPath).PathFor("mcp-tasks", taskId))!;
         Assert.AreEqual(host.ConnectionId, stored.ConnectionId);
         Assert.AreEqual(McpTaskStatus.Completed, stored.Task.Status);
@@ -288,6 +291,7 @@ public sealed class McpMultiProjectConnectionTests
         var waited = await CallAsync("unity_bridge_wait_result", new { commandId, timeoutMs = 5000 });
         Assert.AreEqual(host.ConnectionId, waited["connectionId"]?.GetValue<string>());
         Assert.AreEqual(host.ConnectionId, host.Index.FindCommand(commandId)!.ConnectionId);
+        Assert.AreEqual(host.ConnectionId, commands[commandId]["connectionId"]?.GetValue<string>(), "Submit-only uses the same wire origin as ordinary/native work.");
         Assert.AreEqual(old.Original, (await host.Store.GetTaskAsync(old.Id, lifetime.Token))!.Result!.Value.GetRawText());
         var before = commands.Count;
         await host.MaintainAsync(lifetime.Token);

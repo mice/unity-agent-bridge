@@ -29,18 +29,23 @@ namespace UnityMcp.AgentBridge
 
         private static AgentTaskControlResponse Create(AgentTaskControlRequest request)
         {
-            return AgentTaskTemplateExecutionService.Control(new AgentTaskControlRequest
+            return AgentTaskTemplateExecutionService.Control(NormalizeCreate(request));
+        }
+
+        public static AgentTaskControlRequest NormalizeCreate(AgentTaskControlRequest request)
+        {
+            return new AgentTaskControlRequest
             {
-                Operation = AgentTaskControlProtocol.Create, TaskType = AgentTaskTemplateExecutionService.TaskType,
+                Operation = AgentTaskControlProtocol.Create, TaskType = AgentTaskTemplateExecutionService.TaskType, TimeoutMs = request.TimeoutMs, SubmittedAtUtc = request.SubmittedAtUtc,
                 Payload = JsonConvert.SerializeObject(new { templateId = request.TaskType == AssetTaskType ? UnityAssetAnalystSpecialistFactory.TemplateId : UnityProgrammerSpecialistFactory.TemplateId,
                     inputs = AgentTaskTemplateCatalog.ParseObject(request.Payload) })
-            });
+            };
         }
 
         public static void RegisterTemplateExecutors()
         {
-            AgentTaskTemplateExecutors.Register(new BuiltinExecutor(false));
-            AgentTaskTemplateExecutors.Register(new BuiltinExecutor(true));
+            AgentTaskTemplateExecutors.Register(new BuiltinExecutor(false), requiresUnityExecution: false);
+            AgentTaskTemplateExecutors.Register(new BuiltinExecutor(true), requiresUnityExecution: false);
         }
 
         public static IEnumerable<AgentTaskTemplateDefinition> TemplateDefinitions()

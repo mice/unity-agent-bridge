@@ -6,11 +6,11 @@ public static class AgentCommandEnvelope
 {
     public const string SchemaVersion = JsonUtil.CurrentSchemaVersion;
 
-    public static string Build(string commandId, string tool, int timeoutMs, string argsJson, int targetSchemaVersion = 0, string? projectId = null, string? editorSessionId = null)
+    public static string Build(string commandId, string tool, int timeoutMs, string argsJson, int targetSchemaVersion = 0, string? projectId = null, string? editorSessionId = null, string? connectionId = null)
     {
         try
         {
-            return JsonUtil.BuildCommandEnvelope(commandId, tool, timeoutMs, argsJson, targetSchemaVersion: targetSchemaVersion, projectId: projectId, editorSessionId: editorSessionId);
+            return JsonUtil.BuildCommandEnvelope(commandId, tool, timeoutMs, argsJson, targetSchemaVersion: targetSchemaVersion, projectId: projectId, editorSessionId: editorSessionId, connectionId: connectionId);
         }
         catch (ArgumentException exception)
         {

@@ -18,6 +18,7 @@ namespace UnityMcp.AgentBridge
         public int maxPollIntervalMs = 2000;
         public int compileBackoffMs = 1000;
         public int maxConcurrent = 1;
+        public int schedulerWaitingCapacity = 32;
         public string tempRoot = "Temp/AgentBridge";
         public string logRoot = "Library/AgentBridge/logs";
         public string metricsPath = "Library/AgentBridge/metrics.json";

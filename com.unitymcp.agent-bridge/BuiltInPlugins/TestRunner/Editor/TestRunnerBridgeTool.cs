@@ -5,7 +5,7 @@ using UnityMcp.Plugin;
 
 namespace UnityMcp.BuiltInPlugins.TestRunner
 {
-    internal sealed class TestRunnerBridgeTool : IUnityMcpTool
+    internal class TestRunnerBridgeTool : IUnityMcpTool
     {
         private readonly IAgentTool _inner;
         private readonly AgentBridgeSettings _settings;
@@ -37,14 +37,7 @@ namespace UnityMcp.BuiltInPlugins.TestRunner
 
         public UnityMcpToolResult Execute(UnityMcpToolContext context, IUnityMcpCancellation cancellation)
         {
-            var command = new AgentCommand
-            {
-                schemaVersion = JsonUtil.CurrentSchemaVersion,
-                commandId = context.CommandId,
-                tool = context.ToolName,
-                timeoutMs = context.TimeoutMs,
-                rawArgsJson = string.IsNullOrWhiteSpace(context.RawArgsJson) ? "{}" : context.RawArgsJson
-            };
+            var command = EditorTaskScheduling.TaskCommand(context.CommandId, context.ToolName, context.TimeoutMs, context.RawArgsJson);
             var result = _inner.Execute(new AgentToolContext
             {
                 Command = command,
@@ -200,5 +193,10 @@ namespace UnityMcp.BuiltInPlugins.TestRunner
                 _inner?.ThrowIfCancellationRequested();
             }
         }
+    }
+    internal sealed class SelfTestBridgeTool : TestRunnerBridgeTool, UnityMcp.AgentTaskCore.IAgentTaskAdmissionTool
+    {
+        public SelfTestBridgeTool(UnitySelfTestTool inner, AgentBridgeSettings settings, int timeout, string schema)
+            : base(inner, settings, timeout, schema) { }
     }
 }

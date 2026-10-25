@@ -33,6 +33,8 @@ namespace UnityMcp.AgentBridge
         public ToolSideEffect SideEffect { get; set; }
 
         public bool MayTriggerDomainReload { get; set; }
+        // Code-owned policy. Read-only labels or client/configuration data do not grant this lane.
+        public bool SupportsConcurrentObservation { get; set; }
 
         public string ArgsSchemaPath { get; set; }
     }

@@ -15,17 +15,20 @@ namespace UnityMcp.AgentTaskEditor
         private IAgentTaskContext context;
         private bool started;
         private bool cleanedUp;
+        private readonly Action<string> runStarted;
 
-        public RunPlayModeTestsTask(TestRunnerApi api, Filter filter)
+        public RunPlayModeTestsTask(TestRunnerApi api, Filter filter, Action<string> runStarted = null)
         {
             this.api = api ?? throw new ArgumentNullException(nameof(api));
             this.filter = filter ?? throw new ArgumentNullException(nameof(filter));
+            this.runStarted = runStarted;
             if ((filter.testMode & TestMode.PlayMode) != TestMode.PlayMode)
                 throw new ArgumentException("The task requires a PlayMode filter.", nameof(filter));
         }
 
         public bool CanCancel => false;
         public string RunGuid { get; private set; }
+        public bool ExecutionEnded { get; private set; }
 
         public void Start(IAgentTaskContext taskContext)
         {
@@ -35,6 +38,7 @@ namespace UnityMcp.AgentTaskEditor
             try { RunGuid = api.Execute(new ExecutionSettings(filter) { runSynchronously = false }); }
             catch (Exception exception)
             {
+                ExecutionEnded = true;
                 CleanupRunner();
                 context.Fail(new AgentTaskError("AGENT_TASK_TEST_RUNNER_START", exception.Message, exception));
             }
@@ -54,7 +58,7 @@ namespace UnityMcp.AgentTaskEditor
         }
 
         public void RequestCancellation(IAgentTaskContext taskContext) => throw new NotSupportedException("Unity Test Runner cancellation is not publicly supported.");
-        public void RunStarted(ITestAdaptor testsToRun) { }
+        public void RunStarted(ITestAdaptor testsToRun) { runStarted?.Invoke(RunGuid); }
         public void TestStarted(ITestAdaptor test) { }
 
         public void TestFinished(ITestResultAdaptor result)
@@ -75,6 +79,8 @@ namespace UnityMcp.AgentTaskEditor
 
         public void RunFinished(ITestResultAdaptor result)
         {
+            ExecutionEnded = true;
+            if ((context as IAgentTaskTerminalContext)?.IsTerminal == true) { CleanupRunner(); return; }
             if (context == null) return;
             CleanupRunner();
             var hasFailures = result != null && result.FailCount > 0;

@@ -75,7 +75,7 @@ namespace UnityMcp.AgentBridge.Tests
             registry.Discover();
             var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
             var facade = new UnityToolFacade(registry, settings, logger);
-            var poller = new AgentCommandPoller(queue, facade, settings, paths, logger);
+            var poller = new AgentCommandPoller(queue, facade, settings, paths, useSharedScheduler: false, logger: logger, projectIdProvider: _ => "observability-record-fixture");
 
             poller.Start();
             try
@@ -123,7 +123,7 @@ namespace UnityMcp.AgentBridge.Tests
             registry.Discover();
             var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
             var facade = new UnityToolFacade(registry, settings, logger);
-            var poller = new AgentCommandPoller(queue, facade, settings, paths, logger);
+            var poller = new AgentCommandPoller(queue, facade, settings, paths, useSharedScheduler: false, logger: logger, projectIdProvider: _ => "observability-record-fixture");
 
             InvokePollerUpdate(poller);
 
@@ -175,7 +175,7 @@ namespace UnityMcp.AgentBridge.Tests
             registry.Register(new ThrowingObservabilityTool());
             var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
             var facade = new UnityToolFacade(registry, settings, logger);
-            var poller = new AgentCommandPoller(queue, facade, settings, paths, logger);
+            var poller = new AgentCommandPoller(queue, facade, settings, paths, useSharedScheduler: false, logger: logger, projectIdProvider: _ => "observability-record-fixture");
 
             var enqueue = queue.Enqueue(CreateCommandJson("cmd-098", 1000, "unity.observability.throw"));
             Assert.That(enqueue.Success, Is.True);
@@ -205,7 +205,7 @@ namespace UnityMcp.AgentBridge.Tests
             registry.Register(new SuccessfulObservabilityTool());
             var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
             var facade = new UnityToolFacade(registry, settings, logger);
-            var poller = new AgentCommandPoller(queue, facade, settings, paths, logger);
+            var poller = new AgentCommandPoller(queue, facade, settings, paths, useSharedScheduler: false, logger: logger, projectIdProvider: _ => "observability-record-fixture");
 
             var enqueue = queue.Enqueue(CreateCommandJson("cmd-144-last-error", 1000, "unity.observability.success"));
             Assert.That(enqueue.Success, Is.True);
@@ -217,8 +217,10 @@ namespace UnityMcp.AgentBridge.Tests
             Assert.That(json, Does.Not.Contain("Project info collected."));
         }
 
+        // TestRecord: Packages/com.unitymcp.agent-bridge/Documentation~/test_records/AGB_368.md
         [Test]
         [Category("AGB_Observability")]
+        [Category("AGB_368")]
         public void Poller_LifecycleReadFailure_IsLoggedWithoutStoppingHeartbeat()
         {
             var settings = AgentBridgeSettingsLoader.CreateDefaultSettings();
@@ -235,7 +237,7 @@ namespace UnityMcp.AgentBridge.Tests
             registry.Discover();
             var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
             var facade = new UnityToolFacade(registry, settings, logger);
-            var poller = new AgentCommandPoller(queue, facade, settings, paths, logger);
+            var poller = new AgentCommandPoller(queue, facade, settings, paths, useSharedScheduler: false, logger: logger, projectIdProvider: _ => "observability-record-fixture");
 
             InvokePollerUpdate(poller);
             InvokePollerUpdate(poller);

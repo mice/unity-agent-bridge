@@ -76,7 +76,7 @@ public sealed class McpTaskAdapter
                 throw new InvalidOperationException("MCP_TASK_DISPATCH_CONFLICT: A task identity cannot be reused for different arguments.");
             return await ReconcileAsync(mcpId, cancellationToken);
         }
-        var response = await SendAsync("create", null, taskType, payload, timeoutMs, cancellationToken, dispatch.CommandId);
+        var response = await SendAsync("create", null, taskType, payload, timeoutMs, cancellationToken, dispatch.CommandId, dispatch.CreatedAt);
         _dispatches.SaveResponse(dispatch, response.ToJsonString());
         return BindCreation(dispatch, response);
     }
@@ -96,7 +96,7 @@ public sealed class McpTaskAdapter
             ProjectId: dispatch.ProjectId, EditorSessionId: dispatch.EditorSessionId, ConnectionId: dispatch.ConnectionId, QueueRoot: dispatch.QueueRoot));
         var state = response["state"]?.GetValue<string>();
         var status = string.Equals(state, "Failed", StringComparison.OrdinalIgnoreCase) ? "failed" : string.Equals(state, "Cancelled", StringComparison.OrdinalIgnoreCase) ? "cancelled" : "working";
-        return new JsonObject { ["success"] = status == "working", ["taskId"] = dispatch.McpTaskId, ["status"] = status, ["pollIntervalMs"] = 250, ["execution"] = response["execution"]?.DeepClone() ?? UnknownExecution() };
+        return new JsonObject { ["success"] = status == "working", ["taskId"] = dispatch.McpTaskId, ["status"] = status, ["pollIntervalMs"] = 250, ["execution"] = response["execution"]?.DeepClone() ?? UnknownExecution(), ["scheduling"] = response["scheduling"]?.DeepClone() };
     }
 
     internal bool HasDispatch(string taskId) => _dispatches.Load(_projectIdentity, taskId) is not null;
@@ -259,26 +259,37 @@ public sealed class McpTaskAdapter
         catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException or NotSupportedException) { return false; }
     }
 
-    private async Task<JsonObject> SendAsync(string operation, string? agentTaskId, string? taskType, string? payload, int timeoutMs, CancellationToken cancellationToken, string? commandId = null)
+    private async Task<JsonObject> SendAsync(string operation, string? agentTaskId, string? taskType, string? payload, int timeoutMs, CancellationToken cancellationToken, string? commandId = null, DateTimeOffset? submittedAt = null)
     {
         var request = new JsonObject { ["version"] = 1, ["operation"] = operation, ["projectIdentity"] = _projectIdentity };
         if (agentTaskId != null) request["agentTaskId"] = agentTaskId;
         if (taskType != null) request["taskType"] = taskType;
         if (payload != null) request["payload"] = payload;
         if (timeoutMs > 0) request["timeoutMs"] = timeoutMs;
+        if (submittedAt.HasValue) request["submittedAtUtc"] = submittedAt.Value.ToString("O");
         commandId ??= _client.CreateCommandId();
         var result = await _client.ExecuteAsync(_queuePaths, commandId, new BridgeCommandSpec("unity.agent_task_control", 90000, request.ToJsonString()), cancellationToken);
         return Unwrap(result.RawJson);
     }
 
-    private static JsonObject Unwrap(string json)
+    internal static JsonObject Unwrap(string json)
     {
         var envelope = JsonNode.Parse(json)?.AsObject();
         if (envelope is null) return Error("INVALID_RESPONSE", "Unity returned an invalid task response.");
         var embedded = envelope["metricsObjectJson"]?.GetValue<string>();
         var response = !string.IsNullOrWhiteSpace(embedded) ? JsonNode.Parse(embedded)?.AsObject() : envelope["metrics"]?.AsObject();
-        var result = response ?? envelope;
+        // Facade preflight errors carry descriptive metrics rather than a control DTO.
+        // Keep their original envelope/errors; only unwrap actual task-control fields.
+        var result = response is not null && (response.ContainsKey("agentTaskId") || response.ContainsKey("state") || response.ContainsKey("errorCode"))
+            ? response : envelope;
+        if (result["errors"] is JsonArray errors && errors.FirstOrDefault() is JsonObject firstError)
+        {
+            result["errorCode"] ??= firstError["code"]?.DeepClone();
+            result["errorMessage"] ??= firstError["message"]?.DeepClone();
+        }
         result["execution"] ??= UnknownExecution();
+        if (result["schedulingJson"] is JsonValue scheduling && scheduling.TryGetValue<string>(out var schedulingJson) && !string.IsNullOrWhiteSpace(schedulingJson))
+            result["scheduling"] = JsonNode.Parse(schedulingJson);
         return result;
     }
 

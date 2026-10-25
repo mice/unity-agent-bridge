@@ -20,6 +20,7 @@ namespace UnityMcp.AgentBridge
         static AgentTaskDurableResults()
         {
             AgentTaskTemplateExecutionService.ConfigurePersistence(Save, id => Read(id));
+            AgentTaskTemplateExecutionService.ConfigureScheduling(EditorTaskScheduling.ScheduleTemplateTask, EditorTaskScheduling.CancelTask, id => EditorTaskScheduling.Observation(id), EditorTaskScheduling.ReconcileCreation);
             EditorApplication.update += Maintain;
         }
 

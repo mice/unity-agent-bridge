@@ -16,12 +16,19 @@ namespace UnityMcp.AgentBridge
         private readonly FileAgentBridgeLogger _logger;
         private readonly AgentBridgePaths _paths;
         private readonly string _capabilityRevision;
+        private readonly bool _useSharedScheduler;
+        private readonly Func<string, string> _projectIdProvider;
         private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
         private DateTime _nextTickUtc;
         private bool _isStarted;
         private string _lastError = string.Empty;
 
         public AgentCommandPoller(AgentCommandQueue queue, UnityToolFacade facade, AgentBridgeSettings settings, AgentBridgePaths paths, FileAgentBridgeLogger logger = null, string capabilityRevision = null)
+            : this(queue, facade, settings, paths, true, logger, capabilityRevision)
+        {
+        }
+
+        internal AgentCommandPoller(AgentCommandQueue queue, UnityToolFacade facade, AgentBridgeSettings settings, AgentBridgePaths paths, bool useSharedScheduler, FileAgentBridgeLogger logger = null, string capabilityRevision = null, Func<string, string> projectIdProvider = null)
         {
             _queue = queue ?? throw new ArgumentNullException(nameof(queue));
             _facade = facade ?? throw new ArgumentNullException(nameof(facade));
@@ -29,6 +36,10 @@ namespace UnityMcp.AgentBridge
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
             _logger = logger;
             _capabilityRevision = capabilityRevision ?? "missing";
+            _useSharedScheduler = useSharedScheduler;
+            if (useSharedScheduler && projectIdProvider != null) throw new ArgumentException("Custom identities require an isolated poller.", nameof(projectIdProvider));
+            _projectIdProvider = projectIdProvider ?? (path => ProjectPathIdentity.GetProjectId(path));
+            if (_useSharedScheduler) EditorTaskScheduling.Configure(_facade, settings);
         }
 
         public bool IsStarted => _isStarted;
@@ -76,7 +87,8 @@ namespace UnityMcp.AgentBridge
                 _nextTickUtc = nowUtc.AddMilliseconds(EditorApplication.isCompiling ? _settings.compileBackoffMs : _settings.pollIntervalMs);
                 PublishStatus(string.Empty, "unity.poller.idle");
 
-                for (var index = 0; index < _settings.maxConcurrent; index++)
+                // Intake and lifecycle controls continue while a separate scheduler owns execution.
+                for (var index = 0; index < (_useSharedScheduler ? Math.Max(32, _settings.maxConcurrent) : _settings.maxConcurrent); index++)
                 {
                     if (!_queue.TryDequeue(out var queuedCommand))
                     {
@@ -90,7 +102,8 @@ namespace UnityMcp.AgentBridge
                     {
                         PublishStatus(queuedCommand.Command.commandId, "unity.tool.start");
                         _logger?.Stage("unity.tool.start", queuedCommand.Command.commandId, queuedCommand.Command.tool, "running", "tool execution started");
-                        result = _facade.Execute(queuedCommand.Command, NoOpAgentCancellation.Instance);
+                        result = _useSharedScheduler ? _facade.Execute(queuedCommand.Command, NoOpAgentCancellation.Instance)
+                            : _facade.ExecuteImmediate(queuedCommand.Command, NoOpAgentCancellation.Instance);
                         _queue.UpdateState(queuedCommand.Command.commandId, state => state.status = result?.status ?? ToolResultStatus.Exception);
                         _logger?.Stage("unity.tool.finish", queuedCommand.Command.commandId, queuedCommand.Command.tool, result?.status ?? ToolResultStatus.Exception, result?.summary ?? string.Empty);
 
@@ -184,7 +197,7 @@ namespace UnityMcp.AgentBridge
                 SessionState.SetString(revisionKey, revision.ToString(CultureInfo.InvariantCulture));
                 return new EditorSessionInfo
                 {
-                    projectId = ProjectPathIdentity.GetProjectId(_paths.ProjectRoot),
+                    projectId = _projectIdProvider(_paths.ProjectRoot),
                     editorSessionId = sessionId,
                     processId = process.Id,
                     processStartTime = process.StartTime.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
@@ -207,6 +220,7 @@ namespace UnityMcp.AgentBridge
                 heartbeatUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                 currentCommandId = currentCommandId ?? string.Empty,
                 currentStage = currentStage ?? string.Empty,
+                schedulingJson = _useSharedScheduler ? EditorTaskScheduling.Observation() : null,
                 isCompiling = EditorApplication.isCompiling,
                 isUpdating = EditorApplication.isUpdating,
                 isPlaying = EditorApplication.isPlayingOrWillChangePlaymode,

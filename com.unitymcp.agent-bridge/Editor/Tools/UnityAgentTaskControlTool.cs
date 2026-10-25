@@ -13,7 +13,8 @@ namespace UnityMcp.AgentBridge
             Description = "Create, query, retrieve, or cancel a project-local AgentTask.",
             AllowedModes = ToolExecutionModes.Edit,
             SideEffect = ToolSideEffect.RunsUserCode,
-            MayTriggerDomainReload = false
+            MayTriggerDomainReload = false,
+            SupportsConcurrentObservation = true
         };
 
         public ToolResult Execute(AgentToolContext context, IAgentCancellation cancellation)
@@ -22,7 +23,11 @@ namespace UnityMcp.AgentBridge
             {
                 cancellation?.ThrowIfCancellationRequested();
                 var request = new AgentTaskControlCodec().DeserializeRequest(context?.RawArgsJson ?? "{}");
-                var response = (string.Equals(request?.TaskType, AgentTaskTemplateExecutionService.TaskType, StringComparison.Ordinal)
+                if (request.Version != AgentTaskControlProtocol.CurrentVersion) return ToolResult.Unsupported("UNSUPPORTED_VERSION", "Unsupported task control version.");
+                request = EditorTaskScheduling.ReconcileCreation(request);
+                var response = request.Operation == AgentTaskControlProtocol.Cancel && !string.IsNullOrEmpty(request.CommandId)
+                    ? EditorTaskScheduling.CancelCommand(request.CommandId)
+                    : (string.Equals(request?.TaskType, AgentTaskTemplateExecutionService.TaskType, StringComparison.Ordinal)
                     || request?.AgentTaskId != null && request.AgentTaskId.StartsWith("template-", StringComparison.Ordinal))
                     ? AgentTaskTemplateExecutionService.Control(request)
                     : (string.Equals(request?.TaskType, AgentTaskVerifiedAnalysisExecutionService.TaskType, StringComparison.Ordinal)
@@ -40,7 +45,7 @@ namespace UnityMcp.AgentBridge
                     || (request?.Operation != AgentTaskControlProtocol.Create && request?.AgentTaskId != null && request.AgentTaskId.StartsWith("playmode-", StringComparison.Ordinal))
                     ? AgentTaskPlayModeExecutionService.Control(request)
                     : AgentTaskEditModeExecutionService.Control(request);
-                var raw = new AgentTaskControlCodec().SerializeResponse(response);
+                var raw = new AgentTaskControlCodec().SerializeResponse(EditorTaskScheduling.Observe(response));
                 return new ToolResult
                 {
                     commandId = context?.Command?.commandId,

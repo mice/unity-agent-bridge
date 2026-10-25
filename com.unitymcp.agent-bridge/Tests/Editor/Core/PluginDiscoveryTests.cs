@@ -47,7 +47,7 @@ namespace UnityMcp.AgentBridge.Tests
                 var logger = new FileAgentBridgeLogger(paths.BridgeLogPath);
                 var published = UnityMcpPluginRuntime.DiscoverAndRegister(registry, settings, paths, logger);
                 poller = new AgentCommandPoller(new AgentCommandQueue(_projectRoot, settings.tempRoot),
-                    new UnityToolFacade(registry, settings, logger), settings, paths, logger, published.CapabilityRevision);
+                    new UnityToolFacade(registry, settings, logger), settings, paths, useSharedScheduler: false, logger: logger, capabilityRevision: published.CapabilityRevision, projectIdProvider: _ => "discovery-record-fixture");
                 Assert.That(published.CapabilityRevision, Does.Match("^[a-f0-9]{64}$"));
                 using (var sha = System.Security.Cryptography.SHA256.Create())
                     Assert.That(published.CapabilityRevision, Is.EqualTo(BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(paths.PluginCatalogPath))).Replace("-", "").ToLowerInvariant()));
