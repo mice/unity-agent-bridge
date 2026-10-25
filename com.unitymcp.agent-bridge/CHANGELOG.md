@@ -20,6 +20,27 @@ The format follows Keep a Changelog and Semantic Versioning.
 
 - Working-tree implementation passed fixed A/B scheduling, manual activity, storage faults, lifecycle and multi-project protocol acceptance. Full .NET regression passed 368 tests with one platform skip. These entries remain Unreleased; package version and RC1 history are unchanged.
 
+### Accepted scope — lightweight Editor-side task scheduling
+
+The original agreed scope and acceptance criteria are retained below. Implementation and validation status are recorded above; no release version is assigned.
+
+- Reuse AgentTask identities, lifecycle, results and recovery contracts; place one authoritative scheduler inside each Unity Editor Bridge so requests from multiple MCP hosts share the same execution gate.
+- Route ordinary calls, MCP Tasks and submit-only requests through common admission before Unity execution. Internal task control and observations must remain able to progress the active operation.
+- Start with one exclusive execution slot for compilation, tests, builds, Play Mode transitions and scene/project mutations. Unknown or user-code operations require conservative admission; do not assume they are safe parallel queries.
+- Use a bounded FIFO queue with explicit queued/running states, blocking reasons and actionable queue-full rejection. Expose task ownership and terminal diagnostics to the original caller.
+- Pause dispatch while compilation, importing or observed conflicting manual operations occupy the Editor. Respect shared versus explicitly authorized AI-exclusive use; scheduling does not grant permission to open/close the Editor or interrupt a person.
+- Allow queued-task cancellation. Running cancellation follows the executor's actual support; caller timeout, cancellation intent or loss of observation must not release the execution slot before completion or verified safe termination.
+- Keep task/status observations and retained-result/report reads available without the exclusive slot where safe. External Pi/report analysis does not consume the Unity execution slot.
+- Persist queue order, admitted ownership and active-operation correlation across Domain Reload. Reconcile the original operation without replay; Editor restart must expose interrupted/unknown outcomes according to evidence and executor recovery support.
+- Preserve per-project and Editor-session isolation within the existing multi-project routing. Socket transport, remote nodes, cross-machine scheduling and additional validation projects are outside this increment.
+
+#### Acceptance criteria
+
+- Two MCP callers submit a long-running test and a compile to the same Editor: the compile queues and starts only after the test is confirmed finished; status and historical reports remain readable.
+- Cancelling a queued request prevents its execution. A running request's timeout or unsupported cancellation does not admit overlapping Unity work.
+- MCP reconnect and Domain Reload neither duplicate execution nor mix task results. Full queues and manual Editor activity return explicit, verifiable dispositions.
+- Reuse existing agreed validation projects; do not create extra Unity projects or launch additional Editors without prior authorization. Validate ordering, execution counts and diagnostics, rather than claiming the scheduler prevents every Unity crash.
+
 ## [1.5.0-rc.1] - 2026-10-23
 
 ### Added
